@@ -1,0 +1,2635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>eyeD Prototype</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg2: #131a30;
+    --card: #1a2240;
+    --ink: #f4f6ff;
+    --ink-dim: #aab1cc;
+    --accent: #6cc4ff;
+    --accent2: #ffd66c;
+    --line: #2a335c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+  /* JS-health indicator */
+  #jshealth { position: fixed; top: env(safe-area-inset-top); left: 0; right: 0;
+    background: #b9002d; color: #fff; text-align: center;
+    font-size: 12px; font-weight: 700; padding: 6px; z-index: 99; letter-spacing: 1px; }
+
+  header { padding: 14px 18px 8px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; }
+  .logo .d { color: var(--accent); }
+  .tag { font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 1.4px; }
+
+  main { padding: 8px 16px 140px; max-width: 520px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin: 12px 0; }
+  h2 { margin: 0 0 6px; font-size: 17px; color: var(--ink); }
+  p, li { color: var(--ink-dim); font-size: 14px; line-height: 1.5; }
+
+  button, .btn {
+    -webkit-appearance: none; appearance: none;
+    border: none; background: var(--accent); color: #002338;
+    font-family: inherit; font-weight: 700; font-size: 15px;
+    padding: 14px 18px; border-radius: 14px; cursor: pointer;
+    width: 100%; touch-action: manipulation;
+  }
+  button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:active { opacity: 0.7; }
+  input[type=file] { position: absolute; left: -9999px; }
+
+  .stage {
+    position: relative; background: #000; border-radius: 14px; overflow: hidden;
+    aspect-ratio: 1; width: 100%; touch-action: none;
+    user-select: none; -webkit-user-select: none;
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .controls .full { grid-column: 1 / -1; }
+  .slider { width: 100%; margin: 4px 0; }
+  label.tinylabel { display: block; font-size: 12px; color: var(--ink-dim); margin: 8px 0 2px; }
+
+  .swatch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff2; }
+
+  .result { background: linear-gradient(140deg, #1d2856 0%, #0e1430 100%);
+    border: 1px solid var(--accent); border-radius: 18px; padding: 18px; margin: 12px 0; }
+  .result .big { font-size: 26px; font-weight: 800; color: var(--accent); margin-bottom: 6px; }
+  .result .sub { font-size: 14px; color: var(--ink); line-height: 1.4; }
+  .attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .attr { background: #00000055; border-radius: 12px; padding: 10px; }
+  .attr .k { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .attr .v { font-size: 14px; color: var(--ink); margin-top: 2px; font-weight: 600; }
+  /* Highlights — featured callouts above the attribute grid */
+  .highlights { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .highlight { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+               background: linear-gradient(120deg, #00000080 0%, #00000055 100%);
+               border-radius: 12px; border-left: 3px solid var(--accent); }
+  .highlight .swatch-circle { width: 32px; height: 32px; border-radius: 50%;
+               border: 2px solid #ffffff33; flex-shrink: 0; }
+  .highlight .swatch-circle.split { background-image: linear-gradient(120deg, var(--c1) 50%, var(--c2) 50%); }
+  .highlight .body { flex: 1; min-width: 0; }
+  .highlight .title { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .highlight .desc { font-size: 11px; color: var(--ink-dim); margin-top: 1px; line-height: 1.3; }
+  /* View toggle (Card vs Story) */
+  .view-toggle { display: flex; gap: 6px; margin: 14px 0 0 0; }
+  .view-toggle button { flex: 1; background: #00000055; color: var(--ink-dim);
+                       border: 1px solid var(--line); border-radius: 10px;
+                       padding: 8px 10px; font-size: 12px; cursor: pointer; }
+  .view-toggle button.active { background: var(--card); color: var(--ink);
+                              border-color: var(--accent); }
+  /* Eye Story view */
+  .eye-story { padding-top: 8px; }
+  .eye-story p { font-size: 14px; color: var(--ink); line-height: 1.55; margin: 10px 0; }
+  .eye-story p strong { color: var(--accent); font-weight: 700; }
+  /* Share Card preview modal */
+  .share-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px; z-index: 1000; overflow: auto;
+  }
+  .share-modal.show { display: flex; }
+  .share-inner {
+    max-width: 540px; width: 100%; display: flex; flex-direction: column; gap: 12px;
+    align-items: stretch;
+  }
+  .share-inner img {
+    width: 100%; height: auto; border-radius: 16px; display: block;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .share-controls { display: flex; gap: 8px; }
+  .share-controls button { flex: 1; padding: 12px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    font-size: 14px; cursor: pointer; }
+  .share-controls button.primary { background: var(--accent); color: #0a0a14; border-color: var(--accent); font-weight: 700; }
+  .eye-badge { display: inline-block; background: var(--accent); color: #002338;
+    font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; }
+
+  .twoeye { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .twoeye .eye-box { background: #00000055; border-radius: 12px; padding: 10px; }
+  .twoeye .eye-box .side { font-size: 10px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; }
+  .twoeye .eye-box .name { font-size: 15px; color: var(--ink); font-weight: 700; margin-top: 3px; }
+  .twoeye .eye-box .meta { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .bilateral { grid-column: 1 / -1; background: #00000055; border-radius: 12px; padding: 10px;
+               border-left: 3px solid var(--accent); }
+  .bilateral .label { font-size: 10px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; }
+  .bilateral .verdict { font-size: 14px; color: var(--ink); font-weight: 700; margin-top: 3px; }
+  .bilateral .detail { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .bilateral.match { border-left-color: var(--accent2); }
+
+  nav.tabs { display: flex; gap: 6px; padding: 6px; background: var(--bg2); border-radius: 14px; margin: 10px 0; }
+  nav.tabs button {
+    background: transparent; color: var(--ink-dim); padding: 10px;
+    font-size: 13px; font-weight: 600;
+  }
+  nav.tabs button.active { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+
+  .pill { display: inline-block; background: #00000040; border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 10px; font-size: 11px; color: var(--ink-dim); margin: 2px 4px 2px 0; }
+  .step { font-size: 11px; color: var(--accent2); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+  .hint { font-size: 12px; color: var(--ink-dim); margin-top: 6px; text-align: center; }
+  .hidden { display: none !important; }
+
+  .post-stage { aspect-ratio: 9/16; background: #000; position: relative; border-radius: 14px; overflow: hidden; }
+  .post-stage canvas { width: 100%; height: 100%; display: block; }
+  .post-overlay-text { position: absolute; left: 0; right: 0; top: 50%;
+    transform: translateY(-50%); text-align: center; color: #fff;
+    font-size: 24px; font-weight: 800; text-shadow: 0 2px 8px #000; padding: 0 14px; pointer-events: none; }
+  .footer-note { font-size: 10px; color: var(--ink-dim); text-align: center; padding: 18px 0 8px; }
+
+  .err { background: #3a0012; color: #ffdbe4; border-left: 4px solid #ff5577;
+    padding: 10px 14px; border-radius: 8px; font-size: 12px; margin: 10px 0; display: none; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<div id="jshealth">JAVASCRIPT NOT RUNNING &mdash; SEE TIP BELOW</div>
+
+<header>
+  <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
+  <div class="tag" style="margin-top:20px">Prototype v0.22 &middot; Davis Scale</div>
+</header>
+
+<main>
+
+  <div class="card" id="open-help">
+    <div class="step">Can&rsquo;t see buttons respond?</div>
+    <h2>Open this file in Safari (not Files preview)</h2>
+    <p>When the top banner turns green and says &ldquo;JavaScript running&rdquo;, you&rsquo;re good. If it&rsquo;s red, the page is rendering inside the iOS Files app preview, which doesn&rsquo;t execute JavaScript. Tap the <strong>Share</strong> icon in the upper right of the preview and pick <strong>Open in Safari</strong>. Or long-press the file in Files &rarr; Share &rarr; Safari.</p>
+  </div>
+
+  <div id="err" class="err"></div>
+
+  <nav class="tabs">
+    <button type="button" class="tab-btn active" data-tab="capture">Analyze</button>
+    <button type="button" class="tab-btn" data-tab="post">Post Maker</button>
+    <button type="button" class="tab-btn" data-tab="about">About</button>
+  </nav>
+
+  <!-- ======================== ANALYZE ======================== -->
+  <section id="tab-capture">
+
+    <div class="card" id="card-capture">
+      <div class="step">Step 1</div>
+      <h2>Take or upload a photo</h2>
+      <p>A full-face selfie works great &mdash; you&rsquo;ll pick which eye to analyze in the next step. Close-up iris photos also work. Shoot in soft daylight, avoid on-camera flash if possible.</p>
+      <div class="controls">
+        <button type="button" id="btn-camera">Take Photo</button>
+        <button type="button" class="secondary" id="btn-upload">Choose Photo</button>
+        <button type="button" class="secondary full" id="btn-sample">Use Sample Iris</button>
+      </div>
+      <label class="tinylabel" style="margin-top:12px">Date of birth <span style="font-weight:400;color:var(--ink-dim)">(optional &mdash; improves limbal ring scoring)</span></label>
+      <input type="date" id="birthdate-input" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;font-family:inherit;width:100%;margin-bottom:6px">
+      <input type="file" id="file-input" accept="image/*">
+    </div>
+
+    <!-- ============== Step 2: Locate the eye ============== -->
+    <div class="card" id="card-locate" style="display:none">
+      <div class="step">Step 2</div>
+      <h2 id="locate-title">Tap on the eye you want to analyze</h2>
+      <p id="locate-sub">We&rsquo;ll zoom in and fit the iris ring automatically on the next step.</p>
+      <div class="stage" id="locate-stage">
+        <canvas id="locate-canvas"></canvas>
+      </div>
+      <div class="hint">Tap the center of the iris. Use the slider to adjust the crop.</div>
+      <label class="tinylabel">Crop size</label>
+      <input class="slider" id="r-crop" type="range" min="8" max="60" value="22">
+      <div class="controls">
+        <button type="button" class="secondary" id="btn-locate-back">Back</button>
+        <button type="button" id="btn-zoom-in" disabled style="opacity:0.5">Zoom In &rarr;</button>
+      </div>
+    </div>
+
+    <!-- ============== Step 3: Fit the donut ============== -->
+    <div class="card" id="card-fit" style="display:none">
+      <div class="step">Step 3 &middot; <span id="fit-side-label">&mdash;</span></div>
+      <h2>Fit the donut to the iris</h2>
+      <p>Tap to center. Sliders size the iris ring and pupil exclusion. Flash reflections and eyelids are filtered out automatically.</p>
+      <div class="stage" id="stage">
+        <canvas id="canvas-main"></canvas>
+      </div>
+      <div class="hint" id="autofit-hint">Auto-fit is running&hellip;</div>
+      <div id="manual-sliders" style="display:none">
+        <label class="tinylabel">Iris size</label>
+        <input class="slider" id="r-iris" type="range" min="40" max="500" value="180">
+        <label class="tinylabel">Pupil exclusion size</label>
+        <input class="slider" id="r-pupil" type="range" min="10" max="400" value="60">
+        <label class="tinylabel">Glare / reflection sensitivity</label>
+        <input class="slider" id="r-thresh" type="range" min="180" max="255" value="230">
+      </div>
+      <div class="controls">
+        <button type="button" class="secondary" id="btn-fit-back">Re-locate</button>
+        <button type="button" class="secondary" id="btn-autofit">Auto-Fit Again</button>
+      </div>
+      <div class="controls">
+        <button type="button" class="secondary" id="btn-reset">Reset</button>
+        <button type="button" id="btn-analyze">Analyze Iris</button>
+      </div>
+      <button type="button" class="secondary" id="btn-toggle-manual" style="margin-top:6px;font-size:13px;padding:10px">Adjust Manually</button>
+      <div class="hint" id="autofit-status">&nbsp;</div>
+    </div>
+
+    <!-- ============== Step 4: Davis Card ============== -->
+    <div id="card-result" style="display:none">
+      <div class="result">
+        <div class="step">eyeD Card</div>
+        <span class="eye-badge" id="r-side">Right Eye</span>
+        <div class="big" id="r-color">&mdash;</div>
+        <div class="sub" id="r-narrative">&mdash;</div>
+        <div class="swatch-row" id="r-swatches"></div>
+        <!-- View toggle: Card view (data-rich) vs Story view (prose) -->
+        <div class="view-toggle">
+          <button type="button" id="view-card" class="active" data-view="card">Card</button>
+          <button type="button" id="view-story" data-view="story">Story</button>
+        </div>
+        <!-- Highlights: featured callouts for detected features -->
+        <div class="highlights" id="r-highlights"></div>
+        <!-- Card view: attribute grid -->
+        <div id="view-card-content">
+          <div class="attrs">
+            <div class="attr"><div class="k">General Color</div><div class="v" id="r-general">&mdash;</div></div>
+            <div class="attr"><div class="k">Specific</div><div class="v" id="r-specific">&mdash;</div></div>
+            <div class="attr"><div class="k">Limbal Ring</div><div class="v" id="r-limbal">&mdash;</div></div>
+            <div class="attr"><div class="k">Heterochromia</div><div class="v" id="r-hetero">&mdash;</div></div>
+            <div class="attr"><div class="k">Sectoral</div><div class="v" id="r-sectoral">&mdash;</div></div>
+            <div class="attr"><div class="k">Freckles</div><div class="v" id="r-freckles">&mdash;</div></div>
+            <div class="attr"><div class="k">Brightness</div><div class="v" id="r-brightness">&mdash;</div></div>
+            <div class="attr"><div class="k">Saturation</div><div class="v" id="r-saturation">&mdash;</div></div>
+          </div>
+        </div>
+        <!-- Story view: written description -->
+        <div id="view-story-content" class="eye-story" style="display:none"></div>
+        <div class="twoeye" id="twoeye-summary" style="display:none">
+          <div class="eye-box" id="eye-box-left">
+            <div class="side">Left Eye</div>
+            <div class="name" id="left-name">&mdash;</div>
+            <div class="meta" id="left-meta">&mdash;</div>
+          </div>
+          <div class="eye-box" id="eye-box-right">
+            <div class="side">Right Eye</div>
+            <div class="name" id="right-name">&mdash;</div>
+            <div class="meta" id="right-meta">&mdash;</div>
+          </div>
+          <div class="bilateral" id="bilateral-row">
+            <div class="label">Bilateral heterochromia (L vs R)</div>
+            <div class="verdict" id="bilateral-verdict">&mdash;</div>
+            <div class="detail" id="bilateral-detail">&mdash;</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>What&rsquo;s next</h2>
+        <p id="next-text">Analyze the other eye for a complete pair, pop over to Post Maker for the cover-and-uncover reveal, or start over.</p>
+        <div class="controls">
+          <button type="button" id="btn-other-eye">Analyze Other Eye</button>
+          <button type="button" class="secondary" id="btn-portrait">Add Beauty Shot</button>
+          <button type="button" class="secondary" id="btn-share">Make Share Card</button>
+          <button type="button" class="secondary full" id="btn-again">Start Over</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Share Card preview modal -->
+    <div class="share-modal" id="share-modal">
+      <div class="share-inner">
+        <img id="share-preview" alt="eyeD share card">
+        <div class="share-controls">
+          <button type="button" id="share-download" class="primary">Download</button>
+          <button type="button" id="share-close">Close</button>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ======================== POST MAKER ======================== -->
+  <section id="tab-post" class="hidden">
+    <div class="card">
+      <div class="step">Cover &middot; Uncover Reveal</div>
+      <h2>What color are my eyes?</h2>
+      <p>In the production app this is a video: hand covers the eye, uncover to reveal the Davis Card. For now, tap to toggle the reveal.</p>
+    </div>
+    <div class="post-stage">
+      <canvas id="post-canvas"></canvas>
+      <div class="post-overlay-text" id="post-text">What color are my eyes?</div>
+    </div>
+    <div class="controls">
+      <button type="button" id="btn-toggle-reveal">Toggle Reveal</button>
+      <button type="button" class="secondary" id="btn-export-post">Save Image</button>
+    </div>
+    <p class="hint">v1 native app replaces this with real MP4 export.</p>
+  </section>
+
+  <!-- ======================== ABOUT ======================== -->
+  <section id="tab-about" class="hidden">
+    <div class="card">
+      <h2>What this prototype proves</h2>
+      <p>A classical-CV iris analyzer running entirely in the browser. Full-face capture, tap to locate either eye, zoom and fit, and a Davis Card per eye &mdash; no server, no ML, no photo leaves your phone.</p>
+      <p><span class="pill">Full-face &rarr; locate eye</span><span class="pill">Auto-fit pupil + iris</span><span class="pill">Sclera / lash / lid masking</span><span class="pill">Iris donut sampling</span><span class="pill">Dominant cluster per zone</span><span class="pill">Curated palette</span><span class="pill">CIE Lab distance</span><span class="pill">Heterochromia (cross-cat)</span><span class="pill">Heterochromia (gradient)</span><span class="pill">Limbal ring</span><span class="pill">Sectoral hetero</span><span class="pill">Iris freckles</span><span class="pill">Bilateral heterochromia</span><span class="pill">Left / Right labeling</span></p>
+    </div>
+    <div class="card">
+      <h2>Production path</h2>
+      <p>This spec ports to native iOS (SwiftUI + Vision + Core Image). Native adds automatic eye detection via Vision&rsquo;s face-landmarks, real-time iris auto-centering, persistent eye-pair library, MP4 reveal export, and opted-in dataset collection for the v1.1 Core ML pattern classifier (Rayid Flower / Stream / Shaker / Jewel).</p>
+    </div>
+    <div class="card">
+      <h2>Davis Scale v0.1</h2>
+      <p>General color &middot; Specific named color &middot; Limbal ring strength &middot; Heterochromia &middot; Brightness &middot; Saturation &middot; Left/Right. Adds for v1.1: pattern, freckles, sclera tone, eye shape.</p>
+    </div>
+    <div class="footer-note">eyeD prototype &copy; 2026 &middot; Local processing only</div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+"use strict";
+
+// ---- JS-health indicator: flip to green on load so Bryan knows JS is running
+function markRunning() {
+  var h = document.getElementById('jshealth');
+  if (h) { h.style.background = '#116b2d'; h.textContent = 'JAVASCRIPT RUNNING'; }
+  var hh = document.getElementById('open-help');
+  if (hh) hh.style.display = 'none';
+}
+
+// Visible error reporter
+function showError(msg) {
+  var e = document.getElementById('err');
+  if (!e) { alert('ERROR: ' + msg); return; }
+  e.style.display = 'block';
+  e.textContent = 'Error: ' + msg;
+}
+window.addEventListener('error', function(ev){
+  showError((ev.message || 'unknown') + (ev.filename ? ' (' + ev.filename + ':' + ev.lineno + ')' : ''));
+});
+
+try {
+
+var $ = function (id) { return document.getElementById(id); };
+
+// ======================= PALETTE =======================
+var PALETTE = [
+  // ── BLUE (32 entries: icy → deep navy) ──
+  ['Blue','Arctic Mist','#E8F3FA'],['Blue','Porcelain Blue','#D6E6F2'],['Blue','Crystal Blue','#BFD8E8'],
+  ['Blue','Ice Blue','#A8CDE0'],['Blue','Powder Blue','#92BDD6'],['Blue','Sky Blue','#7AAECB'],
+  ['Blue','Periwinkle','#7EA4C8'],['Blue','Cornflower Blue','#6B96BF'],['Blue','True Blue','#5A87B2'],
+  ['Blue','Cerulean','#4A78A5'],['Blue','Denim Blue','#3D6A98'],['Blue','Steel Blue','#4682B4'],
+  ['Blue','Azure','#3070A0'],['Blue','Cobalt','#2860A0'],['Blue','Royal Blue','#1E508A'],
+  ['Blue','Deep Blue','#1A4580'],['Blue','Sapphire','#143872'],['Blue','Navy','#0E2A5C'],
+  ['Blue','Midnight Blue','#0A1F4A'],['Blue','Gunmetal Blue','#4A6480'],['Blue','Slate Blue','#5A7090'],
+  ['Blue','Storm Blue','#3A5570'],['Blue','Dusk Blue','#2E4A65'],['Blue','Indigo','#2A3F73'],
+  ['Blue','Iris Blue','#5060A0'],['Blue','Wedgwood','#5B80A0'],['Blue','Aquamarine','#6ACCC0'],
+  ['Blue','Teal Blue','#4AAAB0'],['Blue','Blue-Gray','#6080A0'],['Blue','Heather Blue','#7090B0'],
+  ['Blue','Smoky Blue','#607A90'],['Blue','Pewter Blue','#708090'],
+  // ── GRAY (20 entries: silver → charcoal) ──
+  ['Gray','Silver Mist','#D0D4DC'],['Gray','Pearl Gray','#C0C5CC'],['Gray','Dove Gray','#B0B5BC'],
+  ['Gray','Cloud Gray','#A0A5AC'],['Gray','Ash Gray','#90969C'],['Gray','Smoke Gray','#80868C'],
+  ['Gray','Warm Gray','#908880'],['Gray','Cool Gray','#808890'],['Gray','Slate Gray','#708090'],
+  ['Gray','Steel Gray','#608088'],['Gray','Iron Gray','#505860'],['Gray','Graphite','#404850'],
+  ['Gray','Charcoal','#384048'],['Gray','Dark Slate','#303840'],['Gray','Gun Metal','#485860'],
+  ['Gray','Blue Gray','#607080'],['Gray','Storm Gray','#506070'],['Gray','Dusk Gray','#485868'],
+  ['Gray','Silver Blue','#8090A0'],['Gray','Pewter','#708898'],
+  // ── GREEN (28 entries: pale mint → dark forest) ──
+  ['Green','Mint Frost','#D0E8D4'],['Green','Pale Sage','#B8D4BC'],['Green','Sea Glass','#A0C4A8'],
+  ['Green','Seafoam','#88B898'],['Green','Celadon','#78A888'],['Green','Sage','#70A078'],
+  ['Green','Jade','#60986A'],['Green','Pistachio','#80A860'],['Green','Apple','#70A050'],
+  ['Green','Fern','#608848'],['Green','Olive','#787848'],['Green','Olive Green','#687040'],
+  ['Green','Khaki Green','#708858'],['Green','Moss','#506040'],['Green','Moss Green','#486038'],
+  ['Green','Hunter','#406038'],['Green','Forest Green','#305830'],['Green','Emerald','#206848'],
+  ['Green','Deep Emerald','#185838'],['Green','Bottle Green','#204830'],['Green','Pine','#284838'],
+  ['Green','Teal','#387868'],['Green','Dark Teal','#286058'],['Green','Malachite','#308060'],
+  ['Green','Viridian','#408068'],['Green','Eucalyptus','#608878'],['Green','Autumn Green','#788848'],
+  ['Green','Swamp Green','#506840'],
+  // ── HAZEL (24 entries: golden-green → dark brown-green) ──
+  ['Hazel','Warm Gold','#C8A870'],['Hazel','Honey Gold','#B89060'],['Hazel','Sandy Hazel','#A88050'],
+  ['Hazel','Light Hazel','#987040'],['Hazel','Golden Hazel','#906838'],['Hazel','Warm Hazel','#886030'],
+  ['Hazel','Hazel','#806028'],['Hazel','Autumn Hazel','#786020'],['Hazel','Amber Hazel','#906828'],
+  ['Hazel','Copper Hazel','#885830'],['Hazel','Rich Hazel','#705028'],['Hazel','Dark Hazel','#604820'],
+  ['Hazel','Deep Hazel','#584018'],['Hazel','Green-Hazel','#788848'],['Hazel','Olive-Hazel','#708040'],
+  ['Hazel','Mossy Hazel','#687038'],['Hazel','Khaki Hazel','#787040'],['Hazel','Forest Hazel','#606838'],
+  ['Hazel','Warm Moss','#706838'],['Hazel','Muddy Hazel','#686038'],['Hazel','Bronze','#886040'],
+  ['Hazel','Antique Gold','#A07840'],['Hazel','Caramel','#987848'],['Hazel','Toffee','#885A38'],
+  // ── AMBER (20 entries: champagne → deep amber) ──
+  ['Amber','Champagne','#F0DFBA'],['Amber','Pale Gold','#E8CF98'],['Amber','Warm Cream','#E0C080'],
+  ['Amber','Honey','#D8B060'],['Amber','Gold','#D0A040'],['Amber','Topaz','#C89030'],
+  ['Amber','Amber','#C08020'],['Amber','Deep Gold','#B07018'],['Amber','Burnt Gold','#A86018'],
+  ['Amber','Cognac','#A05810'],['Amber','Tawny','#985010'],['Amber','Copper','#904808'],
+  ['Amber','Butterscotch','#C89048'],['Amber','Caramel Gold','#B88040'],['Amber','Warm Amber','#B87030'],
+  ['Amber','Bronze Gold','#A87028'],['Amber','Tiger Eye','#B87020'],['Amber','Tortoise','#987010'],
+  ['Amber','Warm Tawny','#906018'],['Amber','Dark Amber','#885010'],
+  // ── BROWN (56 entries: tan → near-black) ──
+  ['Brown','Ivory','#E8D8B8'],['Brown','Cream','#D8C8A0'],['Brown','Linen','#C8B888'],
+  ['Brown','Sand','#B8A870'],['Brown','Wheat','#A89858'],['Brown','Tan','#988848'],
+  ['Brown','Khaki','#908040'],['Brown','Warm Tan','#987840'],['Brown','Light Brown','#886830'],
+  ['Brown','Caramel Brown','#785820'],['Brown','Warm Brown','#705018'],['Brown','Hazelnut','#684810'],
+  ['Brown','Chestnut','#604010'],['Brown','Cinnamon','#703818'],['Brown','Russet','#703010'],
+  ['Brown','Auburn','#682818'],['Brown','Mahogany','#602010'],['Brown','Cognac','#582018'],
+  ['Brown','Sienna','#703010'],['Brown','Burnt Sienna','#682808'],['Brown','Umber','#604020'],
+  ['Brown','Raw Umber','#584018'],['Brown','Walnut','#503010'],['Brown','Rich Walnut','#482808'],
+  ['Brown','Dark Walnut','#402008'],['Brown','Chocolate','#381808'],['Brown','Dark Chocolate','#301008'],
+  ['Brown','Espresso','#281008'],['Brown','Mocha','#301808'],['Brown','Dark Mocha','#281008'],
+  ['Brown','Coffee','#201008'],['Brown','Black Coffee','#180808'],['Brown','Near Black','#100808'],
+  ['Brown','Warm Black','#180C08'],['Brown','Deep Brown','#200C08'],['Brown','Rich Brown','#281008'],
+  ['Brown','Mahogany Brown','#381810'],['Brown','Russet Brown','#401808'],['Brown','Copper Brown','#502010'],
+  ['Brown','Brick Brown','#582018'],['Brown','Clay Brown','#604028'],['Brown','Terracotta','#703028'],
+  ['Brown','Adobe','#784030'],['Brown','Burnt Clay','#683028'],['Brown','Red Brown','#602018'],
+  ['Brown','Warm Chestnut','#583018'],['Brown','Mink','#705050'],['Brown','Dark Mink','#604040'],
+  ['Brown','Otter Brown','#706050'],['Brown','Seal Brown','#503838'],['Brown','Dark Seal','#402828'],
+  ['Brown','Peat','#504030'],['Brown','Mud Brown','#483828'],['Brown','Earth Brown','#504030'],
+  ['Brown','Soil Brown','#483830'],['Brown','Bark','#402818'],
+  // ── VIOLET (20 entries: lavender → deep violet) ──
+  ['Violet','Lilac Mist','#D8C8E8'],['Violet','Pale Lavender','#C8B0D8'],['Violet','Lavender','#B898C8'],
+  ['Violet','Soft Violet','#A880B8'],['Violet','Mauve','#9870A8'],['Violet','Dusty Violet','#886098'],
+  ['Violet','Violet','#785088'],['Violet','Warm Violet','#684878'],['Violet','Deep Violet','#583868'],
+  ['Violet','Plum','#483058'],['Violet','Dark Plum','#382048'],['Violet','Grape','#502858'],
+  ['Violet','Amethyst','#806098'],['Violet','Purple','#705888'],['Violet','Iris','#808098'],
+  ['Violet','Blue Violet','#6068A8'],['Violet','Indigo Violet','#485098'],['Violet','Twilight','#505070'],
+  ['Violet','Storm Violet','#486080'],['Violet','Dusk Violet','#405068']
+]; // palette array end
+
+function hexToRgb(h){ var n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function srgbLin(c){ c=c/255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function rgbLab(r,g,b){
+  var R=srgbLin(r), G=srgbLin(g), B=srgbLin(b);
+  var X=(R*0.4124564+G*0.3575761+B*0.1804375)*100;
+  var Y=(R*0.2126729+G*0.7151522+B*0.0721750)*100;
+  var Z=(R*0.0193339+G*0.1191920+B*0.9503041)*100;
+  var Xn=95.047, Yn=100, Zn=108.883;
+  function f(t){ return t>0.008856 ? Math.cbrt(t) : (7.787*t + 16/116); }
+  var fx=f(X/Xn), fy=f(Y/Yn), fz=f(Z/Zn);
+  return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+}
+function dE(a,b){ return Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]); }
+function rgbHsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  var mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn, h=0;
+  if (d){ if (mx===r) h=((g-b)/d)%6; else if (mx===g) h=(b-r)/d+2; else h=(r-g)/d+4; h*=60; if (h<0) h+=360; }
+  return [h, mx ? d/mx : 0, mx];
+}
+
+PALETTE.forEach(function(p){ var rgb=hexToRgb(p[2]); p.cat=p[0]; p.name=p[1]; p.hex=p[2]; p.rgb=rgb; p.lab=rgbLab(rgb[0],rgb[1],rgb[2]); });
+// ===== Eye-color rarity (global distribution, approximate) =====
+// Sources: published prevalence surveys synthesized — used here for product
+// copy, not clinical claims. Numbers are reasonable approximations.
+var RARITY = {
+  'Brown':  { pct: 75,   label: 'Common',          line: 'Roughly 3 in 4 people on Earth have brown eyes — the most common color in the world.' },
+  'Blue':   { pct: 9,    label: 'Uncommon',        line: 'About 1 in 11 people have blue eyes — concentrated in northern Europe and increasingly rare worldwide.' },
+  'Hazel':  { pct: 5,    label: 'Uncommon',        line: 'About 1 in 20 people have hazel eyes — a true crossroads color that shifts in different light.' },
+  'Amber':  { pct: 5,    label: 'Uncommon',        line: 'About 1 in 20 people have amber eyes — a single dominant gold-yellow tone, rarer than people realize.' },
+  'Gray':   { pct: 3,    label: 'Rare',            line: 'About 1 in 33 people have true gray eyes — the rarest of the "common" colors.' },
+  'Green':  { pct: 2,    label: 'Rare',            line: 'About 1 in 50 people have green eyes — the rarest natural eye color globally.' },
+  'Violet': { pct: 0.1,  label: 'Extraordinary',   line: 'Fewer than 1 in 1,000 people have violet eyes — a vanishingly rare optical effect.' },
+};
+
+// ===== Composite rarity score 0-100 =====
+// Stacks: base color prevalence + heterochromia + sectoral + limbal + freckles + age-adjusted limbal bonus
+function computeRarityScore(result) {
+  var base = {
+    'Brown': 0, 'Blue': 40, 'Hazel': 45, 'Amber': 50,
+    'Gray': 65, 'Green': 75, 'Violet': 95
+  };
+  var score = base[result.overall ? result.overall.cat : 'Brown'] || 0;
+  // Heterochromia bonus
+  if (result.hetero && result.hetero !== 'None') {
+    if (result.hetero.indexOf('warmth') >= 0 || result.hetero.indexOf('lightness') >= 0) score += 8;
+    else if (result.hetero === 'Central') score += 12;
+    else score += 6;
+  }
+  // Sectoral bonus
+  if (result.sectoral) score += 15;
+  // Limbal ring bonus
+  var limbalBonus = { 'Faint': 2, 'Soft': 4, 'Moderate': 7, 'Strong': 12, 'Dramatic': 18 };
+  if (result.limbal && limbalBonus[result.limbal]) {
+    var lb = limbalBonus[result.limbal];
+    // Age adjustment: strong limbal ring in someone over 40 is rarer
+    var age = result.userAge || 0;
+    if (age > 40) lb = Math.round(lb * 1.3);
+    score += lb;
+  }
+  // Freckle bonus
+  if (result.freckles && result.freckles.length) {
+    score += Math.min(8, result.freckles.length * 2);
+  }
+  return Math.min(100, Math.round(score));
+}
+
+function rarityScoreLabel(score) {
+  if (score >= 90) return 'Extraordinary';
+  if (score >= 75) return 'Very Rare';
+  if (score >= 60) return 'Rare';
+  if (score >= 45) return 'Uncommon';
+  if (score >= 25) return 'Somewhat Common';
+  return 'Common';
+}
+
+// ===== Vibe descriptors per category (light to dark) =====
+// Pick one based on the dominant outer-iris L* value.
+var VIBES = {
+  'Brown':  ['Warm ivory','Sandy dune','Golden caramel','Whiskey-soaked','Rich chestnut','Velvet brown','Espresso depth','Near-black depth'],
+  'Blue':   ['Glacial mist','Arctic ice','Powder sky','Cornflower','Denim wash','Steel water','Stormcloud blue','Midnight ink'],
+  'Gray':   ['Silver cloud','Pearl mist','Dove gray','Smoke and ash','Worn pewter','Smoke and silver','Iron slate','Dark graphite'],
+  'Hazel':  ['Warm honey','Golden wheat','Autumn ember','Chestnut shimmer','Forest floor','Whiskey-amber','Bark and bronze','Dark loam'],
+  'Amber':  ['Champagne glow','Pale gold','Sunlit honey','Honeyed gold','Maple warmth','Cognac warmth','Tawny ember','Burnt amber'],
+  'Green':  ['Sea-glass','Pale sage','Spring moss','Celadon mist','Forest moss','Deep jade','Emerald depth','Dark forest'],
+  'Violet': ['Lavender mist','Pale lilac','Soft amethyst','Twilight mauve','Dusty violet','Deep violet','Plum depth','Indigo bloom'],
+};
+
+function getVibe(cat, lab){
+  var arr = VIBES[cat] || ['Singular'];
+  var L = lab ? lab[0] : 50;
+  // map L (0-100) into the array length
+  var idx = Math.max(0, Math.min(arr.length-1, Math.floor((100 - L) / (100/arr.length))));
+  return arr[idx];
+}
+
+// ===== Iris pattern hint from saturation + brightness =====
+// Rough heuristic — true Rayid pattern classification is v1.1's CoreML target.
+function getPatternHint(brightness, saturation){
+  // brightness 0..255, saturation 0..1 (these are the analyzer's existing fields)
+  if (saturation > 0.30 && brightness > 100) return 'Vivid stroma — strong color saturation';
+  if (saturation > 0.25) return 'Saturated iris — pigment-rich';
+  if (saturation < 0.10) return 'Soft, muted stroma';
+  if (brightness < 70) return 'Deep, light-absorbing iris';
+  if (brightness > 140) return 'Bright, light-reflecting iris';
+  return 'Balanced light and pigment';
+}
+
+function rgbToHex(rgb){
+  function p(n){ var s = n.toString(16); return s.length===1 ? '0'+s : s; }
+  return '#' + p(rgb[0]) + p(rgb[1]) + p(rgb[2]);
+}
+function nearestPal(rgb){
+  var lab=rgbLab(rgb[0],rgb[1],rgb[2]), best=null, bd=Infinity;
+  for (var i=0;i<PALETTE.length;i++){ var d=dE(lab, PALETTE[i].lab); if (d<bd){bd=d; best=PALETTE[i];} }
+  return {entry:best, distance:bd};
+}
+
+// ======================= TAB SWITCHING =======================
+var tabs = document.querySelectorAll('.tab-btn');
+for (var i=0;i<tabs.length;i++){
+  (function(btn){
+    btn.addEventListener('click', function(){
+      for (var j=0;j<tabs.length;j++) tabs[j].classList.remove('active');
+      btn.classList.add('active');
+      var t = btn.getAttribute('data-tab');
+      ['capture','post','about'].forEach(function(n){
+        var el = $('tab-'+n);
+        if (el) el.classList.toggle('hidden', n !== t);
+      });
+      if (t === 'post') drawPostStage();
+    });
+  })(tabs[i]);
+}
+
+// ======================= FILE LOADING =======================
+var fileInput = $('file-input');
+
+$('btn-camera').addEventListener('click', function(){
+  fileInput.setAttribute('capture','environment');
+  fileInput.click();
+});
+$('btn-upload').addEventListener('click', function(){
+  fileInput.removeAttribute('capture');
+  fileInput.click();
+});
+$('btn-sample').addEventListener('click', function(){
+  drawSyntheticFace();
+});
+fileInput.addEventListener('change', function(e){
+  var f = e.target.files && e.target.files[0];
+  if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function(){ loadOriginalFromUrl(reader.result); };
+  reader.onerror = function(){ showError('Could not read file.'); };
+  reader.readAsDataURL(f);
+});
+
+// Synthetic "face" with two tinted irises so the locate flow can be demoed without a camera
+function drawSyntheticFace(){
+  var c = document.createElement('canvas'); c.width = 900; c.height = 600;
+  var ctx = c.getContext('2d');
+  // background
+  var bg = ctx.createLinearGradient(0,0,0,600);
+  bg.addColorStop(0,'#d6c0a8'); bg.addColorStop(1,'#b89a7c');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,900,600);
+  // face silhouette
+  ctx.fillStyle = '#e8cdb3';
+  ctx.beginPath(); ctx.ellipse(450, 320, 270, 310, 0, 0, Math.PI*2); ctx.fill();
+  // eyes: left (person's right in image = viewer's left) and right
+  drawSynthEye(ctx, 355, 290, true);
+  drawSynthEye(ctx, 545, 290, false);
+  // nose
+  ctx.strokeStyle = '#b58f70'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(450,310); ctx.quadraticCurveTo(440,380,450,420); ctx.stroke();
+  // mouth
+  ctx.strokeStyle = '#8a4e3a'; ctx.lineWidth = 5; ctx.beginPath();
+  ctx.moveTo(400,470); ctx.quadraticCurveTo(450,495,500,470); ctx.stroke();
+  loadOriginalFromUrl(c.toDataURL());
+}
+function drawSynthEye(ctx, cx, cy, hetero){
+  // sclera
+  ctx.fillStyle = '#fafafa';
+  ctx.beginPath(); ctx.ellipse(cx, cy, 60, 32, 0, 0, Math.PI*2); ctx.fill();
+  // iris gradient (blue for both; add pupillary amber on the "hetero" side)
+  var grad = ctx.createRadialGradient(cx,cy,6, cx,cy,30);
+  if (hetero){
+    grad.addColorStop(0.00,'#caa15a');
+    grad.addColorStop(0.30,'#caa15a');
+    grad.addColorStop(0.45,'#7aa4d0');
+    grad.addColorStop(0.90,'#3d6a98');
+    grad.addColorStop(1.00,'#1d3a60');
+  } else {
+    grad.addColorStop(0.00,'#6f9abf');
+    grad.addColorStop(0.70,'#4d7aa5');
+    grad.addColorStop(1.00,'#23466b');
+  }
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
+  // texture
+  for (var k=0;k<160;k++){
+    var a = Math.random()*Math.PI*2;
+    var r1 = 8 + Math.random()*18, r2 = r1+2+Math.random()*3;
+    ctx.strokeStyle = 'rgba(255,255,255,'+(0.04+Math.random()*0.08)+')';
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(a)*r1, cy+Math.sin(a)*r1);
+    ctx.lineTo(cx+Math.cos(a)*r2, cy+Math.sin(a)*r2);
+    ctx.stroke();
+  }
+  // pupil
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2); ctx.fill();
+  // catch-light
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath(); ctx.arc(cx-4, cy-4, 2.5, 0, Math.PI*2); ctx.fill();
+  // lashes / lid hints
+  ctx.strokeStyle = '#3a2717'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx-62, cy-4); ctx.quadraticCurveTo(cx, cy-38, cx+62, cy-4); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx-60, cy+4); ctx.quadraticCurveTo(cx, cy+32, cx+60, cy+4); ctx.stroke();
+}
+
+// ======================= STATE =======================
+var originalImgEl = null;     // full-face image user loaded
+var imgEl = null;             // working (cropped) image used by fit/analyze steps
+var imgLoaded = false;
+var currentSide = null;       // 'Left' or 'Right'
+var eyeResults = {};          // { 'Left': resultObj, 'Right': resultObj }
+var captureMode = 'analysis'; // 'analysis' | 'portrait' — controls what the
+                              // Analyze button does (run analyzer vs. save
+                              // a portrait shot to the existing result).
+
+// ======================= LOCATE STAGE =======================
+var locCanvas = $('locate-canvas'), lctx = locCanvas.getContext('2d');
+var locStageW = 600, locStageH = 600;
+var locDraw = { dx:0, dy:0, dw:600, dh:600 };
+var locTap = null;      // {sx, sy} in stage pixels, or null
+var cropPct = 22;       // crop size as % of longer image side
+
+function loadOriginalFromUrl(url){
+  var img = new Image();
+  img.onload = function(){
+    originalImgEl = img;
+    // start the locate step
+    $('card-capture').scrollIntoView({behavior:'smooth', block:'start'});
+    showLocate();
+  };
+  img.onerror = function(){ showError('Could not load image.'); };
+  img.src = url;
+}
+
+function showLocate(){
+  $('card-locate').style.display = 'block';
+  $('card-fit').style.display = 'none';
+  // When re-locating, keep previous result on screen only if we're about to analyze the OTHER eye
+  // Otherwise hide it.
+  if (!currentSide) $('card-result').style.display = 'none';
+  locTap = null;
+  $('btn-zoom-in').disabled = true;
+  $('btn-zoom-in').style.opacity = '0.5';
+  setTimeout(function(){
+    layoutLocate();
+    $('card-locate').scrollIntoView({behavior:'smooth', block:'start'});
+  }, 40);
+  // If we already have one eye result, adjust titles to steer user to the OTHER eye
+  var firstDone = eyeResults['Left'] ? 'Left' : (eyeResults['Right'] ? 'Right' : null);
+  if (firstDone){
+    var other = firstDone === 'Left' ? 'Right' : 'Left';
+    $('locate-title').textContent = 'Now tap on the ' + other.toLowerCase() + ' eye';
+    $('locate-sub').textContent = 'That\u2019s the one on the ' + (other === 'Left' ? 'right side of the photo' : 'left side of the photo') + ' as you look at it.';
+  } else {
+    $('locate-title').textContent = 'Tap on the eye you want to analyze';
+    $('locate-sub').textContent = 'We\u2019ll zoom in and fit the iris ring automatically on the next step.';
+  }
+}
+
+function sizeLocCanvas(){
+  var stage = $('locate-stage');
+  var rect = stage.getBoundingClientRect();
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  locStageW = Math.round(rect.width);
+  locStageH = Math.round(rect.height);
+  locCanvas.width  = locStageW * dpr;
+  locCanvas.height = locStageH * dpr;
+  locCanvas.style.width  = locStageW + 'px';
+  locCanvas.style.height = locStageH + 'px';
+  lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function layoutLocate(){
+  if (!originalImgEl) return;
+  sizeLocCanvas();
+  var ar = originalImgEl.width / originalImgEl.height;
+  var dw = locStageW, dh = locStageH;
+  if (ar > 1) dh = locStageW / ar; else dw = locStageH * ar;
+  locDraw.dx = (locStageW - dw) / 2;
+  locDraw.dy = (locStageH - dh) / 2;
+  locDraw.dw = dw;
+  locDraw.dh = dh;
+  drawLocate();
+}
+
+function drawLocate(){
+  if (!originalImgEl) return;
+  lctx.fillStyle = '#000'; lctx.fillRect(0,0,locStageW, locStageH);
+  lctx.drawImage(originalImgEl, locDraw.dx, locDraw.dy, locDraw.dw, locDraw.dh);
+  if (locTap){
+    // translate crop % to a radius in stage pixels based on the LONGER image dimension
+    var longer = Math.max(locDraw.dw, locDraw.dh);
+    var rStage = longer * (cropPct / 100) / 2;
+    // dim outside the crop box
+    lctx.save();
+    lctx.fillStyle = 'rgba(0,0,0,0.55)';
+    lctx.beginPath();
+    lctx.rect(0,0,locStageW, locStageH);
+    lctx.rect(locTap.sx - rStage, locTap.sy - rStage, rStage*2, rStage*2);
+    lctx.fill('evenodd');
+    lctx.restore();
+    // crosshair + box
+    lctx.strokeStyle = '#6cc4ff'; lctx.lineWidth = 2;
+    lctx.strokeRect(locTap.sx - rStage, locTap.sy - rStage, rStage*2, rStage*2);
+    lctx.strokeStyle = '#ffffffcc';
+    lctx.beginPath();
+    lctx.moveTo(locTap.sx - 10, locTap.sy); lctx.lineTo(locTap.sx + 10, locTap.sy);
+    lctx.moveTo(locTap.sx, locTap.sy - 10); lctx.lineTo(locTap.sx, locTap.sy + 10);
+    lctx.stroke();
+    // side label
+    var imgCx = locTap.sx - locDraw.dx;
+    var side = (imgCx < locDraw.dw / 2) ? 'Right Eye' : 'Left Eye'; // "your right eye" appears on left side of image
+    lctx.fillStyle = '#ffd66c'; lctx.font = '700 13px -apple-system, system-ui, sans-serif';
+    lctx.textAlign = 'center';
+    lctx.fillText(side, locTap.sx, locTap.sy - rStage - 8);
+  }
+}
+
+function handleLocateTap(clientX, clientY){
+  if (!originalImgEl) return;
+  var rect = locCanvas.getBoundingClientRect();
+  var sx = clientX - rect.left, sy = clientY - rect.top;
+  // only accept taps within the image area
+  if (sx < locDraw.dx || sx > locDraw.dx + locDraw.dw ||
+      sy < locDraw.dy || sy > locDraw.dy + locDraw.dh) return;
+  locTap = { sx: sx, sy: sy };
+  $('btn-zoom-in').disabled = false;
+  $('btn-zoom-in').style.opacity = '1';
+  drawLocate();
+}
+locCanvas.addEventListener('click', function(ev){ handleLocateTap(ev.clientX, ev.clientY); });
+locCanvas.addEventListener('touchstart', function(ev){
+  if (!ev.touches || !ev.touches[0]) return;
+  handleLocateTap(ev.touches[0].clientX, ev.touches[0].clientY);
+  ev.preventDefault();
+}, {passive:false});
+$('r-crop').addEventListener('input', function(e){ cropPct = +e.target.value; drawLocate(); });
+
+$('btn-locate-back').addEventListener('click', function(){
+  $('card-locate').style.display = 'none';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+});
+
+$('btn-zoom-in').addEventListener('click', function(){
+  if (!locTap || !originalImgEl) return;
+  // Convert tap to original-image coordinates
+  var sx = locTap.sx - locDraw.dx;
+  var sy = locTap.sy - locDraw.dy;
+  var scaleX = originalImgEl.width / locDraw.dw;
+  var scaleY = originalImgEl.height / locDraw.dh;
+  var ix = sx * scaleX, iy = sy * scaleY;
+  var longer = Math.max(originalImgEl.width, originalImgEl.height);
+  var cropR = longer * (cropPct / 100) / 2;
+  var cx0 = Math.max(0, Math.round(ix - cropR));
+  var cy0 = Math.max(0, Math.round(iy - cropR));
+  var cx1 = Math.min(originalImgEl.width,  Math.round(ix + cropR));
+  var cy1 = Math.min(originalImgEl.height, Math.round(iy + cropR));
+  var cw = cx1 - cx0, ch = cy1 - cy0;
+  if (cw < 40 || ch < 40){ showError('Crop too small. Enlarge crop size.'); return; }
+  // Determine L/R side label
+  currentSide = (ix < originalImgEl.width / 2) ? 'Right' : 'Left';
+  // Build cropped image as the new working image
+  var off = document.createElement('canvas');
+  off.width = cw; off.height = ch;
+  var octx = off.getContext('2d');
+  octx.drawImage(originalImgEl, cx0, cy0, cw, ch, 0, 0, cw, ch);
+  var img = new Image();
+  img.onload = function(){
+    imgEl = img; imgLoaded = true;
+    $('card-locate').style.display = 'none';
+    $('card-fit').style.display = 'block';
+    $('card-result').style.display = 'none';
+    $('fit-side-label').textContent = currentSide + ' Eye';
+    setTimeout(function(){
+      layoutStage();
+      applyAutoFit();
+      $('card-fit').scrollIntoView({behavior:'smooth', block:'start'});
+    autoRunFit();
+    }, 50);
+  };
+  img.onerror = function(){ showError('Could not crop image.'); };
+  img.src = off.toDataURL();
+});
+
+// ======================= AUTO-FIT =======================
+// Classical CV pupil+iris detection. Returns fractions (0..1) so we can apply
+// to the stage regardless of how the image is scaled in.
+function autoFit(src){
+  var sampleSide = 160;
+  var shorter = Math.min(src.width, src.height);
+  var scale = sampleSide / shorter;
+  var W = Math.max(2, Math.round(src.width * scale));
+  var H = Math.max(2, Math.round(src.height * scale));
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+  octx.drawImage(src, 0, 0, W, H);
+  var data = octx.getImageData(0, 0, W, H).data;
+  var lum = new Float32Array(W*H);
+  var sat = new Float32Array(W*H);
+  for (var i=0; i<W*H; i++){
+    var r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+    lum[i] = 0.299*r + 0.587*g + 0.114*b;
+    var mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+    sat[i] = mx>0 ? (mx-mn)/mx : 0;
+  }
+  var II = new Float64Array((W+1)*(H+1));
+  for (var y=0; y<H; y++){
+    var rowsum = 0;
+    for (var x=0; x<W; x++){
+      rowsum += lum[y*W + x];
+      II[(y+1)*(W+1) + (x+1)] = II[y*(W+1) + (x+1)] + rowsum;
+    }
+  }
+  function bs(x0,y0,x1,y1){
+    x0=Math.max(0,x0); y0=Math.max(0,y0); x1=Math.min(W,x1); y1=Math.min(H,y1);
+    if (x1<=x0 || y1<=y0) return 0;
+    return II[y1*(W+1)+x1] - II[y0*(W+1)+x1] - II[y1*(W+1)+x0] + II[y0*(W+1)+x0];
+  }
+  function bm(x0,y0,x1,y1){
+    x0=Math.max(0,x0); y0=Math.max(0,y0); x1=Math.min(W,x1); y1=Math.min(H,y1);
+    var n=(x1-x0)*(y1-y0); return n>0 ? bs(x0,y0,x1,y1)/n : 1e9;
+  }
+  function pupilScore(cx,cy,r){
+    var inner = bm(cx-r,cy-r,cx+r,cy+r);
+    if (inner > 80) return -1e9;
+    var hr = r>>1;
+    var R = bm(cx+r, cy-hr, cx+2*r, cy+hr+1);
+    var L = bm(cx-2*r, cy-hr, cx-r, cy+hr+1);
+    var T = bm(cx-hr, cy-2*r, cx+hr+1, cy-r);
+    var B = bm(cx-hr, cy+r, cx+hr+1, cy+2*r);
+    var four = Math.min(R,L,T,B);
+    if (four - inner < 8) return -1e9;
+    var cd = Math.hypot(cx - W/2, cy - H/2);
+    return (four - inner) - cd*0.5;
+  }
+  var best = {cx: W>>1, cy: H>>1, r: 5}, bestScore = -1e9;
+  var cxLo=Math.floor(W*0.18), cxHi=Math.ceil(W*0.82);
+  var cyLo=Math.floor(H*0.18), cyHi=Math.ceil(H*0.82);
+  var coarseR = [3,5,7,9,12,15,18];
+  for (var cx=cxLo; cx<cxHi; cx+=3){
+    for (var cy=cyLo; cy<cyHi; cy+=3){
+      for (var ri=0; ri<coarseR.length; ri++){
+        var s = pupilScore(cx,cy,coarseR[ri]);
+        if (s>bestScore){ bestScore=s; best={cx:cx, cy:cy, r:coarseR[ri]}; }
+      }
+    }
+  }
+  var bx=best.cx, by=best.cy, br=best.r;
+  for (var cx2=Math.max(cxLo,bx-4); cx2<=Math.min(cxHi,bx+4); cx2++){
+    for (var cy2=Math.max(cyLo,by-4); cy2<=Math.min(cyHi,by+4); cy2++){
+      for (var rr=Math.max(2,br-3); rr<=br+3; rr++){
+        var s2 = pupilScore(cx2,cy2,rr);
+        if (s2>bestScore){ bestScore=s2; best={cx:cx2, cy:cy2, r:rr}; }
+      }
+    }
+  }
+  var pcx=best.cx, pcy=best.cy, pr=best.r;
+  var angles = 64;
+  var irisRs = [];
+  for (var a=0; a<angles; a++){
+    var theta = (a/angles)*Math.PI*2;
+    var ct = Math.cos(theta), st = Math.sin(theta);
+    var rMax = Math.min(W,H)*0.48;
+    var prof = [], profS = [];
+    for (var rr2 = pr+3; rr2 < rMax; rr2++){
+      var px = Math.round(pcx + ct*rr2);
+      var py = Math.round(pcy + st*rr2);
+      if (px<0||px>=W||py<0||py>=H) break;
+      prof.push(lum[py*W+px]); profS.push(sat[py*W+px]);
+    }
+    if (prof.length < 10) continue;
+    var smooth = new Float32Array(prof.length);
+    for (var k=0; k<prof.length; k++){
+      var s3=0, n=0;
+      for (var j=Math.max(0,k-2); j<=Math.min(prof.length-1,k+2); j++){ s3+=prof[j]; n++; }
+      smooth[k] = s3/n;
+    }
+    var peaks = [], maxG = 0;
+    for (var k2=3; k2<smooth.length-5; k2++){
+      var g = smooth[k2+2] - smooth[k2-2];
+      if (g < 4) continue;
+      var postL=0, postS=0, pc=0;
+      for (var m=k2+3; m<Math.min(smooth.length, k2+6); m++){ postL+=smooth[m]; postS+=profS[m]; pc++; }
+      if (!pc) continue;
+      postL /= pc; postS /= pc;
+      if (postL < 130 || postS > 0.22) continue;
+      peaks.push({k:k2, g:g});
+      if (g > maxG) maxG = g;
+    }
+    var accepted = -1;
+    for (var p=0; p<peaks.length; p++){ if (peaks[p].g >= maxG*0.6) accepted = peaks[p].k; }
+    if (accepted >= 0) irisRs.push(pr + 3 + accepted);
+  }
+  var ok = true, irisR;
+  if (irisRs.length >= 10){
+    irisRs.sort(function(a,b){return a-b;});
+    var trim = Math.max(1, Math.floor(irisRs.length / 6));
+    var trimmed = irisRs.slice(trim, irisRs.length - trim);
+    irisR = trimmed[Math.floor(trimmed.length * 0.6)];
+  } else {
+    irisR = pr * 3.2; ok = false;
+  }
+  return {
+    cxFrac: pcx/W, cyFrac: pcy/H,
+    rPupilFrac: (pr*1.15)/W,   // safety margin around detected pupil
+    rIrisFrac: irisR/W,
+    ok: ok, samples: irisRs.length
+  };
+}
+
+function applyAutoFit(){
+  if (!imgEl) return false;
+  try {
+    var fit = autoFit(imgEl);
+    var scaleX = drawInfo.dw / imgEl.width;
+    var scaleY = drawInfo.dh / imgEl.height;
+    donut.cx = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
+    donut.cy = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
+    var rpx = fit.rPupilFrac * imgEl.width * scaleX;
+    var ripx = fit.rIrisFrac * imgEl.width * scaleX;
+    // Sanity guards
+    ripx = Math.max(rpx*1.8, Math.min(ripx, Math.min(stageW,stageH)*0.48));
+    rpx = Math.max(6, Math.min(rpx, ripx*0.7));
+    donut.rIris = ripx;
+    donut.rPupil = rpx;
+    var ri = $('r-iris'), rp = $('r-pupil');
+    ri.max = Math.round(Math.max(stageW, stageH));
+    ri.value = Math.round(ripx);
+    rp.max = Math.round(ripx);
+    rp.value = Math.round(rpx);
+    var st = $('autofit-status');
+    if (st) st.textContent = fit.ok
+      ? 'Auto-fit: snapped to iris (' + fit.samples + ' edge samples)'
+      : 'Auto-fit: pupil found, iris estimated from ratio';
+    draw();
+    return fit.ok;
+  } catch (e) {
+    var st2 = $('autofit-status');
+    if (st2) st2.textContent = 'Auto-fit skipped: ' + (e.message || e);
+    return false;
+  }
+}
+
+// ======================= FIT STAGE / ANALYZER =======================
+var canvas = $('canvas-main'), ctx = canvas.getContext('2d');
+var stageW = 600, stageH = 600;
+var donut = { cx: 300, cy: 300, rIris: 180, rPupil: 60, threshHi: 230 };
+var drawInfo = { dx: 0, dy: 0, dw: 600, dh: 600 };
+
+function sizeCanvas(){
+  var stage = $('stage');
+  var rect = stage.getBoundingClientRect();
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  stageW = Math.round(rect.width);
+  stageH = Math.round(rect.height);
+  canvas.width  = stageW * dpr;
+  canvas.height = stageH * dpr;
+  canvas.style.width = stageW + 'px';
+  canvas.style.height = stageH + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function layoutStage(){
+  if (!imgEl) return;
+  sizeCanvas();
+  var ar = imgEl.width / imgEl.height;
+  var dw = stageW, dh = stageH;
+  if (ar > 1) dh = stageW / ar; else dw = stageH * ar;
+  drawInfo.dx = (stageW - dw) / 2;
+  drawInfo.dy = (stageH - dh) / 2;
+  drawInfo.dw = dw;
+  drawInfo.dh = dh;
+  donut.cx = stageW / 2;
+  donut.cy = stageH / 2;
+  donut.rIris = Math.min(dw, dh) * 0.42;
+  donut.rPupil = donut.rIris * 0.30;
+  var ri = $('r-iris'), rp = $('r-pupil');
+  ri.max = Math.round(Math.max(stageW, stageH));
+  ri.value = Math.round(donut.rIris);
+  rp.max = Math.round(donut.rIris);
+  rp.value = Math.round(donut.rPupil);
+  draw();
+}
+
+function draw(){
+  if (!imgEl) return;
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, stageW, stageH);
+  ctx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  ctx.rect(0, 0, stageW, stageH);
+  ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2, true);
+  ctx.fill('evenodd');
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rPupil, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#6cc4ff';
+  ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#ffd66c';
+  ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rPupil, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#ffffffaa';
+  ctx.beginPath();
+  ctx.moveTo(donut.cx-6, donut.cy); ctx.lineTo(donut.cx+6, donut.cy);
+  ctx.moveTo(donut.cx, donut.cy-6); ctx.lineTo(donut.cx, donut.cy+6);
+  ctx.stroke();
+}
+
+canvas.addEventListener('click', function(ev){
+  if (!imgLoaded) return;
+  var rect = canvas.getBoundingClientRect();
+  donut.cx = ev.clientX - rect.left;
+  donut.cy = ev.clientY - rect.top;
+  draw();
+});
+canvas.addEventListener('touchstart', function(ev){
+  if (!imgLoaded) return;
+  if (!ev.touches || !ev.touches[0]) return;
+  var rect = canvas.getBoundingClientRect();
+  donut.cx = ev.touches[0].clientX - rect.left;
+  donut.cy = ev.touches[0].clientY - rect.top;
+  draw();
+  ev.preventDefault();
+}, {passive: false});
+
+$('r-iris').addEventListener('input', function(e){
+  donut.rIris = +e.target.value;
+  if (donut.rPupil >= donut.rIris) { donut.rPupil = donut.rIris * 0.5; $('r-pupil').value = donut.rPupil; }
+  $('r-pupil').max = donut.rIris;
+  draw();
+});
+$('r-pupil').addEventListener('input', function(e){ donut.rPupil = +e.target.value; draw(); });
+$('r-thresh').addEventListener('input', function(e){ donut.threshHi = +e.target.value; });
+$('btn-reset').addEventListener('click', function(){ layoutStage(); var st=$('autofit-status'); if (st) st.textContent='\u00a0'; });
+$('btn-autofit').addEventListener('click', function(){ applyAutoFit(); });
+$('btn-fit-back').addEventListener('click', function(){
+  $('card-fit').style.display = 'none';
+  showLocate();
+});
+
+window.addEventListener('resize', function(){ if (imgLoaded) layoutStage(); });
+
+$('btn-analyze').addEventListener('click', function(){
+  if (captureMode === 'portrait') {
+    savePortraitForCurrentResult();
+  } else {
+    analyze();
+  }
+});
+
+// Portrait mode: snapshot the current image + iris fit and attach it to the
+// existing analysis result. Bypasses analyze() entirely — we already have
+// the analysis data; this is just a prettier visual for the share card.
+function savePortraitForCurrentResult(){
+  var side = currentSide || (eyeResults['Right'] ? 'Right' : 'Left');
+  var existing = eyeResults[side];
+  if (!existing) {
+    showError('Analyze your eye first, then come back to add a beauty shot.');
+    return;
+  }
+  existing.portraitImage = {
+    src: imgEl ? (imgEl.src || (imgEl.toDataURL && imgEl.toDataURL())) : null,
+    naturalW: imgEl ? imgEl.naturalWidth : 0,
+    naturalH: imgEl ? imgEl.naturalHeight : 0,
+    iris: {
+      cx: donut.cx, cy: donut.cy,
+      rPupil: donut.rPupil, rIris: donut.rIris,
+      drawInfo: { dx: drawInfo.dx, dy: drawInfo.dy,
+                  dw: drawInfo.dw, dh: drawInfo.dh }
+    }
+  };
+  // Reset mode and return to result card
+  captureMode = 'analysis';
+  $('btn-analyze').textContent = 'Analyze Iris';
+  $('card-fit').style.display = 'none';
+  $('card-locate').style.display = 'none';
+  $('card-result').style.display = 'block';
+  // Re-render in case the result UI shows a portrait indicator
+  renderResult(existing);
+  window.__lastResult = existing;
+  setTimeout(function(){ $('card-result').scrollIntoView({behavior:'smooth', block:'start'}); }, 60);
+}
+
+function analyze(){
+  var off = document.createElement('canvas');
+  off.width = stageW; off.height = stageH;
+  var octx = off.getContext('2d');
+  octx.fillStyle = '#000'; octx.fillRect(0, 0, stageW, stageH);
+  octx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
+  var d = octx.getImageData(0, 0, stageW, stageH).data;
+  var cx = donut.cx, cy = donut.cy, rIn = donut.rPupil, rOut = donut.rIris;
+  var innerBand = rIn + (rOut - rIn) * 0.45;
+  // Tighter zones for central-heterochromia gradient detection. The pupillary
+  // zone (innermost 25% of the iris-pupil annulus) and ciliary zone (outermost
+  // 50%) compare against each other for warmth/lightness gradients — catches
+  // "Bryan-style" central het that doesn't cross palette categories but has
+  // an obvious brown/amber inner ring within a blue/gray iris (Δb > 4 in Lab).
+  var pupilZoneCut  = rIn + (rOut - rIn) * 0.25;
+  var ciliaryZoneCut = rIn + (rOut - rIn) * 0.50;
+  var inner = [], outer = [], edge = [];
+  var pupilZone = [], ciliaryZone = [];
+  var edgeDarkSum = 0, edgeDarkCount = 0, midLumSum = 0, midLumCount = 0;
+  // Sectoral heterochromia: accumulate per-wedge pixel arrays + base-band Lab sums.
+  // 12 wedges of 30 deg, base band = [0.30, 0.85] of rIris (matches Python ref).
+  var SECT_WEDGES = 12, SECT_LO = 0.30, SECT_HI = 0.85;
+  var wedgePix = [];
+  for (var wi = 0; wi < SECT_WEDGES; wi++) wedgePix.push([]);
+  var baseLsum = 0, baseAsum = 0, baseBsum = 0, baseN = 0;
+  var x0 = Math.max(0, Math.floor(cx - rOut));
+  var x1 = Math.min(stageW, Math.ceil(cx + rOut));
+  var y0 = Math.max(0, Math.floor(cy - rOut));
+  var y1 = Math.min(stageH, Math.ceil(cy + rOut));
+  var maskStats = {sclera:0, lash:0, lid:0, glare:0, shadow:0, kept:0};
+  // Freckle detection bbox: capture L channel + valid-iris mask for DoG pass.
+  // valid_iris for freckles is more permissive than analyze's main mask: we
+  // KEEP dark blobs (lash filter would kill freckles), so the freckle pass
+  // re-derives the mask using only iris-ring + glare + sclera + lid cone.
+  var FRK_INNER_F = 1.15, FRK_OUTER_F = 0.85;
+  var bboxW = x1 - x0, bboxH = y1 - y0;
+  var Lbuf = new Float32Array(bboxW * bboxH);
+  var validFrk = new Uint8Array(bboxW * bboxH);
+  for (var y = y0; y < y1; y++){
+    for (var x = x0; x < x1; x++){
+      var dx = x - cx, dy = y - cy;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+      var i = (y * stageW + x) * 4;
+      var r = d[i], g = d[i+1], b = d[i+2], a = d[i+3];
+      // Always populate Lbuf for the bbox so the freckle DoG pass has padding.
+      // (Use rgbLab for accurate perceptual L; same function used elsewhere.)
+      var bboxIdx = (y - y0) * bboxW + (x - x0);
+      Lbuf[bboxIdx] = (a >= 200) ? rgbLab(r, g, b)[0] : 0;
+      // Freckle mask: iris ring (with limbal pullback) + skip glare/sclera/lid,
+      // but KEEP dark pixels (no lash/shadow filter — those would kill freckles).
+      if (a >= 200 && dist >= rIn * FRK_INNER_F && dist <= rOut * FRK_OUTER_F) {
+        var lumF = 0.299*r + 0.587*g + 0.114*b;
+        var mxF = Math.max(r,g,b), mnF = Math.min(r,g,b);
+        var satF = mxF>0 ? (mxF - mnF)/mxF : 0;
+        var lidF = Math.abs(dy) / (dist > 0 ? dist : 1) > 0.34;
+        if (!(lumF > 230) && !(lumF > 190 && satF < 0.12) && !lidF) {
+          validFrk[bboxIdx] = 1;
+        }
+      }
+      if (dist < rIn || dist > rOut) continue;
+      if (a < 200) continue;
+      var lum = 0.299*r + 0.587*g + 0.114*b;
+      var mxc = Math.max(r,g,b), mnc = Math.min(r,g,b);
+      var satP = mxc>0 ? (mxc - mnc)/mxc : 0;
+      // Glare (existing)
+      if (lum > donut.threshHi) { maskStats.glare++; continue; }
+      // Sclera: bright + desaturated (keeps pale blue irises since they're less bright)
+      if (lum > 190 && satP < 0.12) { maskStats.sclera++; continue; }
+      // Deep shadow
+      if (lum < 18) { maskStats.shadow++; continue; }
+      // Eyelash: dark + desaturated (keeps dark brown iris because it's warm)
+      if (lum < 45 && satP < 0.15) { maskStats.lash++; continue; }
+      // Eyelid wedges: reject top/bottom ~20 degree cones
+      if (Math.abs(dy) / dist > 0.34) { maskStats.lid++; continue; }
+      maskStats.kept++;
+      // Tight ring band (0.92-1.00) for limbal-ring color isolation
+      if (dist > rOut * 0.92) {
+        edge.push([r,g,b]);
+        edgeDarkSum += lum; edgeDarkCount++;
+      }
+      // Mid band kept for backwards compatibility (no longer drives limbal label)
+      if (dist > rOut * 0.40 && dist < rOut * 0.80) {
+        midLumSum += lum; midLumCount++;
+      }
+      if (dist < innerBand) inner.push([r,g,b]);
+      else outer.push([r,g,b]);
+      // Pupillary / ciliary zones for central-het gradient detection
+      if (dist < pupilZoneCut) pupilZone.push([r,g,b]);
+      else if (dist >= ciliaryZoneCut) ciliaryZone.push([r,g,b]);
+      // Sectoral: collect pixels in the iris-baseline band, bucketed by wedge.
+      if (dist >= rOut * SECT_LO && dist <= rOut * SECT_HI) {
+        var ang = Math.atan2(dy, dx);
+        if (ang < 0) ang += 2*Math.PI;
+        var widx = Math.floor(ang / (2*Math.PI / SECT_WEDGES));
+        if (widx >= SECT_WEDGES) widx = 0;
+        wedgePix[widx].push([r,g,b]);
+        // Pixel-weighted Lab mean for the entire base band (robust baseline)
+        var pl = rgbLab(r,g,b);
+        baseLsum += pl[0]; baseAsum += pl[1]; baseBsum += pl[2]; baseN++;
+      }
+    }
+  }
+  window.__lastMaskStats = maskStats;
+  if (outer.length < 50){
+    showError('Not enough iris pixels. Try enlarging the iris ring or reducing the pupil circle.');
+    return;
+  }
+  function dominant(pixels){
+    if (!pixels.length) return null;
+    var buckets = {}, keys = [];
+    for (var k=0;k<pixels.length;k++){
+      var p = pixels[k];
+      var key = ((p[0]>>4)<<8) | ((p[1]>>4)<<4) | (p[2]>>4);
+      var v = buckets[key];
+      if (!v){ v = {n:0,r:0,g:0,b:0}; buckets[key] = v; keys.push(key); }
+      v.n++; v.r += p[0]; v.g += p[1]; v.b += p[2];
+    }
+    var best = null;
+    for (var m=0;m<keys.length;m++){
+      var v2 = buckets[keys[m]];
+      if (!best || v2.n > best.n) best = v2;
+    }
+    return [Math.round(best.r/best.n), Math.round(best.g/best.n), Math.round(best.b/best.n)];
+  }
+  function topK(pixels, k){
+    var buckets = {}, keys = [];
+    for (var kk=0;kk<pixels.length;kk++){
+      var p = pixels[kk];
+      var key = ((p[0]>>4)<<8) | ((p[1]>>4)<<4) | (p[2]>>4);
+      var v = buckets[key];
+      if (!v){ v = {n:0,r:0,g:0,b:0}; buckets[key] = v; keys.push(key); }
+      v.n++; v.r += p[0]; v.g += p[1]; v.b += p[2];
+    }
+    var arr = keys.map(function(kk2){ var v = buckets[kk2];
+      return { n: v.n, rgb: [Math.round(v.r/v.n), Math.round(v.g/v.n), Math.round(v.b/v.n)] };
+    });
+    arr.sort(function(a,b){ return b.n - a.n; });
+    return arr.slice(0, k);
+  }
+  var innerDom = dominant(inner.length ? inner : outer);
+  var outerDom = dominant(outer);
+  var edgeDom  = dominant(edge.length ? edge : outer);
+  var innerM = nearestPal(innerDom), outerM = nearestPal(outerDom);
+  // ===== Heterochromia: combined detection =====
+  // Path 1 (legacy): cross-category color shift between inner/outer halves
+  //   (catches Bowie-style cross-category central hetero like brown/blue).
+  // Path 2 (new): warmth/lightness gradient between tight pupillary zone
+  //   (innermost 25%) and ciliary zone (outermost 50%) — even within the same
+  //   palette category. Calibrated against Bryan's eyes (Δb≈+9.8, ΔL≈+6.2)
+  //   where the brown pupillary ring sits inside a blue-gray iris.
+  var heteroDist = dE(rgbLab(innerDom[0],innerDom[1],innerDom[2]),
+                      rgbLab(outerDom[0],outerDom[1],outerDom[2]));
+  var hetero = 'None', heteroDb = 0, heteroDL = 0;
+  // Names + RGB for the pupillary and ciliary zones (always populated when
+  // we have enough samples, so the Davis Card can show the inner-ring color
+  // even when the gradient detection didn't trigger).
+  var heteroPup = null, heteroCil = null;
+  if (pupilZone.length >= 20 && ciliaryZone.length >= 20) {
+    var pupDom_ = dominant(pupilZone), cilDom_ = dominant(ciliaryZone);
+    var pupLab_ = rgbLab(pupDom_[0], pupDom_[1], pupDom_[2]);
+    var cilLab_ = rgbLab(cilDom_[0], cilDom_[1], cilDom_[2]);
+    heteroPup = { rgb: pupDom_, lab: pupLab_, color: nearestPal(pupDom_).entry };
+    heteroCil = { rgb: cilDom_, lab: cilLab_, color: nearestPal(cilDom_).entry };
+  }
+  if (heteroDist > 25 && innerM.entry.cat !== outerM.entry.cat) hetero = 'Central';
+  else if (heteroDist > 14) hetero = 'Subtle';
+  // Path 2: warmth/lightness gradient between zones
+  if (hetero === 'None' && heteroPup && heteroCil) {
+    heteroDb = heteroPup.lab[2] - heteroCil.lab[2];   // positive = pupillary zone is warmer
+    heteroDL = heteroPup.lab[0] - heteroCil.lab[0];   // positive = pupillary zone is lighter
+    if (Math.abs(heteroDb) > 4 && Math.abs(heteroDb) > Math.abs(heteroCil.lab[2])) {
+      hetero = 'Central (warmth gradient)';
+    } else if (heteroDL > 6) {
+      hetero = 'Central (lightness gradient)';
+    }
+  }
+  // Synthesize a descriptive ring name when both zones collapse to the same
+  // palette anchor (e.g. desaturated browns within blue-gray that both round
+  // to "Graphite"). Uses Lab b (warmth) and L (lightness) directly.
+  if (heteroPup && heteroCil) {
+    function describeRing(lab, isWarmer, isLighter){
+      var b = lab[2], L = lab[0];
+      if (isWarmer) {
+        if (b > 18)  return L > 55 ? 'Golden' : 'Amber';
+        if (b > 10)  return L > 55 ? 'Honey' : 'Bronze';
+        if (b > 4)   return L > 55 ? 'Warm Tan' : 'Warm Bronze';
+        return 'Warm-tinged';
+      }
+      if (isLighter) {
+        if (L > 70)  return 'Pale';
+        if (L > 50)  return 'Light';
+        return 'Lighter';
+      }
+      // cooler zone descriptor
+      if (b < -18) return L > 55 ? 'Ice Blue' : 'Deep Blue';
+      if (b < -10) return 'Cool Blue';
+      if (b < -4)  return L > 55 ? 'Cool-blue' : 'Slate-blue';
+      if (L < 35)  return 'Deep';
+      if (L > 65)  return 'Pale';
+      return null;
+    }
+    if (heteroPup.color.name === heteroCil.color.name) {
+      // Collisions — synthesize names from Lab values
+      var pupName = describeRing(heteroPup.lab, heteroDb > 4, heteroDL > 6);
+      var cilName = describeRing(heteroCil.lab, false, false);
+      heteroPup.displayName = pupName || heteroPup.color.name;
+      heteroCil.displayName = cilName || heteroCil.color.name;
+    } else {
+      heteroPup.displayName = heteroPup.color.name;
+      heteroCil.displayName = heteroCil.color.name;
+    }
+  }
+  // Limbal ring detection — Lab-L drop between iris baseline (outerDom) and ring band (edgeDom).
+  // Validated thresholds against UBIRIS sample (see datasets/UBIRIS_README.md).
+  var edgeLab  = rgbLab(edgeDom[0],  edgeDom[1],  edgeDom[2]);
+  var outerLab = rgbLab(outerDom[0], outerDom[1], outerDom[2]);
+  // Signed L drop: positive = ring is darker (typical limbal ring),
+  // negative = ring is brighter than the iris baseline (a "halo" — bright
+  // amber/golden zone just inside the iris edge, like Carlie's iris).
+  var limbalDropL    = outerLab[0] - edgeLab[0];
+  var limbalAbsDrop  = Math.abs(limbalDropL);
+  var limbalContrast = dE(outerLab, edgeLab);
+  var limbalLabel = 'None';
+  if      (limbalAbsDrop > 28) limbalLabel = 'Dramatic';
+  else if (limbalAbsDrop > 18) limbalLabel = 'Strong';
+  else if (limbalAbsDrop > 10) limbalLabel = 'Moderate';
+  else if (limbalAbsDrop >  4) limbalLabel = 'Faint';
+  // Distinguish "ring" from "halo" — both are real iris features.
+  var limbalType = (limbalDropL >= 0) ? 'ring' : 'halo';
+  // Ring color: only meaningful when the ring is actually distinct from the iris
+  var limbalMatch = nearestPal(edgeDom);
+  var limbalColor = (limbalLabel === 'None') ? null : limbalMatch.entry;
+  var hsv = rgbHsv(outerDom[0], outerDom[1], outerDom[2]);
+  var brightness = hsv[2] < 0.30 ? 'Dark' : hsv[2] < 0.55 ? 'Medium' : 'Bright';
+  var saturation = hsv[1] < 0.18 ? 'Muted' : hsv[1] < 0.40 ? 'Soft' : 'Vivid';
+  var top = topK(inner.concat(outer), 4);
+
+  // ===== Sectoral heterochromia detection =====
+  // Mirrors sectoral_hetero.py. Pixel-weighted mean Lab of the base band is the
+  // canonical "base color" — uniform paint can't hijack it. Per-wedge dominants
+  // are checked against base by Lab dE + palette category, with a luminance-
+  // envelope guard to reject sclera/lash leakage from oversized auto-fit.
+  var SECT_MIN_PX = 40, SECT_MIN_DE = 15, SECT_MIN_SPAN = 2, SECT_MIN_AGREE = 4;
+  var SECT_DL_HI = 30, SECT_DL_LO = 32, SECT_LMAX = 80, SECT_LMIN = 12;
+  var sectoral = null, sectBaseLab = null, sectBasePal = null;
+  if (baseN >= 200) {
+    sectBaseLab = [baseLsum/baseN, baseAsum/baseN, baseBsum/baseN];
+    // Build per-wedge dominants
+    var wInfo = [];
+    for (var wi2 = 0; wi2 < SECT_WEDGES; wi2++) {
+      var px = wedgePix[wi2];
+      if (px.length < SECT_MIN_PX) { wInfo.push(null); continue; }
+      var dom = dominant(px);
+      var dlab = rgbLab(dom[0], dom[1], dom[2]);
+      var pal = nearestPal(dom);
+      wInfo.push({rgb: dom, lab: dlab, pal: pal.entry, n: px.length});
+    }
+    var validW = wInfo.filter(function(w){ return w; });
+    if (validW.length >= SECT_MIN_AGREE) {
+      // Pick representative wedge for base display = wedge closest to base Lab
+      var baseWedge = validW[0], baseBest = Infinity;
+      for (var k1 = 0; k1 < validW.length; k1++) {
+        var de1 = dE(validW[k1].lab, sectBaseLab);
+        if (de1 < baseBest) { baseBest = de1; baseWedge = validW[k1]; }
+      }
+      sectBasePal = baseWedge.pal;
+      // Flag discordant wedges
+      var flags = [];
+      for (var wi3 = 0; wi3 < SECT_WEDGES; wi3++) {
+        var w3 = wInfo[wi3];
+        if (!w3) { flags.push(false); continue; }
+        var de3 = dE(w3.lab, sectBaseLab);
+        w3.dE = de3;
+        var wL = w3.lab[0];
+        var inEnv = (wL <= sectBaseLab[0] + SECT_DL_HI) &&
+                    (wL >= sectBaseLab[0] - SECT_DL_LO) &&
+                    (wL >= SECT_LMIN) && (wL <= SECT_LMAX);
+        var diffCat = w3.pal.cat !== sectBasePal.cat;
+        flags.push(diffCat && (de3 >= SECT_MIN_DE) && inEnv);
+      }
+      // Find contiguous groups (with wrap-around)
+      var groups = [];
+      for (var ii = 0; ii < SECT_WEDGES; ) {
+        if (!flags[ii]) { ii++; continue; }
+        var s = ii;
+        while (ii < SECT_WEDGES && flags[ii]) ii++;
+        groups.push({start: s, len: ii - s});
+      }
+      if (groups.length >= 2 &&
+          groups[0].start === 0 &&
+          groups[groups.length-1].start + groups[groups.length-1].len === SECT_WEDGES) {
+        var first = groups.shift();
+        var last  = groups.pop();
+        groups.push({start: last.start, len: last.len + first.len});
+      }
+      var big = groups.filter(function(g){ return g.len >= SECT_MIN_SPAN; });
+      big.sort(function(a,b){ return b.len - a.len; });
+      if (big.length) {
+        var g0 = big[0];
+        var members = [];
+        for (var mm = 0; mm < g0.len; mm++) {
+          var idx = (g0.start + mm) % SECT_WEDGES;
+          if (wInfo[idx]) members.push(wInfo[idx]);
+        }
+        var winner = members[0];
+        for (var mm2 = 1; mm2 < members.length; mm2++) {
+          if (members[mm2].n > winner.n) winner = members[mm2];
+        }
+        var sumDe = 0;
+        for (var mm3 = 0; mm3 < members.length; mm3++) sumDe += members[mm3].dE;
+        var centerW = (g0.start + g0.len/2 - 0.5);
+        // wrap into 0..SECT_WEDGES-1
+        centerW = ((centerW % SECT_WEDGES) + SECT_WEDGES) % SECT_WEDGES;
+        var centerDeg = (centerW + 0.5) * (360 / SECT_WEDGES);
+        var clockH = Math.round((centerDeg + 90) / 30) % 12;
+        if (clockH === 0) clockH = 12;
+        sectoral = {
+          color:    winner.pal,
+          rgb:      winner.rgb,
+          clock:    clockH,
+          spanW:    g0.len,
+          spanDeg:  g0.len * (360 / SECT_WEDGES),
+          meanDE:   sumDe / members.length
+        };
+      }
+    }
+  }
+
+  // ===== Freckle (iris nevus) detection =====
+  // Multi-scale Difference of Gaussians on the Lab L channel. Mirrors freckles.py.
+  // Constants validated on UBIRIS: synthetic positive at 0.5px, mean 0.5/image
+  // false-positive rate. See freckles.py for full design.
+  var FRK_SIGMAS = [1.5, 2.5, 4.0];
+  var FRK_K = 1.6;
+  var FRK_CONTRAST = 3.5;
+  var FRK_LOCAL_R = 3;
+  var FRK_MIN_DROP = 10.0;
+  var FRK_MIN_CV = 0.70;
+  var FRK_MAX = 10;
+  var FRK_NMS_F = 2.0;
+  var FRK_RING_LMIN = 22;
+  var FRK_RING_LMAX = 75;
+  var freckles = [];
+
+  function frkGaussKernel(sigma){
+    var rad = Math.max(1, Math.ceil(3.0 * sigma));
+    var k = new Float32Array(2*rad+1), sum = 0;
+    for (var ki = -rad; ki <= rad; ki++){
+      var v = Math.exp(-(ki*ki)/(2*sigma*sigma));
+      k[ki+rad] = v; sum += v;
+    }
+    for (var ki2 = 0; ki2 < k.length; ki2++) k[ki2] /= sum;
+    return { k: k, r: rad };
+  }
+  function frkConvSep(src, W, H, sigma){
+    var kk = frkGaussKernel(sigma), kern = kk.k, rad = kk.r;
+    var tmp = new Float32Array(W*H), out = new Float32Array(W*H);
+    // horizontal
+    for (var yy = 0; yy < H; yy++){
+      for (var xx = 0; xx < W; xx++){
+        var sum = 0;
+        for (var ki = -rad; ki <= rad; ki++){
+          var sx = xx + ki;
+          if (sx < 0) sx = -sx; else if (sx >= W) sx = 2*W - sx - 2;
+          sum += src[yy*W + sx] * kern[ki+rad];
+        }
+        tmp[yy*W + xx] = sum;
+      }
+    }
+    // vertical
+    for (var yy2 = 0; yy2 < H; yy2++){
+      for (var xx2 = 0; xx2 < W; xx2++){
+        var sum2 = 0;
+        for (var ki2 = -rad; ki2 <= rad; ki2++){
+          var sy = yy2 + ki2;
+          if (sy < 0) sy = -sy; else if (sy >= H) sy = 2*H - sy - 2;
+          sum2 += tmp[sy*W + xx2] * kern[ki2+rad];
+        }
+        out[yy2*W + xx2] = sum2;
+      }
+    }
+    return out;
+  }
+
+  if (bboxW > 12 && bboxH > 12) {
+    var frkCands = [];
+    for (var si = 0; si < FRK_SIGMAS.length; si++){
+      var sigma = FRK_SIGMAS[si];
+      var Gin = frkConvSep(Lbuf, bboxW, bboxH, sigma);
+      var Gout = frkConvSep(Lbuf, bboxW, bboxH, sigma * FRK_K);
+      var rad = FRK_LOCAL_R;
+      var innerR = sigma * Math.SQRT2 * 1.4, outerR = sigma * 3.5;
+      var ringR = Math.round(outerR);
+      for (var yy3 = rad; yy3 < bboxH - rad; yy3++){
+        for (var xx3 = rad; xx3 < bboxW - rad; xx3++){
+          if (!validFrk[yy3*bboxW + xx3]) continue;
+          var dogV = Gin[yy3*bboxW + xx3] - Gout[yy3*bboxW + xx3];
+          if (dogV > -FRK_CONTRAST) continue;
+          // local minimum check in (2*rad+1)^2 neighborhood
+          var isMin = true;
+          for (var dy2 = -rad; dy2 <= rad && isMin; dy2++){
+            for (var dx2 = -rad; dx2 <= rad && isMin; dx2++){
+              if (dx2 === 0 && dy2 === 0) continue;
+              var nv = Gin[(yy3+dy2)*bboxW + (xx3+dx2)] - Gout[(yy3+dy2)*bboxW + (xx3+dx2)];
+              if (nv < dogV) isMin = false;
+            }
+          }
+          if (!isMin) continue;
+          // Ring annulus mean L (excludes blob, restricts to valid iris)
+          var ry0 = Math.max(0, yy3 - ringR), ry1 = Math.min(bboxH, yy3 + ringR + 1);
+          var rx0 = Math.max(0, xx3 - ringR), rx1 = Math.min(bboxW, xx3 + ringR + 1);
+          var ringSum = 0, ringN = 0;
+          var inR2 = innerR*innerR, outR2 = outerR*outerR;
+          for (var ry = ry0; ry < ry1; ry++){
+            for (var rx = rx0; rx < rx1; rx++){
+              if (!validFrk[ry*bboxW + rx]) continue;
+              var ddx = rx - xx3, ddy = ry - yy3;
+              var d2v = ddx*ddx + ddy*ddy;
+              if (d2v < inR2 || d2v > outR2) continue;
+              ringSum += Lbuf[ry*bboxW + rx]; ringN++;
+            }
+          }
+          if (ringN < 6) continue;
+          var ringMean = ringSum / ringN;
+          if (ringMean < FRK_RING_LMIN || ringMean > FRK_RING_LMAX) continue;
+          // Bright-side drop + circularity CV via 8-direction probes
+          var blobR = sigma * Math.SQRT2;
+          var step = Math.max(3, Math.round(blobR * 1.6));
+          var offsets = [[step,0],[-step,0],[0,step],[0,-step],
+                         [step,step],[step,-step],[-step,step],[-step,-step]];
+          var drops = [];
+          var Lhere = Lbuf[yy3*bboxW + xx3];
+          for (var oi = 0; oi < offsets.length; oi++){
+            var nx = xx3 + offsets[oi][0], ny = yy3 + offsets[oi][1];
+            if (nx < 0 || nx >= bboxW || ny < 0 || ny >= bboxH) continue;
+            if (!validFrk[ny*bboxW + nx]) continue;
+            drops.push(Lbuf[ny*bboxW + nx] - Lhere);
+          }
+          if (drops.length < 6) continue;
+          var brightDrop = -Infinity;
+          for (var di = 0; di < drops.length; di++) if (drops[di] > brightDrop) brightDrop = drops[di];
+          if (brightDrop < FRK_MIN_DROP) continue;
+          var posDrops = [];
+          for (var pi = 0; pi < drops.length; pi++) if (drops[pi] > 1.0) posDrops.push(drops[pi]);
+          if (posDrops.length < 4) continue;
+          var meanD = 0;
+          for (var mi2 = 0; mi2 < posDrops.length; mi2++) meanD += posDrops[mi2];
+          meanD /= posDrops.length;
+          var varD = 0;
+          for (var vi = 0; vi < posDrops.length; vi++){
+            var dv = posDrops[vi] - meanD; varD += dv*dv;
+          }
+          varD /= posDrops.length;
+          var cvF = meanD > 0 ? Math.sqrt(varD) / meanD : 99;
+          if (cvF > FRK_MIN_CV) continue;
+          frkCands.push({
+            x: xx3 + x0, y: yy3 + y0,
+            sigma: sigma, rPx: blobR,
+            dog: dogV, dropL: brightDrop, cv: cvF
+          });
+        }
+      }
+    }
+    // Cross-scale NMS: bigger sigma wins
+    frkCands.sort(function(a,b){ if (a.sigma !== b.sigma) return b.sigma - a.sigma; return a.dog - b.dog; });
+    var kept = [];
+    for (var ci = 0; ci < frkCands.length; ci++){
+      var c = frkCands[ci], suppr = false;
+      for (var kj = 0; kj < kept.length; kj++){
+        var dxk = c.x - kept[kj].x, dyk = c.y - kept[kj].y;
+        var dk = Math.sqrt(dxk*dxk + dyk*dyk);
+        if (dk < Math.max(c.sigma, kept[kj].sigma) * FRK_NMS_F){ suppr = true; break; }
+      }
+      if (!suppr) kept.push(c);
+      if (kept.length >= FRK_MAX) break;
+    }
+    // Annotate with palette + clock
+    for (var fi = 0; fi < kept.length; fi++){
+      var fc = kept[fi];
+      var pi2 = (fc.y * stageW + fc.x) * 4;
+      var fr = d[pi2], fg = d[pi2+1], fb = d[pi2+2];
+      fc.rgb = [fr, fg, fb];
+      var pal = nearestPal([fr, fg, fb]);
+      fc.palette = pal.entry;
+      var fdx = fc.x - cx, fdy = fc.y - cy;
+      var fdeg = (Math.atan2(fdy, fdx) * 180 / Math.PI + 360) % 360;
+      var clockF = Math.round((fdeg + 90) / 30) % 12;
+      if (clockF === 0) clockF = 12;
+      fc.clock = clockF;
+    }
+    freckles = kept;
+  }
+
+  // Build result
+  // Read optional birthdate for age-adjusted scoring
+  var birthdateEl = document.getElementById('birthdate-input');
+  var userAge = 0;
+  if (birthdateEl && birthdateEl.value) {
+    var bd = new Date(birthdateEl.value);
+    var now = new Date();
+    userAge = Math.floor((now - bd) / (1000 * 60 * 60 * 24 * 365.25));
+  }
+  var result = {
+    side: currentSide || 'Right',
+    userAge: userAge,
+    overall: outerM.entry,
+    inner: innerM.entry,
+    outer: outerM.entry,
+    hetero: hetero,
+    heteroDb: heteroDb,
+    heteroDL: heteroDL,
+    heteroDist: heteroDist,
+    heteroPup: heteroPup,    // {rgb, color} for inner pupillary zone (always populated when samples sufficient)
+    heteroCil: heteroCil,    // {rgb, color} for outer ciliary zone
+    limbal: limbalLabel,
+    limbalType: limbalType,             // 'ring' (darker rim) or 'halo' (brighter inner edge)
+    limbalColor: limbalColor,           // palette entry or null
+    limbalRgb: edgeDom,                 // raw ring RGB (for swatch)
+    limbalDropL: limbalDropL,           // Lab-L drop, useful for debug/share card
+    sectoral: sectoral,                 // {color, rgb, clock, spanW, spanDeg, meanDE} or null
+    freckles: freckles,                 // [{x, y, rPx, sigma, dropL, clock, palette, rgb}, ...]
+    rarity: RARITY[outerM.entry.cat] || null,                      // {pct, label, line}
+    rarityScore: null,   // populated after result object is built
+    vibe: getVibe(outerM.entry.cat, outerM.entry.lab),              // descriptive nickname
+    fingerprint: {
+      lab: rgbLab(outerDom[0], outerDom[1], outerDom[2]),
+      hex: rgbToHex(outerDom),
+      rgb: outerDom,
+    },
+    brightness: brightness,
+    saturation: saturation,
+    topColors: top.map(function(t){ return t.rgb; }),
+    // Dual-photo workflow: snapshot the analysis photo + iris fit so the
+    // share card can re-render the iris from this image at high resolution
+    // even after a portrait photo replaces imgEl.
+    analysisImage: {
+      src: imgEl ? (imgEl.src || imgEl.toDataURL && imgEl.toDataURL()) : null,
+      naturalW: imgEl ? imgEl.naturalWidth : 0,
+      naturalH: imgEl ? imgEl.naturalHeight : 0,
+      iris: {
+        cx: donut.cx, cy: donut.cy,
+        rPupil: donut.rPupil, rIris: donut.rIris,
+        drawInfo: { dx: drawInfo.dx, dy: drawInfo.dy,
+                    dw: drawInfo.dw, dh: drawInfo.dh }
+      }
+    },
+    portraitImage: null   // populated by btn-portrait flow
+  };
+  // Compute composite rarity score now that all fields are in result
+  result.rarityScore = computeRarityScore(result);
+  eyeResults[result.side] = result;
+
+  // Render card
+  renderResult(result);
+  window.__lastResult = result;
+}
+
+function renderResult(result){
+  var resCard = $('card-result');
+  resCard.style.display = 'block';
+  $('r-side').textContent = result.side + ' Eye';
+  $('r-color').textContent = result.overall.name;
+  var n = 'Your ' + result.side.toLowerCase() + ' eye reads as ' + result.overall.cat.toLowerCase()
+        + ' with a closest match to ' + result.overall.name + '. ';
+  if (result.hetero !== 'None') {
+    var pupName = result.heteroPup ? (result.heteroPup.displayName || result.heteroPup.color.name).toLowerCase() : 'warm';
+    var cilName = result.heteroCil ? (result.heteroCil.displayName || result.heteroCil.color.name).toLowerCase() : 'cooler';
+    if (result.hetero.indexOf('warmth') >= 0) {
+      n += 'We detected central heterochromia \u2014 a ' + pupName + ' ring around the pupil sits inside a ' + cilName + ' outer iris. About 10-15% of people have this trait. ';
+    } else if (result.hetero.indexOf('lightness') >= 0) {
+      n += 'We detected central heterochromia \u2014 a ' + pupName + ' ring around the pupil within a ' + cilName + ' outer iris. ';
+    } else if (result.hetero === 'Central') {
+      n += 'We detected central heterochromia \u2014 inner ring reads as ' + result.inner.name + ', outer ring as ' + result.outer.name + '. ';
+    } else {
+      n += 'We detected ' + result.hetero.toLowerCase() + ' heterochromia \u2014 inner ring reads as ' + result.inner.name + ', outer ring as ' + result.outer.name + '. ';
+    }
+  }
+  if (result.limbal !== 'None' && result.limbalColor) {
+    var ftype = result.limbalType || 'ring';
+    if (ftype === 'halo') {
+      n += 'A ' + result.limbal.toLowerCase() + ' ' + result.limbalColor.name.toLowerCase() + ' halo glows just inside the iris edge \u2014 a bright amber/golden zone instead of the typical dark rim. ';
+    } else if (result.limbal === 'Strong' || result.limbal === 'Dramatic') {
+      n += 'You have a ' + result.limbal.toLowerCase() + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring \u2014 it makes your eyes pop. ';
+    } else {
+      n += 'A ' + result.limbal.toLowerCase() + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring sits at the iris edge. ';
+    }
+  }
+  if (result.sectoral) {
+    n += 'A sectoral patch of ' + result.sectoral.color.name.toLowerCase() + ' sits near ' + result.sectoral.clock + " o'clock \u2014 a true one-of-a-kind feature. ";
+  }
+  if (result.freckles && result.freckles.length) {
+    var nf = result.freckles.length;
+    if (nf === 1) {
+      n += 'A single iris freckle sits near ' + result.freckles[0].clock + " o'clock. ";
+    } else {
+      n += nf + ' iris freckles dot the iris \u2014 small pigmented spots unique to you. ';
+    }
+  }
+  $('r-narrative').textContent = n;
+  var sr = $('r-swatches'); sr.innerHTML = '';
+  result.topColors.forEach(function(rgb){
+    var sw = document.createElement('div'); sw.className = 'swatch';
+    sw.style.background = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    sr.appendChild(sw);
+  });
+  $('r-general').textContent = result.overall.cat;
+  $('r-specific').textContent = result.overall.name;
+  // Limbal ring shows "Strength · Color" when distinct, just "None" otherwise
+  $('r-limbal').textContent = result.limbalColor
+    ? (result.limbal + ' \u00b7 ' + result.limbalColor.name + ' ' + (result.limbalType || 'ring'))
+    : result.limbal;
+  // Heterochromia cell — name the inner ring color when we have a gradient
+  if (result.hetero === 'Central (warmth gradient)' || result.hetero === 'Central (lightness gradient)') {
+    var ringDescriptor = result.heteroPup
+      ? (result.heteroPup.displayName || result.heteroPup.color.name) + ' pupillary ring'
+      : (result.hetero.indexOf('warmth') >= 0 ? 'warm pupillary ring' : 'light pupillary ring');
+    $('r-hetero').textContent = 'Central · ' + ringDescriptor;
+  } else if (result.hetero === 'Central' && result.heteroPup && result.heteroCil) {
+    $('r-hetero').textContent = 'Central · ' + (result.heteroPup.displayName || result.heteroPup.color.name) + ' / ' + (result.heteroCil.displayName || result.heteroCil.color.name);
+  } else {
+    $('r-hetero').textContent = result.hetero;
+  }
+  // Render Highlights + Story
+  renderHighlights(result);
+  renderStory(result);
+  $('r-sectoral').textContent = result.sectoral
+    ? (result.sectoral.color.name + " \u00b7 " + result.sectoral.clock + " o'clock")
+    : 'None';
+  $('r-freckles').textContent = (result.freckles && result.freckles.length)
+    ? (result.freckles.length + (result.freckles.length === 1 ? ' freckle' : ' freckles'))
+    : 'None';
+  $('r-brightness').textContent = result.brightness;
+  $('r-saturation').textContent = result.saturation;
+
+  // If both eyes have been analyzed, show the two-eye summary
+  var hasBoth = eyeResults['Left'] && eyeResults['Right'];
+  $('twoeye-summary').style.display = hasBoth ? 'grid' : 'none';
+  if (hasBoth){
+    var L = eyeResults['Left'], R = eyeResults['Right'];
+    $('left-name').textContent  = L.overall.name;
+    $('left-meta').textContent  = L.overall.cat + ' \u00b7 Limbal: ' + L.limbal + ' \u00b7 Het: ' + L.hetero;
+    $('right-name').textContent = R.overall.name;
+    $('right-meta').textContent = R.overall.cat + ' \u00b7 Limbal: ' + R.limbal + ' \u00b7 Het: ' + R.hetero;
+    // ===== Bilateral heterochromia (L vs R) =====
+    // Compares the two eyes' overall palette anchors. Categories are the
+    // strongest signal: David Bowie / Kiefer Sutherland-style "different
+    // color eyes" cross category lines (blue vs brown). Same-category but
+    // large \u0394E flags subtle bilateral hetero (e.g. light vs dark hazel).
+    // Using palette anchors (not raw RGB) keeps this stable across lighting.
+    var biDe = dE(L.overall.lab, R.overall.lab);
+    var sameCat = L.overall.cat === R.overall.cat;
+    var verdict, detail, cls;
+    if (!sameCat){
+      verdict = 'Complete bilateral heterochromia';
+      detail  = L.overall.cat + ' (left) vs ' + R.overall.cat + ' (right) \u2014 \u0394E ' + biDe.toFixed(1)
+              + ' between palette anchors. About 1 in 200,000 people have eyes this distinct.';
+      cls = 'bilateral';
+    } else if (biDe > 18){
+      verdict = 'Subtle bilateral heterochromia';
+      detail  = 'Both eyes are ' + L.overall.cat.toLowerCase() + ', but they differ by \u0394E ' + biDe.toFixed(1)
+              + ' (' + L.overall.name + ' vs ' + R.overall.name + ').';
+      cls = 'bilateral';
+    } else {
+      verdict = 'Matched eyes';
+      detail  = 'Left and right eyes read as the same color (\u0394E ' + biDe.toFixed(1) + ' between palette anchors).';
+      cls = 'bilateral match';
+    }
+    $('bilateral-verdict').textContent = verdict;
+    $('bilateral-detail').textContent  = detail;
+    $('bilateral-row').className = cls;
+  }
+  // Hide "Other Eye" button if both done
+  $('btn-other-eye').style.display = hasBoth ? 'none' : '';
+  // Update Beauty Shot button label based on whether one is already attached
+  var btnPortrait = $('btn-portrait');
+  if (btnPortrait) {
+    btnPortrait.textContent = result.portraitImage
+      ? 'Replace Beauty Shot ✓'
+      : 'Add Beauty Shot';
+  }
+  if (hasBoth) {
+    $('next-text').textContent = 'Both eyes analyzed. Pop over to Post Maker for the cover-and-uncover reveal, or start over.';
+  } else {
+    var other = (result.side === 'Left') ? 'Right' : 'Left';
+    $('btn-other-eye').textContent = 'Analyze ' + other + ' Eye';
+    $('next-text').textContent = 'One eye down. Analyze the ' + other.toLowerCase() + ' eye for a complete pair, make a share card, or start over.';
+  }
+  setTimeout(function(){ $('card-result').scrollIntoView({behavior:'smooth', block:'start'}); }, 60);
+}
+
+// ======================= HIGHLIGHTS + STORY VIEW =======================
+function rgbCss(rgb){ return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')'; }
+
+function renderHighlights(result){
+  var box = $('r-highlights');
+  box.innerHTML = '';
+  var items = [];
+  // ===== Always-on highlights (color profile) =====
+  // Rarity callout
+  if (result.rarity) {
+    var rarityTitle = result.rarityScore !== undefined
+      ? (rarityScoreLabel(result.rarityScore) + ' · ' + result.rarityScore + '/100')
+      : (result.rarity.label + ' · ' + result.rarity.pct + '% of people');
+    items.push({
+      title: rarityTitle,
+      desc: result.rarity.line,
+      swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
+    });
+  }
+  // Vibe descriptor
+  if (result.vibe) {
+    items.push({
+      title: '"' + result.vibe + '"',
+      desc: 'A descriptive nickname capturing your eye’s overall character — based on category and lightness.',
+      swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
+    });
+  }
+  // Pattern hint
+  var patternHint = getPatternHint(result.brightness, result.saturation);
+  if (patternHint) {
+    items.push({
+      title: 'Iris character',
+      desc: patternHint + ' · brightness=' + result.brightness + ' · saturation=' + (result.saturation * 100).toFixed(0) + '%',
+      swatch: { type: 'solid', c1: rgbCss(result.fingerprint ? result.fingerprint.rgb : result.overall.rgb) },
+    });
+  }
+  // ===== Heterochromia (any kind) =====
+  if (result.hetero !== 'None') {
+    var pupName, cilName, pupRgb, cilRgb, label, descParts = [];
+    if (result.heteroPup && result.heteroCil) {
+      pupName = result.heteroPup.displayName || result.heteroPup.color.name;
+      cilName = result.heteroCil.displayName || result.heteroCil.color.name;
+      pupRgb = result.heteroPup.rgb; cilRgb = result.heteroCil.rgb;
+    } else {
+      pupRgb = result.outer.rgb || [128,128,128];
+      cilRgb = result.outer.rgb || [128,128,128];
+    }
+    if (result.hetero.indexOf('warmth') >= 0) {
+      label = 'Central heterochromia';
+      descParts.push((pupName||'Warmer') + ' pupillary ring within ' + (cilName||'cooler') + ' outer iris');
+      descParts.push('Δb=' + result.heteroDb.toFixed(1) + ' (warmth)');
+    } else if (result.hetero.indexOf('lightness') >= 0) {
+      label = 'Central heterochromia';
+      descParts.push((pupName||'Lighter') + ' pupillary ring within ' + (cilName||'darker') + ' outer iris');
+      descParts.push('ΔL=' + result.heteroDL.toFixed(1) + ' (lightness)');
+    } else if (result.hetero === 'Central') {
+      label = 'Central heterochromia';
+      descParts.push((pupName||result.inner.name) + ' inside ' + (cilName||result.outer.name));
+      descParts.push('ΔE=' + result.heteroDist.toFixed(1));
+    } else {
+      label = 'Subtle heterochromia';
+      descParts.push('Inner ' + result.inner.name + ' vs outer ' + result.outer.name);
+      descParts.push('ΔE=' + result.heteroDist.toFixed(1));
+    }
+    items.push({
+      title: label, desc: descParts.join(' · '),
+      swatch: { type: 'split', c1: rgbCss(pupRgb), c2: rgbCss(cilRgb) },
+    });
+  }
+  // Limbal ring or halo
+  if (result.limbal !== 'None' && result.limbalColor) {
+    var ftype = result.limbalType || 'ring';
+    items.push({
+      title: result.limbal + ' limbal ' + ftype,
+      desc: ftype === 'halo'
+        ? result.limbalColor.name + ' halo glowing inside the iris edge · L lift=' + Math.abs(result.limbalDropL).toFixed(1)
+        : result.limbalColor.name + ' rim around the iris · L drop=' + result.limbalDropL.toFixed(1),
+      swatch: { type: 'solid', c1: rgbCss(result.limbalRgb || result.limbalColor.rgb) },
+    });
+  }
+  // Sectoral patch
+  if (result.sectoral) {
+    items.push({
+      title: 'Sectoral patch · ' + result.sectoral.color.name,
+      desc: 'Localized at ' + result.sectoral.clock + " o'clock · spans " + Math.round(result.sectoral.spanDeg) + '° · ΔE=' + result.sectoral.meanDE.toFixed(1),
+      swatch: { type: 'solid', c1: rgbCss(result.sectoral.rgb) },
+    });
+  }
+  // Freckles
+  if (result.freckles && result.freckles.length) {
+    var nf = result.freckles.length;
+    var clocks = result.freckles.map(function(f){ return f.clock; }).slice(0, 3).join(", ");
+    items.push({
+      title: nf + ' iris freckle' + (nf === 1 ? '' : 's'),
+      desc: 'Pigmented spot' + (nf === 1 ? '' : 's') + ' at clock ' + clocks + (nf > 3 ? ' (+' + (nf-3) + ' more)' : ''),
+      swatch: { type: 'solid', c1: rgbCss(result.freckles[0].rgb || [60,40,20]) },
+    });
+  }
+  // ===== Color fingerprint (always shown last, smaller) =====
+  if (result.fingerprint) {
+    items.push({
+      title: 'Color fingerprint',
+      desc: 'Lab(' + result.fingerprint.lab[0].toFixed(0) + ', '
+                   + result.fingerprint.lab[1].toFixed(0) + ', '
+                   + result.fingerprint.lab[2].toFixed(0) + ') · '
+                   + result.fingerprint.hex.toUpperCase()
+                   + ' · No two irises share an identical reading.',
+      swatch: { type: 'solid', c1: rgbCss(result.fingerprint.rgb) },
+    });
+  }
+  // Render
+  if (items.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'flex';
+  items.forEach(function(it){
+    var row = document.createElement('div');
+    row.className = 'highlight';
+    var sw = document.createElement('div');
+    sw.className = 'swatch-circle' + (it.swatch.type === 'split' ? ' split' : '');
+    if (it.swatch.type === 'split') {
+      sw.style.setProperty('--c1', it.swatch.c1);
+      sw.style.setProperty('--c2', it.swatch.c2);
+    } else {
+      sw.style.background = it.swatch.c1;
+    }
+    var body = document.createElement('div');
+    body.className = 'body';
+    var t = document.createElement('div'); t.className = 'title'; t.textContent = it.title;
+    var d2 = document.createElement('div'); d2.className = 'desc'; d2.textContent = it.desc;
+    body.appendChild(t); body.appendChild(d2);
+    row.appendChild(sw); row.appendChild(body);
+    box.appendChild(row);
+  });
+}
+
+function renderStory(result){
+  var box = $('view-story-content');
+  box.innerHTML = '';
+  var paras = [];
+  // Opening
+  var side = result.side.toLowerCase();
+  // Opening — specific palette name + vibe
+  var openLine = 'Your <strong>' + side + ' eye</strong> is <strong>' + result.overall.name + '</strong>';
+  if (result.vibe) openLine += ' — ' + result.vibe;
+  openLine += '.';
+  paras.push(openLine);
+  // Rarity + score
+  if (result.rarity) {
+    var rarityLine = result.rarity.line;
+    if (result.rarityScore !== undefined) {
+      rarityLine += ' Your composite rarity score is <strong>' + result.rarityScore + '/100</strong> — ' + rarityScoreLabel(result.rarityScore).toLowerCase() + '.';
+    }
+    paras.push(rarityLine);
+  }
+  // Iris character — plain language only
+  var ph = getPatternHint(result.brightness, result.saturation);
+  if (ph) {
+    var patDesc = ph.toLowerCase();
+    paras.push('The iris itself is <strong>' + patDesc + '</strong>' + (result.fingerprint ? ', with a unique color fingerprint at ' + result.fingerprint.hex.toUpperCase() : '') + '.');
+  }
+  // Heterochromia
+  if (result.hetero !== 'None') {
+    var pupName = result.heteroPup ? (result.heteroPup.displayName || result.heteroPup.color.name) : null;
+    var cilName = result.heteroCil ? (result.heteroCil.displayName || result.heteroCil.color.name) : null;
+    if (result.hetero.indexOf('warmth') >= 0) {
+      paras.push('The most distinctive feature: <strong>central heterochromia</strong>. A ' + (pupName ? '<strong>' + pupName + '</strong>' : 'warmer') + ' ring sits immediately around the pupil, transitioning into a ' + (cilName ? cilName.toLowerCase() : 'cooler') + ' outer iris. The Lab b-channel shifts by ' + result.heteroDb.toFixed(1) + ' between the pupillary zone and the ciliary zone — that is a clear, measurable warmth gradient. Central heterochromia of this kind appears in roughly 10-15% of the population and is most often inherited as a recessive trait.');
+    } else if (result.hetero.indexOf('lightness') >= 0) {
+      paras.push('The eye shows <strong>central heterochromia of the lightness-gradient type</strong>: a ' + (pupName ? '<strong>' + pupName + '</strong>' : 'lighter') + ' pupillary zone within a ' + (cilName ? cilName.toLowerCase() : 'darker') + ' outer iris (ΔL=' + result.heteroDL.toFixed(1) + ').');
+    } else if (result.hetero === 'Central') {
+      paras.push('The eye shows <strong>central heterochromia</strong>: a clearly different color in the inner pupillary zone (' + result.inner.name + ') compared to the outer ciliary zone (' + result.outer.name + '). ΔE between zones is ' + result.heteroDist.toFixed(1) + ' — large enough to cross palette categories.');
+    } else {
+      paras.push('A <strong>subtle heterochromia</strong> shows up: inner ring reads as ' + result.inner.name + ', outer as ' + result.outer.name + '. ΔE=' + result.heteroDist.toFixed(1) + '.');
+    }
+  }
+  // Limbal ring or halo
+  if (result.limbal !== 'None' && result.limbalColor) {
+    var strength = result.limbal.toLowerCase();
+    var lftype = result.limbalType || 'ring';
+    var lifAbs = Math.abs(result.limbalDropL).toFixed(1);
+    if (lftype === 'halo') {
+      paras.push('A <strong>' + strength + ' ' + result.limbalColor.name.toLowerCase() + ' halo</strong> glows just inside the iris edge — a bright amber/golden zone instead of the typical dark rim. The Lab L channel rises by ' + lifAbs + ' from the iris baseline to the outermost 8% band. Halos are less talked about than limbal rings but are equally distinctive — they give the iris a luminous, inset quality.');
+    } else if (result.limbal === 'Strong' || result.limbal === 'Dramatic') {
+      paras.push('A <strong>' + strength + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring</strong> traces the iris edge — the dark rim that makes the iris pop. The Lab L channel drops by ' + lifAbs + ' between the iris baseline and the outermost 8% ring band. Strong limbal rings tend to be most visible in younger people and gradually fade with age.');
+    } else {
+      paras.push('A <strong>' + strength + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring</strong> sits at the iris edge (L drop of ' + lifAbs + ') — present, but on the subtler side.');
+    }
+  }
+  // Sectoral
+  if (result.sectoral) {
+    var s = result.sectoral;
+    paras.push('A <strong>sectoral patch of ' + s.color.name.toLowerCase() + '</strong> appears near ' + s.clock + " o'clock, spanning roughly " + Math.round(s.spanDeg) + '° of the iris. Sectoral heterochromia is rare — about 1 in 1,000 people — and gives each affected iris a one-of-a-kind signature.');
+  }
+  // Freckles
+  if (result.freckles && result.freckles.length) {
+    var nf = result.freckles.length;
+    if (nf === 1) {
+      paras.push('A single <strong>iris freckle</strong> sits at clock ' + result.freckles[0].clock + ' — a small pigmented spot that is essentially a permanent fingerprint inside the iris.');
+    } else {
+      var clocks = result.freckles.map(function(f){ return f.clock; }).join(', ');
+      paras.push('<strong>' + nf + ' iris freckles</strong> dot the iris at clock positions ' + clocks + '. These small pigmented spots act as a permanent visual fingerprint — no two irises share the same freckle pattern.');
+    }
+  }
+  // If nothing detected beyond the base color
+  if (paras.length === 1) {
+    paras.push('No heterochromia, limbal ring, sectoral patches, or iris freckles were detected at the current resolution. That does not mean none exist — subtle features may need a closer crop or better lighting to surface.');
+  }
+  // Closing
+  paras.push('<em style="color: var(--ink-dim); font-size:12px">Measurements are computed in CIE Lab space using a curated palette of ' + (typeof PALETTE !== 'undefined' ? PALETTE.length : 38) + ' eye-color anchors. Rarity figures are global approximations from published prevalence research. No two irises produce identical fingerprints — your eye is mathematically unique.</em>');
+
+  paras.forEach(function(p){
+    var el = document.createElement('p');
+    el.innerHTML = p;
+    box.appendChild(el);
+  });
+}
+
+// ======================= SHARE CARD =======================
+// Generates a 1080x1350 PNG (Instagram portrait ratio) summarizing the
+// analysis. Uses canvas rendering — no external libraries required.
+
+function generateShareCard(result){
+  // Pick portrait image if user added one; else analysis image; else fall
+  // back to the live globals (imgEl + donut + drawInfo).
+  var stored = result.portraitImage || result.analysisImage || null;
+  return loadResultImage(stored).then(function(loadedImg){
+    var imageSpec = (loadedImg && stored && stored.iris)
+      ? { img: loadedImg, iris: stored.iris }
+      : null;
+    return renderShareCardSync(result, imageSpec);
+  });
+}
+
+function renderShareCardSync(result, imageSpec){
+  return new Promise(function(resolve){
+    var W = 1080, H = 1350;
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+
+    var baseRgb = result.fingerprint ? result.fingerprint.rgb : (result.overall.rgb || [60, 60, 80]);
+    function darken(rgb, amt){
+      return [Math.max(0, rgb[0]-amt), Math.max(0, rgb[1]-amt), Math.max(0, rgb[2]-amt)];
+    }
+    function rgbStr(rgb){ return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')'; }
+
+    // ---- Background gradient + vignette ----
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, rgbStr(darken(baseRgb, 30)));
+    grad.addColorStop(0.5, rgbStr(darken(baseRgb, 80)));
+    grad.addColorStop(1, '#0a0a14');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    var vg = ctx.createRadialGradient(W/2, H/2, W*0.2, W/2, H/2, W*0.8);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+    // ---- Top bar ----
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = '600 36px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('eyeD', 60, 60);
+    ctx.font = '300 22px -apple-system, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.textAlign = 'right';
+    ctx.fillText(result.side + ' eye · Davis Scale', W - 60, 60);
+
+    // ---- Iris circle (1.85× crop, with bloom) ----
+    var irisCx = W/2, irisCy = 380, irisR = 280;
+    drawIrisCrop(ctx, irisCx, irisCy, irisR, baseRgb, imageSpec);
+
+    // ---- Pick hero feature ----
+    var hero = pickHero(result);
+    var allPills = buildFeaturePills(result);
+    var supportingPills = filterPillsForHero(allPills, hero.type);
+
+    // ---- HERO label (with sparkles when not vibe-default) ----
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255,255,255,0.97)';
+    ctx.font = '700 72px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    var heroY = 720;
+    var heroW = ctx.measureText(hero.label).width;
+    if (hero.type !== 'vibe') {
+      drawSparkle(ctx, (W - heroW)/2 - 30, heroY + 35, 14);
+      drawSparkle(ctx, (W + heroW)/2 + 30, heroY + 35, 14);
+    }
+    ctx.fillText(hero.label, W/2, heroY);
+
+    // ---- Gradient underline beneath hero ----
+    var ulW = Math.min(heroW * 0.6, 480), ulX = (W - ulW)/2, ulY = heroY + 95;
+    var ulGrad = ctx.createLinearGradient(ulX, ulY, ulX + ulW, ulY);
+    ulGrad.addColorStop(0, 'rgba(' + baseRgb.join(',') + ',0.0)');
+    ulGrad.addColorStop(0.5, 'rgba(255,255,255,0.4)');
+    ulGrad.addColorStop(1, 'rgba(' + baseRgb.join(',') + ',0.0)');
+    ctx.fillStyle = ulGrad; ctx.fillRect(ulX, ulY, ulW, 3);
+
+    // ---- Hero subtitle ----
+    var subEndY = ulY + 30;
+    if (hero.subtitle) {
+      ctx.font = '400 28px -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(hero.subtitle, W/2, ulY + 18);
+      subEndY = ulY + 60;
+    }
+
+    // ---- Stats line: vibe (smaller) + color · name · rarity ----
+    var statY = subEndY + 30;
+    if (hero.type !== 'vibe') {
+      ctx.font = '700 36px -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillText('"' + (result.vibe || '') + '"', W/2, statY);
+      statY += 50;
+    }
+    ctx.font = '500 28px -apple-system, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    var cParts = [result.overall.cat, result.overall.name];
+    if (result.rarity) cParts.push(result.rarity.label);
+    ctx.fillText(cParts.join('  ·  '), W/2, statY);
+
+    // ---- Rarity sparkle callout ----
+    if (result.rarity) {
+      ctx.font = '700 26px -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(255,235,180,0.88)';
+      ctx.fillText('✦ ' + result.rarity.pct + '% of people ✦', W/2, statY + 42);
+      statY += 72;
+    } else {
+      statY += 40;
+    }
+
+    // ---- Supporting pills (max 3) ----
+    var pillY = statY + 50;
+    supportingPills.slice(0, 3).forEach(function(p){
+      drawPill(ctx, W/2, pillY, p);
+      pillY += 58;
+    });
+
+    // ---- Palette swatches (5 anchors from same category) ----
+    var siblings = [];
+    if (typeof PALETTE !== 'undefined') {
+      for (var i = 0; i < PALETTE.length && siblings.length < 5; i++) {
+        if (PALETTE[i].cat === result.overall.cat) siblings.push(PALETTE[i].rgb);
+      }
+    }
+    if (siblings.length) {
+      var sw = 50, gap = 10;
+      var totalW = siblings.length * sw + (siblings.length - 1) * gap;
+      var sx = (W - totalW) / 2;
+      siblings.forEach(function(rgb){
+        ctx.fillStyle = rgbStr(rgb);
+        roundRect(ctx, sx, 1200, sw, sw, 10); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 2;
+        roundRect(ctx, sx, 1200, sw, sw, 10); ctx.stroke();
+        sx += sw + gap;
+      });
+    }
+
+    // ---- Color fingerprint ----
+    if (result.fingerprint) {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.font = '400 18px ui-monospace, Menlo, monospace';
+      var fp = 'Lab(' + result.fingerprint.lab[0].toFixed(0) + ', '
+                       + result.fingerprint.lab[1].toFixed(0) + ', '
+                       + result.fingerprint.lab[2].toFixed(0) + ')   '
+                       + result.fingerprint.hex.toUpperCase();
+      ctx.fillText(fp, W/2, 1275);
+    }
+
+    // ---- Brand line ----
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.font = '300 16px -apple-system, sans-serif';
+    ctx.fillText('eyeD · iris.color', W/2, 1310);
+
+    canvas.toBlob(function(blob){ resolve({ canvas: canvas, blob: blob }); }, 'image/png');
+  });
+}
+
+function pickHero(result){
+  // Hero priority: rarest/most exciting feature first.
+  if (result.sectoral) {
+    return { type: 'sectoral', label: 'Sectoral Heterochromia',
+             subtitle: result.sectoral.color.name + ' @ ' + result.sectoral.clock + " o'clock",
+             color: result.sectoral.rgb };
+  }
+  if (result.hetero !== 'None') {
+    var pup = result.heteroPup ? (result.heteroPup.displayName || result.heteroPup.color.name) : null;
+    var sub;
+    if (result.hetero.indexOf('warmth') >= 0) sub = (pup ? pup + ' ' : 'warm ') + 'pupillary ring';
+    else if (result.hetero.indexOf('lightness') >= 0) sub = (pup ? pup + ' ' : 'light ') + 'pupillary ring';
+    else if (result.hetero === 'Central') sub = (pup || result.inner.name) + ' inside ' + (result.heteroCil ? (result.heteroCil.displayName || result.heteroCil.color.name) : result.outer.name);
+    else sub = result.heteroDist ? 'ΔE=' + result.heteroDist.toFixed(1) : '';
+    return { type: 'hetero', label: 'Central Heterochromia', subtitle: sub,
+             color: result.heteroPup ? result.heteroPup.rgb : [180,140,90] };
+  }
+  if (result.limbal === 'Strong' || result.limbal === 'Dramatic') {
+    var ftype = result.limbalType || 'ring';
+    return { type: 'limbal_' + ftype,
+             label: result.limbal + ' Limbal ' + (ftype === 'halo' ? 'Halo' : 'Ring'),
+             subtitle: result.limbalColor ? result.limbalColor.name : '',
+             color: result.limbalRgb || (result.limbalColor ? result.limbalColor.rgb : [80,80,80]) };
+  }
+  if (result.freckles && result.freckles.length >= 2) {
+    return { type: 'freckles',
+             label: result.freckles.length + ' Iris Freckles',
+             subtitle: 'A unique pigmented fingerprint',
+             color: result.freckles[0].rgb || [60,40,20] };
+  }
+  // Default — vibe is the hero
+  return { type: 'vibe', label: result.vibe || result.overall.name,
+           subtitle: null, color: result.overall.rgb };
+}
+
+function filterPillsForHero(pills, heroType){
+  return pills.filter(function(p){
+    var l = p.label.toLowerCase();
+    if (heroType === 'hetero' && l.indexOf('heterochromia') >= 0) return false;
+    if (heroType === 'sectoral' && l.indexOf('sectoral') === 0) return false;
+    if (heroType === 'limbal_ring' && l.indexOf('ring') >= 0 && l.indexOf('pupillary') < 0) return false;
+    if (heroType === 'limbal_halo' && l.indexOf('halo') >= 0) return false;
+    if (heroType === 'freckles' && l.indexOf('freckle') >= 0) return false;
+    // Suppress useless "Faint X ring" where X color matches outer iris (no real contrast)
+    return true;
+  });
+}
+
+function drawSparkle(ctx, x, y, size){
+  var s = size;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,235,180,0.85)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.lineTo(x + s*0.3, y - s*0.3);
+  ctx.lineTo(x + s, y);
+  ctx.lineTo(x + s*0.3, y + s*0.3);
+  ctx.lineTo(x, y + s);
+  ctx.lineTo(x - s*0.3, y + s*0.3);
+  ctx.lineTo(x - s, y);
+  ctx.lineTo(x - s*0.3, y - s*0.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawIrisCrop(ctx, cx, cy, r, baseRgb, imageSpec){
+  // Bloom (soft glow ring just outside the iris circle)
+  ctx.save();
+  for (var i = 0; i < 4; i++) {
+    var rr = r + 8 + i*4;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(' + baseRgb.join(',') + ',' + (0.18 - i*0.04) + ')';
+    ctx.lineWidth = 3; ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.clip();
+  // imageSpec: { img: HTMLImageElement, iris: {cx, cy, rPupil, rIris, drawInfo} }
+  // Falls back to the live globals (imgEl + donut + drawInfo) if not provided.
+  var srcImg = (imageSpec && imageSpec.img) ? imageSpec.img : imgEl;
+  var iris = (imageSpec && imageSpec.iris) ? imageSpec.iris :
+             (donut ? { cx: donut.cx, cy: donut.cy, rIris: donut.rIris,
+                        rPupil: donut.rPupil, drawInfo: drawInfo } : null);
+  if (srcImg && iris && iris.rIris && iris.drawInfo && iris.drawInfo.dw > 0) {
+    var srcW = srcImg.naturalWidth || srcImg.width;
+    var srcH = srcImg.naturalHeight || srcImg.height;
+    var di = iris.drawInfo;
+    var sxRatio = srcW / di.dw, syRatio = srcH / di.dh;
+    var imgIrisX = (iris.cx - di.dx) * sxRatio;
+    var imgIrisY = (iris.cy - di.dy) * syRatio;
+    var imgIrisR = iris.rIris * sxRatio;
+    var crop = imgIrisR * 1.85;
+    var sx = imgIrisX - crop / 2, sy = imgIrisY - crop / 2;
+    ctx.fillStyle = 'rgb(' + baseRgb.join(',') + ')';
+    ctx.fillRect(cx - r, cy - r, r*2, r*2);
+    var srcX0 = Math.max(0, sx), srcY0 = Math.max(0, sy);
+    var srcX1 = Math.min(srcW, sx + crop), srcY1 = Math.min(srcH, sy + crop);
+    if (srcX1 > srcX0 && srcY1 > srcY0) {
+      var dx0 = (srcX0 - sx) / crop, dy0 = (srcY0 - sy) / crop;
+      var dx1 = (srcX1 - sx) / crop, dy1 = (srcY1 - sy) / crop;
+      ctx.drawImage(srcImg,
+        srcX0, srcY0, srcX1-srcX0, srcY1-srcY0,
+        cx - r + dx0 * (r*2), cy - r + dy0 * (r*2),
+        (dx1-dx0) * (r*2), (dy1-dy0) * (r*2));
+    }
+  } else {
+    ctx.fillStyle = 'rgb(' + baseRgb.join(',') + ')';
+    ctx.fillRect(cx - r, cy - r, r*2, r*2);
+  }
+  ctx.restore();
+}
+
+// Helper: load an Image from a stored result.{analysis|portrait}Image.src.
+// Returns a Promise that resolves with the HTMLImageElement (or null).
+function loadResultImage(stored){
+  return new Promise(function(resolve){
+    if (!stored || !stored.src) { resolve(null); return; }
+    var img = new Image();
+    img.onload = function(){ resolve(img); };
+    img.onerror = function(){ resolve(null); };
+    img.src = stored.src;
+  });
+}
+
+function buildFeaturePills(result){
+  var pills = [];
+  // Heterochromia
+  if (result.hetero !== 'None') {
+    var pup = result.heteroPup ? (result.heteroPup.displayName || result.heteroPup.color.name) : null;
+    var label;
+    if (result.hetero.indexOf('warmth') >= 0 || result.hetero.indexOf('lightness') >= 0) {
+      label = 'Central heterochromia · ' + (pup || 'gradient ring');
+    } else if (result.hetero === 'Central') {
+      label = 'Central heterochromia · ' + (result.inner.name || pup);
+    } else {
+      label = result.hetero + ' heterochromia';
+    }
+    pills.push({ label: label, color: result.heteroPup ? result.heteroPup.rgb : [180,140,90] });
+  }
+  // Limbal ring or halo. Suppress "Faint X ring" when iris and ring resolve
+  // to the same palette color — no informative contrast.
+  if (result.limbal !== 'None' && result.limbalColor) {
+    var ftype = result.limbalType || 'ring';
+    var sameAsIris = result.outer && result.outer.name === result.limbalColor.name;
+    var suppress = result.limbal === 'Faint' && sameAsIris;
+    if (!suppress) {
+      pills.push({
+        label: result.limbal + ' ' + result.limbalColor.name + ' ' + ftype,
+        color: result.limbalRgb || result.limbalColor.rgb,
+      });
+    }
+  }
+  // Sectoral
+  if (result.sectoral) {
+    pills.push({
+      label: 'Sectoral patch · ' + result.sectoral.color.name + ' @ ' + result.sectoral.clock + " o'clock",
+      color: result.sectoral.rgb,
+    });
+  }
+  // Freckles
+  if (result.freckles && result.freckles.length) {
+    pills.push({
+      label: result.freckles.length + ' iris freckle' + (result.freckles.length === 1 ? '' : 's'),
+      color: result.freckles[0].rgb || [60, 40, 20],
+    });
+  }
+  // Iris character (always)
+  var ph = (typeof getPatternHint === 'function') ? getPatternHint(result.brightness, result.saturation) : null;
+  if (ph) {
+    pills.push({ label: ph, color: result.fingerprint ? result.fingerprint.rgb : [128,128,128] });
+  }
+  return pills;
+}
+
+function drawPill(ctx, cx, y, p){
+  // Measure label width, draw rounded pill with color dot + label
+  var ctxFont = '500 26px -apple-system, sans-serif';
+  ctx.font = ctxFont;
+  var lw = ctx.measureText(p.label).width;
+  var dot = 18, padL = 28, padR = 28, gap = 14;
+  var pillH = 50, pillW = lw + padL + padR + dot + gap;
+  var x = cx - pillW/2;
+  // pill background
+  ctx.fillStyle = 'rgba(0,0,0,0.40)';
+  roundRect(ctx, x, y - pillH/2, pillW, pillH, pillH/2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y - pillH/2, pillW, pillH, pillH/2); ctx.stroke();
+  // color dot
+  ctx.fillStyle = 'rgb(' + p.color.join(',') + ')';
+  ctx.beginPath(); ctx.arc(x + padL + dot/2, y, dot/2, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x + padL + dot/2, y, dot/2, 0, Math.PI*2); ctx.stroke();
+  // label
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = ctxFont;
+  ctx.fillText(p.label, x + padL + dot + gap, y);
+  ctx.textAlign = 'center';
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// Wire the Share button + modal
+$('btn-share').addEventListener('click', function(){
+  if (!window.__lastResult) return;
+  generateShareCard(window.__lastResult).then(function(out){
+    var url = URL.createObjectURL(out.blob);
+    $('share-preview').src = url;
+    $('share-modal').classList.add('show');
+    $('share-download').onclick = function(){
+      // iOS Safari: toDataURL works reliably; blob URL download is blocked
+      try {
+        var dataUrl = out.canvas.toDataURL('image/png');
+        var a = document.createElement('a');
+        a.href = dataUrl;
+        var name = (window.__lastResult.side || 'eye').toLowerCase() + '-eyed-card.png';
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch(e) {
+        // Last resort: open in new tab so user can long-press save
+        var w = window.open();
+        if (w) {
+          var dataUrl2 = out.canvas.toDataURL('image/png');
+          w.document.write('<img src="' + dataUrl2 + '" style="max-width:100%;display:block">');
+          w.document.write('<p style="font-family:sans-serif;padding:12px;color:#666">Long-press the image and choose Save to Photos</p>');
+        }
+      }
+    };
+  });
+});
+$('share-close').addEventListener('click', function(){
+  $('share-modal').classList.remove('show');
+});
+
+// View toggle wiring (Card vs Story)
+(function(){
+  var btnCard = $('view-card'), btnStory = $('view-story');
+  var cardC = $('view-card-content'), storyC = $('view-story-content');
+  function show(view){
+    var isCard = view === 'card';
+    btnCard.classList.toggle('active', isCard);
+    btnStory.classList.toggle('active', !isCard);
+    cardC.style.display = isCard ? 'block' : 'none';
+    storyC.style.display = isCard ? 'none' : 'block';
+  }
+  if (btnCard && btnStory) {
+    btnCard.addEventListener('click', function(){ show('card'); });
+    btnStory.addEventListener('click', function(){ show('story'); });
+  }
+})();
+
+$('btn-other-eye').addEventListener('click', function(){
+  // keep originalImgEl and eyeResults, return to locate step
+  $('card-fit').style.display = 'none';
+  showLocate();
+});
+
+// Beauty-shot button — start a portrait capture for the existing result
+$('btn-portrait').addEventListener('click', function(){
+  captureMode = 'portrait';
+  $('btn-analyze').textContent = 'Save Beauty Shot';
+  // Keep eyeResults intact, reset working image so user can upload a new one
+  originalImgEl = null; imgEl = null; imgLoaded = false;
+  $('card-result').style.display = 'none';
+  $('card-fit').style.display = 'none';
+  $('card-locate').style.display = 'none';
+  // Click the upload button to immediately reopen file picker — feels native
+  // (saves a tap vs. scrolling back up to the upload card)
+  $('card-capture').scrollIntoView({behavior: 'smooth', block: 'start'});
+  setTimeout(function(){ $('btn-upload').click(); }, 200);
+});
+
+$('btn-again').addEventListener('click', function(){
+  eyeResults = {};
+  currentSide = null;
+  captureMode = 'analysis';
+  $('btn-analyze').textContent = 'Analyze Iris';
+  originalImgEl = null; imgEl = null; imgLoaded = false;
+  $('card-result').style.display = 'none';
+  $('card-fit').style.display = 'none';
+  $('card-locate').style.display = 'none';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+});
+// Manual slider toggle
+var btnToggleManual = $('btn-toggle-manual');
+if (btnToggleManual) {
+  btnToggleManual.addEventListener('click', function(){
+    var sliders = $('manual-sliders');
+    var showing = sliders.style.display !== 'none';
+    sliders.style.display = showing ? 'none' : 'block';
+    btnToggleManual.textContent = showing ? 'Adjust Manually' : 'Hide Sliders';
+  });
+}
+// Auto-run autofit when the fit card becomes visible (triggered from showFit)
+function autoRunFit(){
+  var hint = $('autofit-hint');
+  if (hint) hint.textContent = 'Auto-fitting iris ring…';
+  setTimeout(function(){
+    var ab = $('btn-autofit');
+    if (ab) ab.click();
+    if (hint) hint.textContent = 'Auto-fit complete. Tap “Analyze Iris” or adjust manually.';
+  }, 80);
+}
+
+// (Old btn-share post-maker nav handler removed — share button now opens the
+// rendered share-card modal, see generateShareCard wiring earlier.)
+
+// ======================= POST MAKER =======================
+var revealed = false;
+function drawPostStage(){
+  var c = $('post-canvas');
+  var W = c.width = 540, H = c.height = 960;
+  var pc = c.getContext('2d');
+  pc.fillStyle = '#0b1020'; pc.fillRect(0, 0, W, H);
+  var src = originalImgEl || imgEl;
+  if (src){
+    var ar = src.width / src.height;
+    var dw = W, dh = W / ar;
+    if (dh < H * 0.7){ dh = H * 0.7; dw = dh * ar; }
+    pc.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  } else {
+    pc.fillStyle = '#aab1cc'; pc.textAlign = 'center'; pc.font = '600 22px -apple-system, system-ui, sans-serif';
+    pc.fillText('Analyze an iris first', W / 2, H / 2);
+  }
+  var grad = pc.createLinearGradient(0, H*0.6, 0, H);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.85)');
+  pc.fillStyle = grad; pc.fillRect(0, 0, W, H);
+  pc.fillStyle = '#fff'; pc.textAlign = 'left';
+  pc.font = '800 32px -apple-system, system-ui, sans-serif';
+  pc.fillText('eye', 32, H - 72);
+  var w = pc.measureText('eye').width;
+  pc.fillStyle = '#6cc4ff'; pc.fillText('D', 32 + w, H - 72);
+  pc.fillStyle = '#fff'; pc.font = '600 16px -apple-system, system-ui, sans-serif';
+  pc.fillText('#eyeD', 32, H - 44);
+  var t = $('post-text');
+  if (revealed){
+    var hasBoth = eyeResults['Left'] && eyeResults['Right'];
+    if (hasBoth){
+      t.textContent = eyeResults['Left'].overall.name + ' / ' + eyeResults['Right'].overall.name;
+    } else if (window.__lastResult){
+      t.textContent = window.__lastResult.overall.name + ' eyes';
+    } else {
+      t.textContent = '\u2014';
+    }
+  } else {
+    t.textContent = 'What color are my eyes?';
+  }
+}
+$('btn-toggle-reveal').addEventListener('click', function(){ revealed = !revealed; drawPostStage(); });
+$('btn-export-post').addEventListener('click', function(){
+  var c = $('post-canvas');
+  var out = document.createElement('canvas'); out.width = c.width; out.height = c.height;
+  var octx = out.getContext('2d');
+  octx.drawImage(c, 0, 0);
+  octx.fillStyle = 'rgba(0,0,0,0.4)';
+  octx.fillRect(0, c.height*0.4, c.width, c.height*0.2);
+  octx.fillStyle = '#fff'; octx.textAlign = 'center';
+  octx.font = '800 44px -apple-system, system-ui, sans-serif';
+  octx.fillText($('post-text').textContent, c.width/2, c.height*0.52);
+  try {
+    var a = document.createElement('a');
+    a.href = out.toDataURL('image/png');
+    a.download = 'eyeD-post.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (e) {
+    var w = window.open(); if (w) w.document.write('<img src="' + out.toDataURL('image/png') + '" style="max-width:100%">');
+    else showError('Save blocked. Long-press the image and choose Save.');
+  }
+});
+
+// Everything attached — flip banner to green
+markRunning();
+
+} catch (err) {
+  showError(err && err.message ? err.message : String(err));
+}
+})();
+</script>
+</body>
+</html>
