@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.25 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.26 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -2649,6 +2649,8 @@ function uploadToSupabase(result) {
     showSaveToast('Saving…', true);
     function safeNum(v) { var n = parseFloat(v); return isFinite(n) ? n : null; }
     function safeInt(v) { var n = parseInt(v, 10); return isFinite(n) ? n : null; }
+    var irisPos = result.analysisImage && result.analysisImage.iris
+      ? JSON.stringify(result.analysisImage.iris) : null;
     var record = {
       created_at: new Date().toISOString(),
       eye_side: result.side || null,
@@ -2662,7 +2664,8 @@ function uploadToSupabase(result) {
       vibe: result.vibe || null,
       hex_color: result.fingerprint ? result.fingerprint.hex : null,
       sectoral_color: result.sectoral ? result.sectoral.color : null,
-      freckle_count: safeInt(result.freckles ? result.freckles.length : 0)
+      freckle_count: safeInt(result.freckles ? result.freckles.length : 0),
+      iris_position: irisPos
     };
     fetch(SUPABASE_URL + '/rest/v1/analyses', {
       method: 'POST',
@@ -2670,17 +2673,50 @@ function uploadToSupabase(result) {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
         'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'Prefer': 'return=minimal'
+        'Prefer': 'return=representation'
       },
       body: JSON.stringify(record)
     }).then(function(res) {
-      if (res.ok) {
-        showSaveToast('Saved ✓', true);
-      } else {
-        res.text().then(function(body) {
+      if (!res.ok) {
+        return res.text().then(function(body) {
           showSaveToast(res.status + ': ' + body.slice(0, 80), false);
         });
       }
+      return res.json().then(function(rows) {
+        showSaveToast('Saved ✓', true);
+        var rowId = rows && rows[0] && rows[0].id;
+        var src = result.analysisImage && result.analysisImage.src;
+        if (!src || !rowId) return;
+        // Upload full face photo in background
+        fetch(src)
+          .then(function(r) { return r.blob(); })
+          .then(function(blob) {
+            var fileName = 'face-' + rowId + '.jpg';
+            return fetch(SUPABASE_URL + '/storage/v1/object/iris-photos/' + fileName, {
+              method: 'POST',
+              headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'Content-Type': 'image/jpeg'
+              },
+              body: blob
+            }).then(function(storageRes) {
+              if (storageRes.ok) {
+                fetch(SUPABASE_URL + '/rest/v1/analyses?id=eq.' + rowId, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY,
+                    'Prefer': 'return=minimal'
+                  },
+                  body: JSON.stringify({ face_photo_path: fileName })
+                }).catch(function() {});
+              }
+            });
+          })
+          .catch(function() {});
+      });
     }).catch(function(e) {
       showSaveToast('Save failed: ' + String(e).slice(0, 60), false);
     });
