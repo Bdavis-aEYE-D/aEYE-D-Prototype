@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.28 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.29 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -2577,6 +2577,7 @@ $('btn-again').addEventListener('click', function(){
   captureMode = 'analysis';
   $('btn-analyze').textContent = 'Analyze Iris';
   originalImgEl = null; imgEl = null; imgLoaded = false;
+  _sessionFacePhotoPath = null;
   $('card-result').style.display = 'none';
   $('card-fit').style.display = 'none';
   $('card-locate').style.display = 'none';
@@ -2675,6 +2676,7 @@ $('btn-export-post').addEventListener('click', function(){
 // ======================= SUPABASE =======================
 var SUPABASE_URL = 'https://mmotthgsydxgviabnycv.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb3R0aGdzeWR4Z3ZpYWJueWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTM2MjcsImV4cCI6MjA5MzU4OTYyN30.hUgH6_0eJ-s4FbtSD3_EuyH-5sYLWIUQK4fdDAP0yMU';
+var _sessionFacePhotoPath = null;  // reused for both eyes in same session
 
 function showSaveToast(msg, success) {
   var t = document.getElementById('save-toast');
@@ -2691,9 +2693,10 @@ function uploadToSupabase(result) {
     showSaveToast('Saving…', true);
     function safeNum(v) { var n = parseFloat(v); return isFinite(n) ? n : null; }
     function safeInt(v) { var n = parseInt(v, 10); return isFinite(n) ? n : null; }
-    var photoKey = Date.now() + '-' + (result.side || 'eye').toLowerCase();
     var irisPos = result.analysisImage && result.analysisImage.iris
       ? JSON.stringify(result.analysisImage.iris) : null;
+    // Reuse face photo path if already uploaded this session
+    var facePhotoPath = _sessionFacePhotoPath || ('face-' + Date.now() + '.jpg');
     var record = {
       created_at: new Date().toISOString(),
       eye_side: result.side || null,
@@ -2709,7 +2712,7 @@ function uploadToSupabase(result) {
       sectoral_color: result.sectoral ? result.sectoral.color : null,
       freckle_count: safeInt(result.freckles ? result.freckles.length : 0),
       iris_position: irisPos,
-      face_photo_path: 'face-' + photoKey + '.jpg'
+      face_photo_path: facePhotoPath
     };
     fetch(SUPABASE_URL + '/rest/v1/analyses', {
       method: 'POST',
@@ -2727,13 +2730,15 @@ function uploadToSupabase(result) {
         });
       }
       showSaveToast('Saved ✓', true);
-      // Upload full face photo in background
-      var src = result.analysisImage && result.analysisImage.src;
-      if (!src) return;
-      fetch(src)
+      // Upload original full-face photo once per session
+      if (_sessionFacePhotoPath) return;
+      _sessionFacePhotoPath = facePhotoPath;
+      var faceSrc = originalImgEl ? originalImgEl.src : null;
+      if (!faceSrc) return;
+      fetch(faceSrc)
         .then(function(r) { return r.blob(); })
         .then(function(blob) {
-          return fetch(SUPABASE_URL + '/storage/v1/object/iris-photos/face-' + photoKey + '.jpg', {
+          return fetch(SUPABASE_URL + '/storage/v1/object/iris-photos/' + facePhotoPath, {
             method: 'POST',
             headers: {
               'apikey': SUPABASE_KEY,
