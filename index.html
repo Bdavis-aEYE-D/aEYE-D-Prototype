@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.33 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.34 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -970,37 +970,31 @@ function autoFit(src){
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
-  // Iris boundary: Circular Hough Transform.
-  // For each candidate radius r, sum the outward radial gradient on that circle.
-  // The iris/sclera boundary produces the strongest dark-to-bright ring.
-  // Robust to eyelid occlusion because partial arcs still vote correctly.
-  var gxA = new Float32Array(W*H), gyA = new Float32Array(W*H);
-  for (var iy=1; iy<H-1; iy++){
-    for (var ix=1; ix<W-1; ix++){
-      gxA[iy*W+ix] = (lum[iy*W+ix+1] - lum[iy*W+ix-1]) * 0.5;
-      gyA[iy*W+ix] = (lum[(iy+1)*W+ix] - lum[(iy-1)*W+ix]) * 0.5;
-    }
-  }
-  var rMinI = Math.max(pr+3, Math.round(pr*1.8));
-  var rMaxI = Math.round(Math.min(W,H)*0.44);
-  var bestR = rMinI, bestScore = -1, bestCount = 0;
+  // Iris boundary: annular luminance contrast.
+  // Iris is dark; sclera is bright. The true iris/sclera boundary maximises
+  // (mean luminance just outside r) minus (mean luminance just inside r).
+  // Eyelids are also dark, but they only reduce the signal; they can't create
+  // a false peak stronger than the actual dark-iris-to-bright-sclera jump.
+  var rMinI = Math.max(pr+4, Math.round(pr*1.9));
+  var rMaxI = Math.round(Math.min(W,H)*0.46);
+  var bestR = rMinI, bestScore = -1e9, bestCount = 0;
+  var dr = 4;
   for (var r=rMinI; r<=rMaxI; r++){
-    var nPts = Math.max(24, Math.round(2*Math.PI*r));
-    var scoreSum = 0, scoreCount = 0;
+    var nPts = Math.max(32, Math.round(2*Math.PI*r));
+    var innerSum=0, innerN=0, outerSum=0, outerN=0;
     for (var i=0; i<nPts; i++){
       var th = (i/nPts)*Math.PI*2;
       var cth = Math.cos(th), sth = Math.sin(th);
-      var px2 = Math.round(pcx + r*cth);
-      var py2 = Math.round(pcy + r*sth);
-      if (px2<1||px2>=W-1||py2<1||py2>=H-1) continue;
-      var radG = gxA[py2*W+px2]*cth + gyA[py2*W+px2]*sth;
-      if (radG > 0){ scoreSum += radG; scoreCount++; }
+      var pxi = Math.round(pcx+(r-dr)*cth), pyi = Math.round(pcy+(r-dr)*sth);
+      if (pxi>=0&&pxi<W&&pyi>=0&&pyi<H){ innerSum+=lum[pyi*W+pxi]; innerN++; }
+      var pxo = Math.round(pcx+(r+dr)*cth), pyo = Math.round(pcy+(r+dr)*sth);
+      if (pxo>=0&&pxo<W&&pyo>=0&&pyo<H){ outerSum+=lum[pyo*W+pxo]; outerN++; }
     }
-    if (scoreCount < nPts*0.25) continue;
-    var score = scoreSum / nPts;
-    if (score > bestScore){ bestScore = score; bestR = r; bestCount = scoreCount; }
+    if (innerN < nPts*0.4 || outerN < nPts*0.4) continue;
+    var score = (outerSum/outerN) - (innerSum/innerN);
+    if (score > bestScore){ bestScore = score; bestR = r; bestCount = innerN; }
   }
-  var ok = bestScore > 1.0;
+  var ok = bestScore > 10;
   var irisR = ok ? bestR : pr * 3.0;
 
   return {
