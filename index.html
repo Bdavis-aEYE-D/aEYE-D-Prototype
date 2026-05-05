@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>eyeD Prototype</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root {
     --bg: #0b1020;
@@ -198,6 +199,7 @@
       <label class="tinylabel" style="margin-top:12px">Date of birth <span style="font-weight:400;color:var(--ink-dim)">(optional &mdash; improves limbal ring scoring)</span></label>
       <input type="date" id="birthdate-input" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;font-family:inherit;width:100%;margin-bottom:6px">
       <input type="file" id="file-input" accept="image/*">
+      <p style="font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.6;border-top:1px solid var(--line);padding-top:12px;">By using eyeD, your iris photo may be used to help build and improve the Davis Iris Color System. No photos are shared publicly or sold.</p>
     </div>
 
     <!-- ============== Step 2: Locate the eye ============== -->
@@ -1721,6 +1723,7 @@ function analyze(){
   // Render card
   renderResult(result);
   window.__lastResult = result;
+  uploadToSupabase(result);
 }
 
 function renderResult(result){
@@ -2622,6 +2625,57 @@ $('btn-export-post').addEventListener('click', function(){
     else showError('Save blocked. Long-press the image and choose Save.');
   }
 });
+
+// ======================= SUPABASE =======================
+var SUPABASE_URL = 'https://mmotthgsydxgviabnycv.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_QHs-mqo8WMjzsT2W0ZQTOg_mAqDZCuH';
+var _supabase = null;
+try {
+  if (window.supabase && window.supabase.createClient) {
+    _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch(e) {}
+
+function _saveAnalysisRecord(result, photoPath) {
+  if (!_supabase) return;
+  _supabase.from('analyses').insert({
+    created_at: new Date().toISOString(),
+    eye_side: result.side || null,
+    color_name: result.overall ? result.overall.name : null,
+    color_category: result.overall ? result.overall.cat : null,
+    heterochromia: result.hetero || null,
+    limbal_ring: result.limbal || null,
+    brightness: result.brightness != null ? result.brightness : null,
+    saturation: result.saturation != null ? result.saturation : null,
+    rarity_score: result.rarityScore != null ? result.rarityScore : null,
+    vibe: result.vibe || null,
+    hex_color: result.fingerprint ? result.fingerprint.hex : null,
+    sectoral_color: result.sectoral ? result.sectoral.color : null,
+    freckle_count: result.freckles ? result.freckles.length : 0,
+    photo_path: photoPath || null
+  }).catch(function() {});
+}
+
+function uploadToSupabase(result) {
+  if (!_supabase) return;
+  try {
+    var src = result.analysisImage && result.analysisImage.src;
+    if (!src) { _saveAnalysisRecord(result, null); return; }
+    var timestamp = Date.now();
+    var fileName = 'iris-' + (result.side || 'eye').toLowerCase() + '-' + timestamp + '.jpg';
+    fetch(src)
+      .then(function(r) { return r.blob(); })
+      .then(function(blob) {
+        return _supabase.storage
+          .from('iris-photos')
+          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+      })
+      .then(function(res) {
+        _saveAnalysisRecord(result, res.data ? res.data.path : null);
+      })
+      .catch(function() { _saveAnalysisRecord(result, null); });
+  } catch(e) {}
+}
 
 // Everything attached — flip banner to green
 markRunning();
