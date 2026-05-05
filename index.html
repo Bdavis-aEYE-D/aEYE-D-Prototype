@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.27 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.28 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -873,7 +873,7 @@ $('btn-zoom-in').addEventListener('click', function(){
 // Classical CV pupil+iris detection. Returns fractions (0..1) so we can apply
 // to the stage regardless of how the image is scaled in.
 function autoFit(src){
-  var sampleSide = 160;
+  var sampleSide = 280;  // was 160 — higher res catches finer iris edges
   var shorter = Math.min(src.width, src.height);
   var scale = sampleSide / shorter;
   var W = Math.max(2, Math.round(src.width * scale));
@@ -885,12 +885,16 @@ function autoFit(src){
   var data = octx.getImageData(0, 0, W, H).data;
   var lum = new Float32Array(W*H);
   var sat = new Float32Array(W*H);
+  var totalLum = 0;
   for (var i=0; i<W*H; i++){
     var r=data[i*4], g=data[i*4+1], b=data[i*4+2];
     lum[i] = 0.299*r + 0.587*g + 0.114*b;
     var mx=Math.max(r,g,b), mn=Math.min(r,g,b);
     sat[i] = mx>0 ? (mx-mn)/mx : 0;
+    totalLum += lum[i];
   }
+  var meanLum = totalLum / (W*H);
+
   var II = new Float64Array((W+1)*(H+1));
   for (var y=0; y<H; y++){
     var rowsum = 0;
@@ -900,31 +904,44 @@ function autoFit(src){
     }
   }
   function bs(x0,y0,x1,y1){
-    x0=Math.max(0,x0); y0=Math.max(0,y0); x1=Math.min(W,x1); y1=Math.min(H,y1);
-    if (x1<=x0 || y1<=y0) return 0;
-    return II[y1*(W+1)+x1] - II[y0*(W+1)+x1] - II[y1*(W+1)+x0] + II[y0*(W+1)+x0];
+    x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
+    if (x1<=x0||y1<=y0) return 0;
+    return II[y1*(W+1)+x1]-II[y0*(W+1)+x1]-II[y1*(W+1)+x0]+II[y0*(W+1)+x0];
   }
   function bm(x0,y0,x1,y1){
-    x0=Math.max(0,x0); y0=Math.max(0,y0); x1=Math.min(W,x1); y1=Math.min(H,y1);
+    x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
     var n=(x1-x0)*(y1-y0); return n>0 ? bs(x0,y0,x1,y1)/n : 1e9;
   }
+
+  // Pupil: dark circle surrounded by brighter tissue.
+  // Use adaptive threshold + 8 surrounding boxes so eyelid shadow on one
+  // side doesn't fool the detector the way 4-box min did.
+  var darkThresh = Math.min(75, meanLum * 0.48);
   function pupilScore(cx,cy,r){
     var inner = bm(cx-r,cy-r,cx+r,cy+r);
-    if (inner > 80) return -1e9;
-    var hr = r>>1;
-    var R = bm(cx+r, cy-hr, cx+2*r, cy+hr+1);
-    var L = bm(cx-2*r, cy-hr, cx-r, cy+hr+1);
-    var T = bm(cx-hr, cy-2*r, cx+hr+1, cy-r);
-    var B = bm(cx-hr, cy+r, cx+hr+1, cy+2*r);
-    var four = Math.min(R,L,T,B);
-    if (four - inner < 8) return -1e9;
+    if (inner > darkThresh + 35) return -1e9;
+    var hr = Math.max(1, r>>1), gap = Math.max(1, r>>2);
+    var surr = [
+      bm(cx+r+gap, cy-hr, cx+2*r+gap, cy+hr+1),
+      bm(cx-2*r-gap, cy-hr, cx-r-gap, cy+hr+1),
+      bm(cx-hr, cy-2*r-gap, cx+hr+1, cy-r-gap),
+      bm(cx-hr, cy+r+gap, cx+hr+1, cy+2*r+gap),
+      bm(cx+r, cy-2*r, cx+2*r, cy-r),
+      bm(cx-2*r, cy-2*r, cx-r, cy-r),
+      bm(cx+r, cy+r, cx+2*r, cy+2*r),
+      bm(cx-2*r, cy+r, cx-r, cy+2*r)
+    ].sort(function(a,b){return a-b;});
+    var medSurr = (surr[3]+surr[4])/2;  // median of 8 — robust to partial occlusion
+    if (medSurr - inner < 10) return -1e9;
     var cd = Math.hypot(cx - W/2, cy - H/2);
-    return (four - inner) - cd*0.5;
+    var centerBonus = Math.max(0, 1 - cd/(W*0.25));
+    return (medSurr - inner) * (1 + centerBonus*0.4) - cd*0.3;
   }
-  var best = {cx: W>>1, cy: H>>1, r: 5}, bestScore = -1e9;
-  var cxLo=Math.floor(W*0.18), cxHi=Math.ceil(W*0.82);
-  var cyLo=Math.floor(H*0.18), cyHi=Math.ceil(H*0.82);
-  var coarseR = [3,5,7,9,12,15,18];
+
+  var best = {cx: W>>1, cy: H>>1, r: 6}, bestScore = -1e9;
+  var cxLo=Math.floor(W*0.15), cxHi=Math.ceil(W*0.85);
+  var cyLo=Math.floor(H*0.15), cyHi=Math.ceil(H*0.85);
+  var coarseR = [4,6,8,11,14,18,22,27];
   for (var cx=cxLo; cx<cxHi; cx+=3){
     for (var cy=cyLo; cy<cyHi; cy+=3){
       for (var ri=0; ri<coarseR.length; ri++){
@@ -934,63 +951,88 @@ function autoFit(src){
     }
   }
   var bx=best.cx, by=best.cy, br=best.r;
-  for (var cx2=Math.max(cxLo,bx-4); cx2<=Math.min(cxHi,bx+4); cx2++){
-    for (var cy2=Math.max(cyLo,by-4); cy2<=Math.min(cyHi,by+4); cy2++){
-      for (var rr=Math.max(2,br-3); rr<=br+3; rr++){
+  for (var cx2=Math.max(cxLo,bx-5); cx2<=Math.min(cxHi,bx+5); cx2++){
+    for (var cy2=Math.max(cyLo,by-5); cy2<=Math.min(cyHi,by+5); cy2++){
+      for (var rr=Math.max(2,br-4); rr<=br+4; rr++){
         var s2 = pupilScore(cx2,cy2,rr);
         if (s2>bestScore){ bestScore=s2; best={cx:cx2, cy:cy2, r:rr}; }
       }
     }
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
-  var angles = 64;
+
+  // Iris boundary: scan 120 radial rays (was 64).
+  // Side angles (3/9 o'clock) are most reliable — eyelids occlude top/bottom.
+  // Double-count side rays to weight them more heavily in the final median.
+  var angles = 120;
   var irisRs = [];
+  var brightThresh = Math.max(95, meanLum * 0.68);  // adaptive sclera brightness
+
   for (var a=0; a<angles; a++){
     var theta = (a/angles)*Math.PI*2;
     var ct = Math.cos(theta), st = Math.sin(theta);
-    var rMax = Math.min(W,H)*0.48;
+
+    // theta=0→right, theta=PI/2→down, theta=PI→left, theta=3PI/2→up (12 o'clock)
+    var topAngle = Math.PI * 1.5;
+    var angDiff = Math.abs(((theta - topAngle + Math.PI*3) % (Math.PI*2)) - Math.PI);
+    var isSideAngle = angDiff > Math.PI * 0.35;  // roughly 3–9 o'clock arc
+
+    var rMax = Math.min(W,H)*0.49;
     var prof = [], profS = [];
-    for (var rr2 = pr+3; rr2 < rMax; rr2++){
+    for (var rr2=pr+2; rr2<rMax; rr2++){
       var px = Math.round(pcx + ct*rr2);
       var py = Math.round(pcy + st*rr2);
       if (px<0||px>=W||py<0||py>=H) break;
       prof.push(lum[py*W+px]); profS.push(sat[py*W+px]);
     }
-    if (prof.length < 10) continue;
+    if (prof.length < 8) continue;
+
+    // Wider smoothing (±3) for stability across more iris types
     var smooth = new Float32Array(prof.length);
     for (var k=0; k<prof.length; k++){
       var s3=0, n=0;
-      for (var j=Math.max(0,k-2); j<=Math.min(prof.length-1,k+2); j++){ s3+=prof[j]; n++; }
+      for (var j=Math.max(0,k-3); j<=Math.min(prof.length-1,k+3); j++){ s3+=prof[j]; n++; }
       smooth[k] = s3/n;
     }
+
     var peaks = [], maxG = 0;
-    for (var k2=3; k2<smooth.length-5; k2++){
-      var g = smooth[k2+2] - smooth[k2-2];
-      if (g < 4) continue;
+    for (var k2=4; k2<smooth.length-6; k2++){
+      var g = smooth[k2+3] - smooth[k2-3];  // wider gradient window
+      if (g < 3) continue;  // was 4 — catches light blue/gray irises
       var postL=0, postS=0, pc=0;
-      for (var m=k2+3; m<Math.min(smooth.length, k2+6); m++){ postL+=smooth[m]; postS+=profS[m]; pc++; }
+      for (var m=k2+4; m<Math.min(smooth.length, k2+8); m++){ postL+=smooth[m]; postS+=profS[m]; pc++; }
       if (!pc) continue;
       postL /= pc; postS /= pc;
-      if (postL < 130 || postS > 0.22) continue;
+      if (postL < brightThresh || postS > 0.35) continue;  // was 130 / 0.22
       peaks.push({k:k2, g:g});
       if (g > maxG) maxG = g;
     }
     var accepted = -1;
-    for (var p=0; p<peaks.length; p++){ if (peaks[p].g >= maxG*0.6) accepted = peaks[p].k; }
-    if (accepted >= 0) irisRs.push(pr + 3 + accepted);
+    for (var p=0; p<peaks.length; p++){ if (peaks[p].g >= maxG*0.55) accepted = peaks[p].k; }
+    if (accepted >= 0){
+      var rv = pr + 2 + accepted;
+      irisRs.push(rv);
+      if (isSideAngle) irisRs.push(rv);  // side angles counted twice — more reliable
+    }
   }
+
   var ok = true, irisR;
-  if (irisRs.length >= 10){
+  if (irisRs.length >= 12){
     irisRs.sort(function(a,b){return a-b;});
-    var trim = Math.max(1, Math.floor(irisRs.length / 6));
+    var trim = Math.max(1, Math.floor(irisRs.length / 8));
     var trimmed = irisRs.slice(trim, irisRs.length - trim);
-    irisR = trimmed[Math.floor(trimmed.length * 0.6)];
+    irisR = trimmed[Math.floor(trimmed.length * 0.55)];
+  } else if (irisRs.length >= 4){
+    irisRs.sort(function(a,b){return a-b;});
+    irisR = irisRs[Math.floor(irisRs.length * 0.5)];
+    ok = false;
   } else {
-    irisR = pr * 3.2; ok = false;
+    irisR = pr * 3.0; ok = false;
   }
+
   return {
     cxFrac: pcx/W, cyFrac: pcy/H,
-    rPupilFrac: (pr*1.15)/W,   // safety margin around detected pupil
+    rPupilFrac: (pr*1.1)/W,
     rIrisFrac: irisR/W,
     ok: ok, samples: irisRs.length
   };
