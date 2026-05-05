@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.32 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.33 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -970,80 +970,44 @@ function autoFit(src){
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
-  // Iris boundary: scan 120 radial rays (was 64).
-  // Side angles (3/9 o'clock) are most reliable — eyelids occlude top/bottom.
-  // Double-count side rays to weight them more heavily in the final median.
-  var angles = 120;
-  var irisRs = [];
-  var brightThresh = Math.max(95, meanLum * 0.68);  // adaptive sclera brightness
-
-  for (var a=0; a<angles; a++){
-    var theta = (a/angles)*Math.PI*2;
-    var ct = Math.cos(theta), st = Math.sin(theta);
-
-    // theta=0→right, theta=PI/2→down, theta=PI→left, theta=3PI/2→up (12 o'clock)
-    var topAngle = Math.PI * 1.5;
-    var angDiff = Math.abs(((theta - topAngle + Math.PI*3) % (Math.PI*2)) - Math.PI);
-    var isSideAngle = angDiff > Math.PI * 0.35;  // roughly 3–9 o'clock arc
-
-    var rMax = Math.min(W,H)*0.49;
-    var prof = [], profS = [];
-    for (var rr2=pr+2; rr2<rMax; rr2++){
-      var px = Math.round(pcx + ct*rr2);
-      var py = Math.round(pcy + st*rr2);
-      if (px<0||px>=W||py<0||py>=H) break;
-      prof.push(lum[py*W+px]); profS.push(sat[py*W+px]);
-    }
-    if (prof.length < 8) continue;
-
-    // Wider smoothing (±3) for stability across more iris types
-    var smooth = new Float32Array(prof.length);
-    for (var k=0; k<prof.length; k++){
-      var s3=0, n=0;
-      for (var j=Math.max(0,k-3); j<=Math.min(prof.length-1,k+3); j++){ s3+=prof[j]; n++; }
-      smooth[k] = s3/n;
-    }
-
-    var peaks = [], maxG = 0;
-    for (var k2=4; k2<smooth.length-6; k2++){
-      var g = smooth[k2+3] - smooth[k2-3];  // wider gradient window
-      if (g < 3) continue;  // was 4 — catches light blue/gray irises
-      var postL=0, postS=0, pc=0;
-      for (var m=k2+4; m<Math.min(smooth.length, k2+8); m++){ postL+=smooth[m]; postS+=profS[m]; pc++; }
-      if (!pc) continue;
-      postL /= pc; postS /= pc;
-      if (postL < brightThresh || postS > 0.35) continue;  // was 130 / 0.22
-      peaks.push({k:k2, g:g});
-      if (g > maxG) maxG = g;
-    }
-    var accepted = -1;
-    for (var p=0; p<peaks.length; p++){ if (peaks[p].g >= maxG*0.55) accepted = peaks[p].k; }
-    if (accepted >= 0){
-      var rv = pr + 2 + accepted;
-      irisRs.push(rv);
-      if (isSideAngle) irisRs.push(rv);  // side angles counted twice — more reliable
+  // Iris boundary: Circular Hough Transform.
+  // For each candidate radius r, sum the outward radial gradient on that circle.
+  // The iris/sclera boundary produces the strongest dark-to-bright ring.
+  // Robust to eyelid occlusion because partial arcs still vote correctly.
+  var gxA = new Float32Array(W*H), gyA = new Float32Array(W*H);
+  for (var iy=1; iy<H-1; iy++){
+    for (var ix=1; ix<W-1; ix++){
+      gxA[iy*W+ix] = (lum[iy*W+ix+1] - lum[iy*W+ix-1]) * 0.5;
+      gyA[iy*W+ix] = (lum[(iy+1)*W+ix] - lum[(iy-1)*W+ix]) * 0.5;
     }
   }
-
-  var ok = true, irisR;
-  if (irisRs.length >= 12){
-    irisRs.sort(function(a,b){return a-b;});
-    var trim = Math.max(1, Math.floor(irisRs.length / 8));
-    var trimmed = irisRs.slice(trim, irisRs.length - trim);
-    irisR = trimmed[Math.floor(trimmed.length * 0.55)];
-  } else if (irisRs.length >= 4){
-    irisRs.sort(function(a,b){return a-b;});
-    irisR = irisRs[Math.floor(irisRs.length * 0.5)];
-    ok = false;
-  } else {
-    irisR = pr * 3.0; ok = false;
+  var rMinI = Math.max(pr+3, Math.round(pr*1.8));
+  var rMaxI = Math.round(Math.min(W,H)*0.44);
+  var bestR = rMinI, bestScore = -1, bestCount = 0;
+  for (var r=rMinI; r<=rMaxI; r++){
+    var nPts = Math.max(24, Math.round(2*Math.PI*r));
+    var scoreSum = 0, scoreCount = 0;
+    for (var i=0; i<nPts; i++){
+      var th = (i/nPts)*Math.PI*2;
+      var cth = Math.cos(th), sth = Math.sin(th);
+      var px2 = Math.round(pcx + r*cth);
+      var py2 = Math.round(pcy + r*sth);
+      if (px2<1||px2>=W-1||py2<1||py2>=H-1) continue;
+      var radG = gxA[py2*W+px2]*cth + gyA[py2*W+px2]*sth;
+      if (radG > 0){ scoreSum += radG; scoreCount++; }
+    }
+    if (scoreCount < nPts*0.25) continue;
+    var score = scoreSum / nPts;
+    if (score > bestScore){ bestScore = score; bestR = r; bestCount = scoreCount; }
   }
+  var ok = bestScore > 1.0;
+  var irisR = ok ? bestR : pr * 3.0;
 
   return {
     cxFrac: pcx/W, cyFrac: pcy/H,
-    rPupilFrac: (pr*1.1)/W,
+    rPupilFrac: (pr*1.05)/W,
     rIrisFrac: irisR/W,
-    ok: ok, samples: irisRs.length
+    ok: ok, samples: bestCount
   };
 }
 
