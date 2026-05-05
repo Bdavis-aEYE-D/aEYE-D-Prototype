@@ -2637,8 +2637,8 @@ try {
 } catch(e) {}
 
 function _saveAnalysisRecord(result, photoPath) {
-  if (!_supabase) return;
-  _supabase.from('analyses').insert({
+  if (!_supabase) return Promise.resolve(null);
+  return _supabase.from('analyses').insert({
     created_at: new Date().toISOString(),
     eye_side: result.side || null,
     color_name: result.overall ? result.overall.name : null,
@@ -2653,16 +2653,18 @@ function _saveAnalysisRecord(result, photoPath) {
     sectoral_color: result.sectoral ? result.sectoral.color : null,
     freckle_count: result.freckles ? result.freckles.length : 0,
     photo_path: photoPath || null
-  }).catch(function() {});
+  }).select();
 }
 
 function uploadToSupabase(result) {
   if (!_supabase) return;
-  try {
+  // Save analysis data immediately, then attempt photo upload in background
+  _saveAnalysisRecord(result, null).then(function(res) {
+    if (!res || res.error) return;
+    var rowId = res.data && res.data[0] && res.data[0].id;
     var src = result.analysisImage && result.analysisImage.src;
-    if (!src) { _saveAnalysisRecord(result, null); return; }
-    var timestamp = Date.now();
-    var fileName = 'iris-' + (result.side || 'eye').toLowerCase() + '-' + timestamp + '.jpg';
+    if (!src || !rowId) return;
+    var fileName = 'iris-' + (result.side || 'eye').toLowerCase() + '-' + Date.now() + '.jpg';
     fetch(src)
       .then(function(r) { return r.blob(); })
       .then(function(blob) {
@@ -2670,11 +2672,13 @@ function uploadToSupabase(result) {
           .from('iris-photos')
           .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
       })
-      .then(function(res) {
-        _saveAnalysisRecord(result, res.data ? res.data.path : null);
+      .then(function(storageRes) {
+        if (storageRes.data) {
+          _supabase.from('analyses').update({ photo_path: storageRes.data.path }).eq('id', rowId).catch(function(){});
+        }
       })
-      .catch(function() { _saveAnalysisRecord(result, null); });
-  } catch(e) {}
+      .catch(function() {});
+  }).catch(function() {});
 }
 
 // Everything attached — flip banner to green
