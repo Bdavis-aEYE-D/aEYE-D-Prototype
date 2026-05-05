@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.34 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.35 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -973,12 +973,10 @@ function autoFit(src){
   // Iris boundary: annular luminance contrast.
   // Iris is dark; sclera is bright. The true iris/sclera boundary maximises
   // (mean luminance just outside r) minus (mean luminance just inside r).
-  // Eyelids are also dark, but they only reduce the signal; they can't create
-  // a false peak stronger than the actual dark-iris-to-bright-sclera jump.
   var rMinI = Math.max(pr+4, Math.round(pr*1.9));
-  var rMaxI = Math.round(Math.min(W,H)*0.46);
+  var rMaxI = Math.round(Math.min(W,H)*0.49);  // search nearly to image edge
   var bestR = rMinI, bestScore = -1e9, bestCount = 0;
-  var dr = 4;
+  var dr = 5;
   for (var r=rMinI; r<=rMaxI; r++){
     var nPts = Math.max(32, Math.round(2*Math.PI*r));
     var innerSum=0, innerN=0, outerSum=0, outerN=0;
@@ -990,18 +988,18 @@ function autoFit(src){
       var pxo = Math.round(pcx+(r+dr)*cth), pyo = Math.round(pcy+(r+dr)*sth);
       if (pxo>=0&&pxo<W&&pyo>=0&&pyo<H){ outerSum+=lum[pyo*W+pxo]; outerN++; }
     }
-    if (innerN < nPts*0.4 || outerN < nPts*0.4) continue;
+    if (innerN < nPts*0.3 || outerN < nPts*0.3) continue;
     var score = (outerSum/outerN) - (innerSum/innerN);
     if (score > bestScore){ bestScore = score; bestR = r; bestCount = innerN; }
   }
-  var ok = bestScore > 10;
-  var irisR = ok ? bestR : pr * 3.0;
+  var ok = bestScore > 3;
+  var irisR = ok ? bestR : Math.round(pr * 2.3);
 
   return {
     cxFrac: pcx/W, cyFrac: pcy/H,
     rPupilFrac: (pr*1.05)/W,
     rIrisFrac: irisR/W,
-    ok: ok, samples: bestCount
+    ok: ok, samples: bestCount, score: Math.round(bestScore)
   };
 }
 
@@ -1027,8 +1025,8 @@ function applyAutoFit(){
     rp.value = Math.round(rpx);
     var st = $('autofit-status');
     if (st) st.textContent = fit.ok
-      ? 'Auto-fit: snapped to iris (' + fit.samples + ' edge samples)'
-      : 'Auto-fit: pupil found, iris estimated from ratio';
+      ? 'Auto-fit: snapped to iris (' + fit.samples + ' edge samples, score=' + fit.score + ')'
+      : 'Auto-fit: pupil found, iris estimated from ratio (score=' + fit.score + ')';
     draw();
     return fit.ok;
   } catch (e) {
