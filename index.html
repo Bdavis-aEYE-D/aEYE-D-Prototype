@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.31 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.32 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -914,11 +914,20 @@ function autoFit(src){
   }
 
   // Pupil: dark circle surrounded by brighter tissue.
-  // Use adaptive threshold + 8 surrounding boxes so eyelid shadow on one
-  // side doesn't fool the detector the way 4-box min did.
+  // Compute inner mean excluding bright pixels (catch-light / flash reflection)
+  // so a white glare spot in the pupil center doesn't inflate the average.
   var darkThresh = Math.min(75, meanLum * 0.48);
+  var glareThresh = 200;  // pixels brighter than this are reflections, ignore
+  function darkMean(x0,y0,x1,y1){
+    x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
+    var s=0, n=0;
+    for (var yy=y0;yy<y1;yy++) for (var xx=x0;xx<x1;xx++){
+      var v=lum[yy*W+xx]; if (v<glareThresh){ s+=v; n++; }
+    }
+    return n>0 ? s/n : 1e9;
+  }
   function pupilScore(cx,cy,r){
-    var inner = bm(cx-r,cy-r,cx+r,cy+r);
+    var inner = darkMean(cx-r,cy-r,cx+r,cy+r);
     if (inner > darkThresh + 35) return -1e9;
     var hr = Math.max(1, r>>1), gap = Math.max(1, r>>2);
     var surr = [
@@ -1048,9 +1057,9 @@ function applyAutoFit(){
     donut.cy = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
     var rpx = fit.rPupilFrac * imgEl.width * scaleX;
     var ripx = fit.rIrisFrac * imgEl.width * scaleX;
-    // Sanity guards
+    // Sanity guards — pupil is typically 25-45% of iris radius
     ripx = Math.max(rpx*1.8, Math.min(ripx, Math.min(stageW,stageH)*0.48));
-    rpx = Math.max(6, Math.min(rpx, ripx*0.7));
+    rpx = Math.max(6, Math.min(rpx, ripx*0.45));
     donut.rIris = ripx;
     donut.rPupil = rpx;
     var ri = $('r-iris'), rp = $('r-pupil');
