@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.29 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.30 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -873,7 +873,7 @@ $('btn-zoom-in').addEventListener('click', function(){
 // Classical CV pupil+iris detection. Returns fractions (0..1) so we can apply
 // to the stage regardless of how the image is scaled in.
 function autoFit(src){
-  var sampleSide = 280;  // was 160 — higher res catches finer iris edges
+  var sampleSide = 200;  // balanced: better than 160 but coarseR stays calibrated
   var shorter = Math.min(src.width, src.height);
   var scale = sampleSide / shorter;
   var W = Math.max(2, Math.round(src.width * scale));
@@ -941,7 +941,7 @@ function autoFit(src){
   var best = {cx: W>>1, cy: H>>1, r: 6}, bestScore = -1e9;
   var cxLo=Math.floor(W*0.15), cxHi=Math.ceil(W*0.85);
   var cyLo=Math.floor(H*0.15), cyHi=Math.ceil(H*0.85);
-  var coarseR = [4,6,8,11,14,18,22,27];
+  var coarseR = [3,5,7,9,12,15,18,22,26];
   for (var cx=cxLo; cx<cxHi; cx+=3){
     for (var cy=cyLo; cy<cyHi; cy+=3){
       for (var ri=0; ri<coarseR.length; ri++){
