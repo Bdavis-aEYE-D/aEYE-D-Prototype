@@ -6,7 +6,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>eyeD Prototype</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root {
     --bg: #0b1020;
@@ -2629,56 +2628,35 @@ $('btn-export-post').addEventListener('click', function(){
 // ======================= SUPABASE =======================
 var SUPABASE_URL = 'https://mmotthgsydxgviabnycv.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb3R0aGdzeWR4Z3ZpYWJueWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTM2MjcsImV4cCI6MjA5MzU4OTYyN30.hUgH6_0eJ-s4FbtSD3_EuyH-5sYLWIUQK4fdDAP0yMU';
-var _supabase = null;
-try {
-  if (window.supabase && window.supabase.createClient) {
-    _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  }
-} catch(e) {}
-
-function _saveAnalysisRecord(result, photoPath) {
-  if (!_supabase) return Promise.resolve(null);
-  return _supabase.from('analyses').insert({
-    created_at: new Date().toISOString(),
-    eye_side: result.side || null,
-    color_name: result.overall ? result.overall.name : null,
-    color_category: result.overall ? result.overall.cat : null,
-    heterochromia: result.hetero || null,
-    limbal_ring: result.limbal || null,
-    brightness: result.brightness != null ? result.brightness : null,
-    saturation: result.saturation != null ? result.saturation : null,
-    rarity_score: result.rarityScore != null ? result.rarityScore : null,
-    vibe: result.vibe || null,
-    hex_color: result.fingerprint ? result.fingerprint.hex : null,
-    sectoral_color: result.sectoral ? result.sectoral.color : null,
-    freckle_count: result.freckles ? result.freckles.length : 0,
-    photo_path: photoPath || null
-  }).select();
-}
 
 function uploadToSupabase(result) {
-  if (!_supabase) return;
-  // Save analysis data immediately, then attempt photo upload in background
-  _saveAnalysisRecord(result, null).then(function(res) {
-    if (!res || res.error) return;
-    var rowId = res.data && res.data[0] && res.data[0].id;
-    var src = result.analysisImage && result.analysisImage.src;
-    if (!src || !rowId) return;
-    var fileName = 'iris-' + (result.side || 'eye').toLowerCase() + '-' + Date.now() + '.jpg';
-    fetch(src)
-      .then(function(r) { return r.blob(); })
-      .then(function(blob) {
-        return _supabase.storage
-          .from('iris-photos')
-          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
-      })
-      .then(function(storageRes) {
-        if (storageRes.data) {
-          _supabase.from('analyses').update({ photo_path: storageRes.data.path }).eq('id', rowId).catch(function(){});
-        }
-      })
-      .catch(function() {});
-  }).catch(function() {});
+  try {
+    var record = {
+      created_at: new Date().toISOString(),
+      eye_side: result.side || null,
+      color_name: result.overall ? result.overall.name : null,
+      color_category: result.overall ? result.overall.cat : null,
+      heterochromia: result.hetero || null,
+      limbal_ring: result.limbal || null,
+      brightness: result.brightness != null ? result.brightness : null,
+      saturation: result.saturation != null ? result.saturation : null,
+      rarity_score: result.rarityScore != null ? result.rarityScore : null,
+      vibe: result.vibe || null,
+      hex_color: result.fingerprint ? result.fingerprint.hex : null,
+      sectoral_color: result.sectoral ? result.sectoral.color : null,
+      freckle_count: result.freckles ? result.freckles.length : 0
+    };
+    fetch(SUPABASE_URL + '/rest/v1/analyses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(record)
+    }).catch(function() {});
+  } catch(e) {}
 }
 
 // Everything attached — flip banner to green
