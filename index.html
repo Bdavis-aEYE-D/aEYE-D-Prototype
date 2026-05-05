@@ -156,11 +156,16 @@
 
   .err { background: #3a0012; color: #ffdbe4; border-left: 4px solid #ff5577;
     padding: 10px 14px; border-radius: 8px; font-size: 12px; margin: 10px 0; display: none; white-space: pre-wrap; }
+  #save-toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: #1a2240; border: 1px solid var(--line); color: var(--ink-dim);
+    font-size: 12px; padding: 8px 16px; border-radius: 999px; z-index: 200;
+    transition: opacity 0.4s; opacity: 0; pointer-events: none; }
 </style>
 </head>
 <body>
 
 <div id="jshealth">JAVASCRIPT NOT RUNNING &mdash; SEE TIP BELOW</div>
+<div id="save-toast"></div>
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
@@ -2629,8 +2634,19 @@ $('btn-export-post').addEventListener('click', function(){
 var SUPABASE_URL = 'https://mmotthgsydxgviabnycv.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb3R0aGdzeWR4Z3ZpYWJueWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTM2MjcsImV4cCI6MjA5MzU4OTYyN30.hUgH6_0eJ-s4FbtSD3_EuyH-5sYLWIUQK4fdDAP0yMU';
 
+function showSaveToast(msg, success) {
+  var t = document.getElementById('save-toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.style.borderColor = success ? '#4caf50' : '#ff5577';
+  t.style.color = success ? '#4caf50' : '#ff5577';
+  t.style.opacity = '1';
+  setTimeout(function() { t.style.opacity = '0'; }, 3000);
+}
+
 function uploadToSupabase(result) {
   try {
+    showSaveToast('Saving…', true);
     var record = {
       created_at: new Date().toISOString(),
       eye_side: result.side || null,
@@ -2655,8 +2671,18 @@ function uploadToSupabase(result) {
         'Prefer': 'return=minimal'
       },
       body: JSON.stringify(record)
-    }).catch(function() {});
-  } catch(e) {}
+    }).then(function(res) {
+      if (res.ok) {
+        showSaveToast('Saved ✓', true);
+      } else {
+        showSaveToast('Save failed (' + res.status + ')', false);
+      }
+    }).catch(function(e) {
+      showSaveToast('Save failed', false);
+    });
+  } catch(e) {
+    showSaveToast('Save error', false);
+  }
 }
 
 // Everything attached — flip banner to green
