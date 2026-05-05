@@ -2675,10 +2675,12 @@ function uploadToSupabase(result) {
       if (res.ok) {
         showSaveToast('Saved ✓', true);
       } else {
-        showSaveToast('Save failed (' + res.status + ')', false);
+        res.text().then(function(body) {
+          showSaveToast(res.status + ': ' + body.slice(0, 80), false);
+        });
       }
     }).catch(function(e) {
-      showSaveToast('Save failed', false);
+      showSaveToast('Save failed: ' + String(e).slice(0, 60), false);
     });
   } catch(e) {
     showSaveToast('Save error', false);
