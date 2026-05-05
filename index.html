@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.24 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.25 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -2647,6 +2647,8 @@ function showSaveToast(msg, success) {
 function uploadToSupabase(result) {
   try {
     showSaveToast('Saving…', true);
+    function safeNum(v) { var n = parseFloat(v); return isFinite(n) ? n : null; }
+    function safeInt(v) { var n = parseInt(v, 10); return isFinite(n) ? n : null; }
     var record = {
       created_at: new Date().toISOString(),
       eye_side: result.side || null,
@@ -2654,13 +2656,13 @@ function uploadToSupabase(result) {
       color_category: result.overall ? result.overall.cat : null,
       heterochromia: result.hetero || null,
       limbal_ring: result.limbal || null,
-      brightness: result.brightness != null ? result.brightness : null,
-      saturation: result.saturation != null ? result.saturation : null,
-      rarity_score: result.rarityScore != null ? result.rarityScore : null,
+      brightness: safeNum(result.brightness),
+      saturation: safeNum(result.saturation),
+      rarity_score: safeNum(result.rarityScore),
       vibe: result.vibe || null,
       hex_color: result.fingerprint ? result.fingerprint.hex : null,
       sectoral_color: result.sectoral ? result.sectoral.color : null,
-      freckle_count: result.freckles ? result.freckles.length : 0
+      freckle_count: safeInt(result.freckles ? result.freckles.length : 0)
     };
     fetch(SUPABASE_URL + '/rest/v1/analyses', {
       method: 'POST',
