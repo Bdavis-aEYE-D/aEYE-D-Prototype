@@ -194,7 +194,7 @@ var locDraw = { dx:0, dy:0, dw:600, dh:600 };
 var locTap = null;      // {sx, sy} in stage pixels, or null
 var cropPct = 14;       // crop size as % of longer image side
 
-function loadOriginalFromUrl(url){
+var loadOriginalFromUrl = function(url){
   var img = new Image();
   img.onload = function(){
     originalImgEl = img;
