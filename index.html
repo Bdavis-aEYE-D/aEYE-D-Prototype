@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.40 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.41 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -970,51 +970,50 @@ function autoFit(src){
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
-  // Iris boundary: two-pass ray-casting from pupil center.
-  // Pass 1 (high threshold 1.5x): finds sclera-only rays — eyelid margin (~170 lum) won't fire.
-  //   If >=5 rays hit, their median is the iris radius (all are correct sclera hits).
-  // Pass 2 (low threshold 1.3x + mode): fallback for dim photos where sclera < 191.
-  //   Mode detection (densest 5px cluster) rejects eyelid-margin hits at larger radii.
-  var rMinI = Math.max(pr+4, Math.round(pr*1.9));
-  var rMaxI = Math.round(Math.min(W,H)*0.49);
-  var brightHigh = Math.min(Math.max(meanLum*1.5, 155), 205);
-  var brightLow  = Math.min(Math.max(meanLum*1.3, 140), 185);
-  var nRays=64, rayHi=[], rayLo=[];
-  for (var ri=0; ri<nRays; ri++){
-    var ang=(ri/nRays)*Math.PI*2;
-    var ca=Math.cos(ang), sa=Math.sin(ang);
-    for (var step=rMinI; step<=rMaxI+10; step++){
-      var rx=Math.round(pcx+step*ca), ry=Math.round(pcy+step*sa);
-      if (rx<0||rx>=W||ry<0||ry>=H) break;
-      var lv=lum[ry*W+rx];
-      if (lv>brightHigh){ rayHi.push(step); break; }
-      if (lv>brightLow) { rayLo.push(step); break; }
+  // Iris boundary: horizontal band scan at pupil center row.
+  // The horizontal midline has no eyelids — iris transitions cleanly to sclera on both sides.
+  // Average a ±bandH pixel band to smooth over iris texture variation.
+  var scleraThresh = Math.min(Math.max(meanLum * 1.35, 148), 200);
+  var bandH = 4;
+  var midY = Math.round(pcy);
+  var innerR = Math.round(pr * 1.15); // start scan just past pupil edge
+
+  var leftHit = -1;
+  for (var x = Math.round(pcx) - innerR; x >= 0; x--){
+    var s=0, n=0;
+    for (var b=-bandH; b<=bandH; b++){
+      var ry=midY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
     }
+    if (s/n > scleraThresh){ leftHit = x; break; }
   }
-  var ok, irisR;
-  if (rayHi.length >= 5){
-    rayHi.sort(function(a,b){return a-b;});
-    irisR = rayHi[Math.floor(rayHi.length*0.5)];
-    ok = true;
-  } else {
-    rayLo.sort(function(a,b){return a-b;});
-    var bestCount=0, bestCenter=rayLo[0]||Math.round(pr*2.1);
-    for (var i=0; i<rayLo.length; i++){
-      var cnt=0;
-      for (var j=0; j<rayLo.length; j++){
-        if (Math.abs(rayLo[j]-rayLo[i])<=3) cnt++;
-      }
-      if (cnt>bestCount){ bestCount=cnt; bestCenter=rayLo[i]; }
+
+  var rightHit = -1;
+  for (var x = Math.round(pcx) + innerR; x < W; x++){
+    var s=0, n=0;
+    for (var b=-bandH; b<=bandH; b++){
+      var ry=midY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
     }
-    irisR = rayLo.length>=5 ? bestCenter : Math.round(pr*2.1);
-    ok = rayLo.length>=5;
+    if (s/n > scleraThresh){ rightHit = x; break; }
+  }
+
+  var ok, irisR;
+  if (leftHit >= 0 && rightHit >= 0){
+    irisR = Math.round((rightHit - leftHit) / 2);
+    pcx   = Math.round((leftHit + rightHit) / 2);
+    ok = true;
+  } else if (leftHit >= 0){
+    irisR = Math.round(pcx - leftHit); ok = true;
+  } else if (rightHit >= 0){
+    irisR = Math.round(rightHit - pcx); ok = true;
+  } else {
+    irisR = Math.round(pr * 2.1); ok = false;
   }
 
   return {
     cxFrac: pcx/W, cyFrac: pcy/H,
     rPupilFrac: (pr*1.05)/W,
     rIrisFrac: irisR/W,
-    ok: ok, hiRays: rayHi.length, loRays: rayLo.length, nRays: nRays
+    ok: ok, leftHit: leftHit, rightHit: rightHit, thresh: Math.round(scleraThresh)
   };
 }
 
@@ -1040,8 +1039,8 @@ function applyAutoFit(){
     rp.value = Math.round(rpx);
     var st = $('autofit-status');
     if (st) st.textContent = fit.ok
-      ? 'Auto-fit: snapped to iris (hi=' + fit.hiRays + ' lo=' + fit.loRays + '/' + fit.nRays + ')'
-      : 'Auto-fit: iris estimated (hi=' + fit.hiRays + ' lo=' + fit.loRays + '/' + fit.nRays + ')';
+      ? 'Auto-fit: snapped to iris (L=' + fit.leftHit + ' R=' + fit.rightHit + ' t=' + fit.thresh + ')'
+      : 'Auto-fit: iris estimated (t=' + fit.thresh + ')';
     draw();
     return fit.ok;
   } catch (e) {
