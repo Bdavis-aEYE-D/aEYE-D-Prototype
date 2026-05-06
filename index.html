@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.37 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.38 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -991,7 +991,7 @@ function autoFit(src){
   var irisR;
   if (ok){
     rayRadii.sort(function(a,b){return a-b;});
-    irisR = rayRadii[Math.floor(rayRadii.length*0.5)];  // median
+    irisR = rayRadii[Math.floor(rayRadii.length*0.35)];  // 35th pct — biases away from far eyelid hits
   } else {
     irisR = Math.round(pr*2.1);
   }
