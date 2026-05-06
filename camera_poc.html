@@ -68,14 +68,15 @@
     color: #ffffffcc; text-shadow: 0 1px 4px #000;
   }
 
-  /* Black-screen capture overlay — covers entire screen so phone isn't a light source */
+  /* Capture overlay — starts white (pupil constriction), switches to black (no reflection) */
   #capture-overlay {
-    position: fixed; inset: 0; background: #000;
+    position: fixed; inset: 0; background: #fff;
     opacity: 0; pointer-events: none;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.12s ease;
     z-index: 999;
   }
-  #capture-overlay.on { opacity: 1; }
+  #capture-overlay.flash { opacity: 1; background: #fff; }
+  #capture-overlay.dark  { opacity: 1; background: #000; transition: background 0s; }
   #capture-overlay .countdown {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
@@ -134,7 +135,7 @@
     </div>
     <div class="status" id="status">Camera ready</div>
 
-    <button type="button" id="btn-capture">Capture (black screen — 3 s countdown)</button>
+    <button type="button" id="btn-capture">Capture (flash → black → capture)</button>
     <button type="button" class="secondary" id="btn-torch" style="display:none">
       Toggle Torch (Android only)
     </button>
@@ -263,37 +264,34 @@
     });
   });
 
-  // ---- Black-screen capture — phone goes dark, eliminating it as a reflection source ----
+  // ---- Combined flash + black-screen capture ----
+  // 1. White flash 1.5s  → pupil constricts (exposes more iris)
+  // 2. Switch to black   → phone stops being a reflection source
+  // 3. Wait 400ms        → screen dark, camera exposure settles
+  // 4. Capture           → constricted pupil, no phone glare
   document.getElementById('btn-capture').addEventListener('click', function() {
     if (!stream) return;
     var btn = this;
     btn.disabled = true;
-    setStatus('Going dark — hold still…');
+    setStatus('Flashing — hold still, eyes open…');
     log('--- Capture sequence start ---');
 
-    // Step 1: Cover screen with black overlay — phone is no longer a light source
-    captureOverlay.classList.add('on');
-    log('Step 1: Screen black — phone reflection eliminated');
+    // Step 1: White flash — constrict pupil
+    captureOverlay.classList.add('flash');
+    log('Step 1: White flash ON — pupil constricting');
 
-    // Step 2: Count down 3 s while dark — camera auto-exposure adjusts to ambient light
-    var remaining = 3;
-    countdownNum.textContent = remaining;
-    var ticker = setInterval(function() {
-      remaining--;
-      if (remaining > 0) {
-        countdownNum.textContent = remaining;
-      } else {
-        clearInterval(ticker);
-        countdownNum.textContent = '';
-      }
-    }, 1000);
-
-    new Promise(function(resolve) { setTimeout(resolve, 3000); })
+    new Promise(function(resolve) { setTimeout(resolve, 1500); })
     .then(function() {
-      log('Step 2: 3s dark hold complete — capturing frame');
+      // Step 2: Instant switch to black — phone is no longer a light source
+      captureOverlay.classList.remove('flash');
+      captureOverlay.classList.add('dark');
+      log('Step 2: Screen black — phone reflection eliminated, pupil still constricted');
       setStatus('Capturing…');
-
-      // Step 3: Grab frame while screen is still black
+      // Step 3: Brief settle — screen goes dark, camera exposure adjusts
+      return new Promise(function(resolve) { setTimeout(resolve, 400); });
+    })
+    .then(function() {
+      // Step 4: Grab frame — constricted pupil, no phone glare
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       var ctx = canvas.getContext('2d');
@@ -302,8 +300,8 @@
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0);
 
-      // Step 4: Restore UI
-      captureOverlay.classList.remove('on');
+      // Restore UI
+      captureOverlay.classList.remove('dark');
 
       var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       resultImg.src = dataUrl;
@@ -317,9 +315,9 @@
       log('--- Capture sequence complete ---');
       setStatus('Done — check result below');
     }).catch(function(e) {
-      clearInterval(ticker);
       log('Capture error: ' + e.message);
-      captureOverlay.classList.remove('on');
+      captureOverlay.classList.remove('flash');
+      captureOverlay.classList.remove('dark');
     }).finally(function() {
       btn.disabled = false;
     });
