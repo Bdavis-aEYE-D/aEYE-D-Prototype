@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.43 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.44 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -1076,11 +1076,14 @@ function applyAutoFit(){
       var imgW = originalImgEl.naturalWidth || originalImgEl.width;
       var imgH = originalImgEl.naturalHeight || originalImgEl.height;
 
-      // Pick whichever iris center is closest to the crop region center
-      var cropCx = cropRegion ? (cropRegion.x + cropRegion.w * 0.5) / imgW : 0.5;
-      var d0 = Math.abs(L[468].x - cropCx);   // MediaPipe "left"  iris
-      var d1 = Math.abs(L[473].x - cropCx);   // MediaPipe "right" iris
-      var ci = (d0 < d1) ? 468 : 473;
+      // currentSide 'Right' = subject's right = LEFT side of image (smaller x)
+      // currentSide 'Left'  = subject's left  = RIGHT side of image (larger x)
+      var ci;
+      if (currentSide === 'Right') {
+        ci = (L[468].x < L[473].x) ? 468 : 473;
+      } else {
+        ci = (L[468].x > L[473].x) ? 468 : 473;
+      }
 
       var c = L[ci];
       // Average radius from center to 4 boundary landmarks
@@ -1101,7 +1104,7 @@ function applyAutoFit(){
       donut.cx = drawInfo.dx + cx_img * scaleX;
       donut.cy = drawInfo.dy + cy_img * scaleY;
       var ripx = ir * scaleX;
-      var rpx  = ir * 0.38 * scaleX;
+      var rpx  = ir * 0.28 * scaleX;
       ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
       rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
       donut.rIris  = ripx;
@@ -1110,7 +1113,7 @@ function applyAutoFit(){
       if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
       if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
       if (hint) hint.textContent = 'Auto-fit complete. Tap “Analyze Iris” or adjust manually.';
-      if (st)   st.textContent   = 'MediaPipe ✓  iris r=' + Math.round(ir) + 'px';
+      if (st)   st.textContent   = 'MP ✓ ci=' + ci + ' r=' + Math.round(ir) + ' cx=' + Math.round(cx_img) + ' cy=' + Math.round(cy_img) + ' crop=' + (cropRegion ? Math.round(cropRegion.x) : '?');
       draw();
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
