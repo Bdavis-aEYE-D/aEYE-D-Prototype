@@ -8,6 +8,8 @@ function analyze(){
   octx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
   var d = octx.getImageData(0, 0, stageW, stageH).data;
   var cx = donut.cx, cy = donut.cy, rIn = donut.rPupil, rOut = donut.rIris;
+  var cxP = donut.cxPupil != null ? donut.cxPupil : cx;
+  var cyP = donut.cyPupil != null ? donut.cyPupil : cy;
   var innerBand = rIn + (rOut - rIn) * 0.45;
   // Tighter zones for central-heterochromia gradient detection. The pupillary
   // zone (innermost 25% of the iris-pupil annulus) and ciliary zone (outermost
@@ -42,6 +44,7 @@ function analyze(){
     for (var x = x0; x < x1; x++){
       var dx = x - cx, dy = y - cy;
       var dist = Math.sqrt(dx*dx + dy*dy);
+      var distP = Math.sqrt((x-cxP)*(x-cxP) + (y-cyP)*(y-cyP));
       var i = (y * stageW + x) * 4;
       var r = d[i], g = d[i+1], b = d[i+2], a = d[i+3];
       // Always populate Lbuf for the bbox so the freckle DoG pass has padding.
@@ -50,7 +53,7 @@ function analyze(){
       Lbuf[bboxIdx] = (a >= 200) ? rgbLab(r, g, b)[0] : 0;
       // Freckle mask: iris ring (with limbal pullback) + skip glare/sclera/lid,
       // but KEEP dark pixels (no lash/shadow filter — those would kill freckles).
-      if (a >= 200 && dist >= rIn * FRK_INNER_F && dist <= rOut * FRK_OUTER_F) {
+      if (a >= 200 && distP >= rIn * FRK_INNER_F && dist <= rOut * FRK_OUTER_F) {
         var lumF = 0.299*r + 0.587*g + 0.114*b;
         var mxF = Math.max(r,g,b), mnF = Math.min(r,g,b);
         var satF = mxF>0 ? (mxF - mnF)/mxF : 0;
@@ -59,7 +62,7 @@ function analyze(){
           validFrk[bboxIdx] = 1;
         }
       }
-      if (dist < rIn || dist > rOut) continue;
+      if (distP < rIn || dist > rOut) continue;
       if (a < 200) continue;
       var lum = 0.299*r + 0.587*g + 0.114*b;
       var mxc = Math.max(r,g,b), mnc = Math.min(r,g,b);

@@ -234,6 +234,163 @@ function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
   return count > 0 ? sum / count : 128;
 }
 
+// ---- Iris OD: horizontal band + near-horizontal rays ----
+// Scans the sclera→iris boundary horizontally where the contrast is strongest.
+// Returns { irisR, cxIris, cyIris } in imgEl pixels, or null if not enough hits.
+// pupilRHint: guard radius so we skip the pupil→iris boundary.
+function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return null;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  function lum(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+
+  var cx = Math.round(cxHint), cy = Math.round(cyHint);
+  var guardR = Math.round((pupilRHint || 0) * 1.4);
+  var bandH = 6;
+
+  // Smooth horizontal profile across ±6px band
+  var profile = new Float32Array(W);
+  for (var x = 0; x < W; x++) {
+    var s = 0, n = 0;
+    for (var b = -bandH; b <= bandH; b++) {
+      var ry = cy + b;
+      if (ry >= 0 && ry < H) { s += lum(x, ry); n++; }
+    }
+    profile[x] = n ? s / n : 0;
+  }
+
+  var hits = [];       // collected limbal distances from center
+  var leftHit = -1, rightHit = -1;
+
+  // Left limbus: scan rightward from left edge, find steepest brightness DROP entering iris
+  var leftMax = 20;   // minimum gradient threshold (lum units over 2px)
+  for (var x = 2; x < cx - guardR; x++) {
+    var drop = profile[x-2] - profile[x];
+    if (drop > leftMax) { leftMax = drop; leftHit = x; }
+  }
+  if (leftHit >= 0) hits.push(cx - leftHit);
+
+  // Right limbus: scan leftward from right edge
+  var rightMax = 20;
+  for (var x = W - 3; x > cx + guardR; x--) {
+    var drop = profile[x+2] - profile[x];
+    if (drop > rightMax) { rightMax = drop; rightHit = x; }
+  }
+  if (rightHit >= 0) hits.push(rightHit - cx);
+
+  // Near-horizontal rays at ±20° and ±30°, firing both left and right
+  var rayAngles = [20, -20, 30, -30];
+  var rayThresh = 12;
+  var maxR = Math.min(W, H) * 0.5;
+
+  for (var ai = 0; ai < rayAngles.length; ai++) {
+    var angle = rayAngles[ai] * Math.PI / 180;
+    var cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+    // Rightward ray
+    var bestR = -1, bestG = rayThresh;
+    for (var r = guardR + 2; r < maxR - 2; r++) {
+      var x1 = cx + r*cosA, y1 = cy + r*sinA;
+      if (x1 < 0 || x1 >= W || y1 < 0 || y1 >= H) break;
+      var g = lum(cx + (r-2)*cosA, cy + (r-2)*sinA) - lum(x1, y1);
+      if (g > bestG) { bestG = g; bestR = r; }
+    }
+    if (bestR > 0) hits.push(bestR);
+
+    // Leftward ray (mirror angle)
+    bestR = -1; bestG = rayThresh;
+    for (var r = guardR + 2; r < maxR - 2; r++) {
+      var x1 = cx - r*cosA, y1 = cy + r*sinA;
+      if (x1 < 0 || x1 >= W || y1 < 0 || y1 >= H) break;
+      var g = lum(cx - (r-2)*cosA, cy + (r-2)*sinA) - lum(x1, y1);
+      if (g > bestG) { bestG = g; bestR = r; }
+    }
+    if (bestR > 0) hits.push(bestR);
+  }
+
+  if (hits.length < 2) return null;
+  hits.sort(function(a, b) { return a - b; });
+  var irisR = hits[Math.floor(hits.length / 2)];
+
+  // Iris center x: midpoint of horizontal hits if both found; otherwise keep hint
+  var cxIris = (leftHit >= 0 && rightHit >= 0)
+    ? Math.round((leftHit + rightHit) / 2)
+    : cx;
+
+  return { irisR: irisR, cxIris: cxIris, cyIris: cy };
+}
+
+// ---- Pupil radius: 8-ray inward scan ----
+// Fires 8 rays outward from pupil center and finds where each exits the dark pupil.
+// Returns pupil radius in imgEl pixels (capped to irisR × 0.32).
+function findPupilRadiusByRays(imgEl, cxPupil, cyPupil, irisR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return irisR * 0.25;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  // Build luminance array with glare pre-pass (corneal reflections → neighbor average)
+  var gl = new Float32Array(W * H);
+  for (var i = 0; i < W * H; i++) {
+    var idx = i * 4;
+    gl[i] = 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+  for (var y = 1; y < H - 1; y++) {
+    for (var x = 1; x < W - 1; x++) {
+      if (gl[y*W+x] > 220) {
+        gl[y*W+x] = (gl[(y-1)*W+x] + gl[(y+1)*W+x] + gl[y*W+x-1] + gl[y*W+x+1]) * 0.25;
+      }
+    }
+  }
+  function lumG(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    return gl[py*W+px];
+  }
+
+  // Darkest pixel in 5×5 window around pupil center → calibrate exit threshold
+  var cx = Math.round(cxPupil), cy = Math.round(cyPupil);
+  var darkest = 255;
+  for (var dy = -2; dy <= 2; dy++) {
+    for (var dx = -2; dx <= 2; dx++) {
+      var v = lumG(cx+dx, cy+dy);
+      if (v < darkest) darkest = v;
+    }
+  }
+  var exitThresh = Math.max(darkest + 25, 45);
+  var maxR = irisR * 0.35;
+  var radii = [];
+
+  for (var a = 0; a < 8; a++) {
+    var angle = (a / 8) * 2 * Math.PI;
+    var cosA = Math.cos(angle), sinA = Math.sin(angle);
+    for (var r = 2; r <= maxR; r++) {
+      if (lumG(cx + r*cosA, cy + r*sinA) > exitThresh) {
+        radii.push(r);
+        break;
+      }
+    }
+  }
+
+  if (radii.length < 4) return irisR * 0.25; // fallback
+  radii.sort(function(a, b) { return a - b; });
+  var pupilR = radii[Math.floor(radii.length / 2)];
+  return Math.max(4, Math.min(pupilR, irisR * 0.32));
+}
+
 // Radial brightness scan: find iris outer radius anchored on a known center point.
 // hintR: MP iris radius in crop pixels — used to set a minimum search radius so we
 // skip the pupil→iris boundary and only find the iris→sclera limbal transition.
