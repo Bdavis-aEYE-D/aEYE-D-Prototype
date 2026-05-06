@@ -118,6 +118,26 @@
     border: 1px solid var(--line); background: var(--card); color: var(--ink);
     font-size: 14px; cursor: pointer; }
   .share-controls button.primary { background: var(--accent); color: #0a0a14; border-color: var(--accent); font-weight: 700; }
+
+  /* Photo tips modal */
+  .tips-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+    display: none; align-items: flex-end; justify-content: center;
+    padding: 0; z-index: 1000;
+  }
+  .tips-modal.show { display: flex; }
+  .tips-inner {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 24px 24px 0 0; padding: 24px 20px 40px;
+    width: 100%; max-width: 520px;
+  }
+  .tips-inner h3 { margin: 0 0 4px; font-size: 18px; color: var(--ink); }
+  .tips-inner .tips-sub { font-size: 13px; color: var(--ink-dim); margin: 0 0 18px; }
+  .tip-row { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .tip-row:last-of-type { border-bottom: none; }
+  .tip-icon { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; margin-top: 1px; }
+  .tip-body .tip-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .tip-body .tip-desc { font-size: 13px; color: var(--ink-dim); margin-top: 2px; line-height: 1.4; }
   .eye-badge { display: inline-block; background: var(--accent); color: #002338;
     font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
     padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; }
@@ -169,7 +189,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.53 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.54 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -199,6 +219,7 @@
         <button type="button" id="btn-camera">Take Photo</button>
         <button type="button" class="secondary" id="btn-upload">Choose Photo</button>
         <button type="button" class="secondary full" id="btn-sample">Use Sample Iris</button>
+        <button type="button" class="secondary full" id="btn-tips">Photo Tips &rsaquo;</button>
       </div>
       <label class="tinylabel" style="margin-top:12px">Date of birth <span style="font-weight:400;color:var(--ink-dim)">(optional &mdash; improves limbal ring scoring)</span></label>
       <input type="date" id="birthdate-input" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;font-family:inherit;width:100%;margin-bottom:6px">
@@ -310,6 +331,50 @@
           <button type="button" class="secondary" id="btn-share">Make Share Card</button>
           <button type="button" class="secondary full" id="btn-again">Start Over</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Photo tips modal -->
+    <div class="tips-modal" id="tips-modal">
+      <div class="tips-inner">
+        <h3>How to take a great photo</h3>
+        <p class="tips-sub">Better photos mean more accurate results.</p>
+        <div class="tip-row">
+          <div class="tip-icon">&#x1F4A1;</div>
+          <div class="tip-body">
+            <div class="tip-title">Use diffuse, even lighting</div>
+            <div class="tip-desc">Avoid facing windows or bright lamps — they cause reflections on the eye. Overcast outdoor light or a well-lit room with light from multiple directions works best.</div>
+          </div>
+        </div>
+        <div class="tip-row">
+          <div class="tip-icon">&#x1F4CF;</div>
+          <div class="tip-body">
+            <div class="tip-title">Hold at arm&rsquo;s length</div>
+            <div class="tip-desc">About 18&ndash;24 inches away. Your full face should be in the frame &mdash; the app will zoom into each eye automatically.</div>
+          </div>
+        </div>
+        <div class="tip-row">
+          <div class="tip-icon">&#x1F3AF;</div>
+          <div class="tip-body">
+            <div class="tip-title">Lock focus on your eye</div>
+            <div class="tip-desc">Tap your eye on the phone screen before shooting to make sure the camera focuses there, not on the background.</div>
+          </div>
+        </div>
+        <div class="tip-row">
+          <div class="tip-icon">&#x1F9D0;</div>
+          <div class="tip-body">
+            <div class="tip-title">Look straight at the camera</div>
+            <div class="tip-desc">Face the lens squarely and open your eyes wide. Both eyes visible in the same photo is ideal.</div>
+          </div>
+        </div>
+        <div class="tip-row">
+          <div class="tip-icon">&#x23F8;</div>
+          <div class="tip-body">
+            <div class="tip-title">Hold still</div>
+            <div class="tip-desc">Even slight blur reduces accuracy. Brace your elbow or rest your hand against something steady.</div>
+          </div>
+        </div>
+        <button type="button" id="btn-tips-close" style="margin-top:18px">Got it</button>
       </div>
     </div>
 
@@ -618,6 +683,15 @@ $('btn-upload').addEventListener('click', function(){
 });
 $('btn-sample').addEventListener('click', function(){
   drawSyntheticFace();
+});
+$('btn-tips').addEventListener('click', function(){
+  $('tips-modal').classList.add('show');
+});
+$('btn-tips-close').addEventListener('click', function(){
+  $('tips-modal').classList.remove('show');
+});
+$('tips-modal').addEventListener('click', function(e){
+  if (e.target === this) this.classList.remove('show');
 });
 fileInput.addEventListener('change', function(e){
   var f = e.target.files && e.target.files[0];
