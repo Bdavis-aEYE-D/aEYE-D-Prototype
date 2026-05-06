@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b1020" id="theme-color-meta">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Camera POC — eyeD</title>
 <style>
   :root {
@@ -168,6 +170,10 @@
   var canvas     = document.getElementById('capture-canvas');
   var captureOverlay = document.getElementById('capture-overlay');
   var countdownNum   = document.getElementById('countdown-num');
+  var themeColorMeta = document.getElementById('theme-color-meta');
+
+  function setThemeBlack() { if (themeColorMeta) themeColorMeta.content = '#000000'; }
+  function setThemeNormal() { if (themeColorMeta) themeColorMeta.content = '#0b1020'; }
   var statusEl   = document.getElementById('status');
   var logEl      = document.getElementById('log');
   var guideText  = document.getElementById('guide-text');
@@ -278,6 +284,7 @@
 
     // Step 1: White flash — constrict pupil
     captureOverlay.classList.add('flash');
+    setThemeBlack();
     log('Step 1: White flash ON — pupil constricting');
 
     new Promise(function(resolve) { setTimeout(resolve, 1500); })
@@ -302,6 +309,7 @@
 
       // Restore UI
       captureOverlay.classList.remove('dark');
+      setThemeNormal();
 
       var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       resultImg.src = dataUrl;
@@ -318,6 +326,7 @@
       log('Capture error: ' + e.message);
       captureOverlay.classList.remove('flash');
       captureOverlay.classList.remove('dark');
+      setThemeNormal();
     }).finally(function() {
       btn.disabled = false;
     });
