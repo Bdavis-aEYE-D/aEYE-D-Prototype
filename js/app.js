@@ -505,7 +505,7 @@ function applyAutoFit(){
       if (irisOD && irisOD.irisR > 6) {
         cxIris_img = irisOD.cxIris;
         cyIris_img = irisOD.cyIris;
-        irisR_img  = irisOD.irisR;
+        irisR_img  = Math.min(irisOD.irisR, ir * 1.20); // cap: don't stray past MP hint
         radSrc = 'hband';
       } else {
         // Fall back to radial scan

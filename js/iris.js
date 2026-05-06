@@ -297,12 +297,12 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
     var angle = rayAngles[ai] * Math.PI / 180;
     var cosA = Math.cos(angle), sinA = Math.sin(angle);
 
-    // Rightward ray
+    // Rightward ray — look for brightness RISE (dark iris → bright sclera)
     var bestR = -1, bestG = rayThresh;
     for (var r = guardR + 2; r < maxR - 2; r++) {
       var x1 = cx + r*cosA, y1 = cy + r*sinA;
       if (x1 < 0 || x1 >= W || y1 < 0 || y1 >= H) break;
-      var g = lum(cx + (r-2)*cosA, cy + (r-2)*sinA) - lum(x1, y1);
+      var g = lum(x1, y1) - lum(cx + (r-2)*cosA, cy + (r-2)*sinA);
       if (g > bestG) { bestG = g; bestR = r; }
     }
     if (bestR > 0) hits.push(bestR);
@@ -312,7 +312,7 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
     for (var r = guardR + 2; r < maxR - 2; r++) {
       var x1 = cx - r*cosA, y1 = cy + r*sinA;
       if (x1 < 0 || x1 >= W || y1 < 0 || y1 >= H) break;
-      var g = lum(cx - (r-2)*cosA, cy + (r-2)*sinA) - lum(x1, y1);
+      var g = lum(x1, y1) - lum(cx - (r-2)*cosA, cy + (r-2)*sinA);
       if (g > bestG) { bestG = g; bestR = r; }
     }
     if (bestR > 0) hits.push(bestR);
@@ -371,7 +371,7 @@ function findPupilRadiusByRays(imgEl, cxPupil, cyPupil, irisR) {
     }
   }
   var exitThresh = Math.max(darkest + 25, 45);
-  var maxR = irisR * 0.35;
+  var maxR = irisR * 0.28;
   var radii = [];
 
   for (var a = 0; a < 8; a++) {
