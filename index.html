@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.50 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.51 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -1257,7 +1257,7 @@ function applyAutoFit(){
       // This corrects dark-eye underestimation while preventing light-eye overshoot
       // (outlier rays hitting eye corners inflate the scan for low-contrast irises).
       var rawR  = (scanR && scanR > 6) ? scanR : ir;
-      var finalR = Math.min(rawR, ir * 1.05);
+      var finalR = Math.min(rawR, ir * 1.12);
       var radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
       var ripx  = Math.min(finalR * scaleX, Math.min(stageW,stageH) * 0.45);
 
@@ -1269,7 +1269,7 @@ function applyAutoFit(){
       } catch(e) {
         rpx = ripx * 0.28;
       }
-      rpx = Math.max(6, Math.min(rpx, ripx * 0.50));
+      rpx = Math.max(6, Math.min(rpx, ripx * 0.38));
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
