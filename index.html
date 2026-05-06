@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.46 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.47 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -1108,27 +1108,26 @@ function applyAutoFit(){
       var scaleY = drawInfo.dh / imgEl.height;
       donut.cx = drawInfo.dx + cx_img * scaleX;
       donut.cy = drawInfo.dy + cy_img * scaleY;
-      var ripx = ir * scaleX;
+      // Trust MediaPipe for iris radius; cap within stage bounds
+      var ripx = Math.min(ir * scaleX, Math.min(stageW,stageH) * 0.45);
 
-      // Hybrid: use classical CV dark-region scan for pupil size (more accurate than fixed ratio)
+      // Classical CV for pupil inner ring only; capped relative to iris ring
       var rpx;
       try {
         var cf = autoFit(imgEl);
         rpx = cf.rPupilFrac * imgEl.width * scaleX;
       } catch(e) {
-        rpx = ir * 0.28 * scaleX;
+        rpx = ripx * 0.28;
       }
+      rpx = Math.max(6, Math.min(rpx, ripx * 0.50));
 
-      ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
-      rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
       donut.rIris  = ripx;
       donut.rPupil = rpx;
       var ri = $('r-iris'), rp = $('r-pupil');
       if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
       if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
       if (hint) hint.textContent = 'Auto-fit complete. Tap “Analyze Iris” or adjust manually.';
-      var natRatio = Math.round((originalImgEl.naturalWidth||originalImgEl.width) / originalImgEl.width * 10) / 10;
-      if (st)   st.textContent   = 'MP ✓ ci=' + ci + ' r=' + Math.round(ir) + ' sc=' + natRatio + 'x cw=' + cropRegion.w;
+      if (st)   st.textContent   = 'MP ✓ ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' r=' + Math.round(ir) + ' cw=' + cropRegion.w;
       draw();
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
