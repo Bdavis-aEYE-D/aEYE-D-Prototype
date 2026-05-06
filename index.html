@@ -180,12 +180,56 @@
     background: #1a2240; border: 1px solid var(--line); color: var(--ink-dim);
     font-size: 12px; padding: 8px 16px; border-radius: 999px; z-index: 200;
     transition: opacity 0.4s; opacity: 0; pointer-events: none; }
+
+  /* ---- In-app camera viewfinder ---- */
+  .viewfinder-wrap {
+    position: relative; background: #000; border-radius: 14px;
+    overflow: hidden; aspect-ratio: 3/4; width: 100%;
+  }
+  #eyeid-viewfinder {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover; transform: scaleX(-1); /* mirror for selfie */
+  }
+  .face-guide {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .face-oval {
+    width: 72%; padding-top: 96%; border-radius: 50%;
+    border: 2px dashed rgba(108,196,255,0.55);
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -52%);
+  }
+  .guide-text {
+    position: absolute; bottom: 14px; left: 0; right: 0;
+    text-align: center; font-size: 13px; font-weight: 600;
+    color: #ffffffcc; text-shadow: 0 1px 4px #000;
+  }
+  .cam-status { font-size: 13px; color: var(--accent); margin: 8px 0 4px;
+    min-height: 20px; font-weight: 600; text-align: center; }
+
+  /* Flash → black capture overlay */
+  #cam-overlay {
+    position: fixed; inset: 0; background: #fff;
+    opacity: 0; pointer-events: none; z-index: 1100;
+    transition: opacity 0.12s ease;
+  }
+  #cam-overlay.flash { opacity: 1; background: #fff; }
+  #cam-overlay.dark  { opacity: 1; background: #000; transition: background 0s; }
+  #cam-overlay .cam-countdown {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255,255,255,0.2); font-size: 80px; font-weight: 800;
+  }
 </style>
 </head>
 <body>
 
 <div id="jshealth">JAVASCRIPT NOT RUNNING &mdash; SEE TIP BELOW</div>
 <div id="save-toast"></div>
+<meta name="theme-color" content="#0b1020" id="theme-color-meta">
+<!-- Flash → black capture overlay -->
+<div id="cam-overlay"><div class="cam-countdown" id="cam-countdown"></div></div>
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
@@ -225,6 +269,22 @@
       <input type="date" id="birthdate-input" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;font-family:inherit;width:100%;margin-bottom:6px">
       <input type="file" id="file-input" accept="image/*">
       <p style="font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.6;border-top:1px solid var(--line);padding-top:12px;">By using eyeD, your iris photo may be used to help build and improve the Davis Iris Color System. No photos are shared publicly or sold.</p>
+    </div>
+
+    <!-- Camera viewfinder (shown when in-app camera is active) -->
+    <div class="card" id="card-viewfinder" style="display:none">
+      <div class="step">Step 1 — Camera</div>
+      <h2>Position your face in the oval</h2>
+      <div class="viewfinder-wrap">
+        <video id="eyeid-viewfinder" autoplay playsinline muted></video>
+        <div class="face-guide">
+          <div class="face-oval"></div>
+          <div class="guide-text" id="cam-guide-text">Centre your face — eyes open wide</div>
+        </div>
+      </div>
+      <div class="cam-status" id="cam-status">Starting camera&hellip;</div>
+      <button type="button" id="btn-cam-capture" disabled style="margin-top:8px">Capture</button>
+      <button type="button" class="secondary" id="btn-cam-stop" style="margin-top:6px">Cancel</button>
     </div>
 
     <!-- ============== Step 2: Locate the eye ============== -->

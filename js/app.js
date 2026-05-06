@@ -44,13 +44,22 @@ for (var i=0;i<tabs.length;i++){
 var fileInput = $('file-input');
 
 $('btn-camera').addEventListener('click', function(){
-  fileInput.setAttribute('capture','environment');
-  fileInput.click();
+  // Use in-app viewfinder if getUserMedia is available (requires HTTPS)
+  if (cameraAvailable()) {
+    cameraStart();
+  } else {
+    // Fallback: native camera via file input (desktop or non-HTTPS)
+    fileInput.setAttribute('capture', 'user');
+    fileInput.click();
+  }
 });
 $('btn-upload').addEventListener('click', function(){
   fileInput.removeAttribute('capture');
   fileInput.click();
 });
+$('btn-cam-capture').addEventListener('click', function(){ cameraCaptureSequence(); });
+$('btn-cam-stop').addEventListener('click', function(){ cameraStop(); });
+
 $('btn-sample').addEventListener('click', function(){
   drawSyntheticFace();
 });
