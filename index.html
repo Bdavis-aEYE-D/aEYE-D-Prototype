@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.42 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.43 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -695,6 +695,38 @@ var originalImgEl = null;     // full-face image user loaded
 var imgEl = null;             // working (cropped) image used by fit/analyze steps
 var imgLoaded = false;
 var currentSide = null;       // 'Left' or 'Right'
+var cropRegion = null;        // {x,y,w,h} of crop in originalImgEl pixels
+
+// ======================= MEDIAPIPE =======================
+var mpLandmarker = null;
+var mpLoadPromise = null;
+
+function initMediaPipe() {
+  if (mpLoadPromise) return mpLoadPromise;
+  mpLoadPromise = import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs')
+    .then(function(m) {
+      return m.FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+      ).then(function(fs) {
+        return m.FaceLandmarker.createFromOptions(fs, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU'
+          },
+          outputFaceBlendshapes: false,
+          runningMode: 'IMAGE',
+          numFaces: 1
+        });
+      }).then(function(lm) { mpLandmarker = lm; return lm; });
+    }).catch(function(e) {
+      console.warn('MediaPipe init failed:', e);
+      mpLoadPromise = null;
+      return null;
+    });
+  return mpLoadPromise;
+}
+// Start loading immediately so it's ready by the time the user crops
+initMediaPipe();
 var eyeResults = {};          // { 'Left': resultObj, 'Right': resultObj }
 var captureMode = 'analysis'; // 'analysis' | 'portrait' — controls what the
                               // Analyze button does (run analyzer vs. save
@@ -844,6 +876,7 @@ $('btn-zoom-in').addEventListener('click', function(){
   var cy1 = Math.min(originalImgEl.height, Math.round(iy + cropR));
   var cw = cx1 - cx0, ch = cy1 - cy0;
   if (cw < 40 || ch < 40){ showError('Crop too small. Enlarge crop size.'); return; }
+  cropRegion = {x: cx0, y: cy0, w: cw, h: ch};
   // Determine L/R side label
   currentSide = (ix < originalImgEl.width / 2) ? 'Right' : 'Left';
   // Build cropped image as the new working image
@@ -1026,33 +1059,92 @@ function autoFit(src){
 
 function applyAutoFit(){
   if (!imgEl) return false;
+  var hint = $('autofit-hint');
+  var st   = $('autofit-status');
+  if (hint) hint.textContent = 'Detecting iris…';
+  if (st)   st.textContent   = ' ';
+
+  initMediaPipe().then(function(lm) {
+    if (!lm || !originalImgEl) { _applyFitClassical(); return; }
+    try {
+      var result = lm.detect(originalImgEl);
+      if (!result || !result.faceLandmarks || !result.faceLandmarks.length) {
+        if (hint) hint.textContent = 'Face not detected — using fallback';
+        _applyFitClassical(); return;
+      }
+      var L = result.faceLandmarks[0];
+      var imgW = originalImgEl.naturalWidth || originalImgEl.width;
+      var imgH = originalImgEl.naturalHeight || originalImgEl.height;
+
+      // Pick whichever iris center is closest to the crop region center
+      var cropCx = cropRegion ? (cropRegion.x + cropRegion.w * 0.5) / imgW : 0.5;
+      var d0 = Math.abs(L[468].x - cropCx);   // MediaPipe "left"  iris
+      var d1 = Math.abs(L[473].x - cropCx);   // MediaPipe "right" iris
+      var ci = (d0 < d1) ? 468 : 473;
+
+      var c = L[ci];
+      // Average radius from center to 4 boundary landmarks
+      var ir = 0;
+      for (var k = 1; k <= 4; k++) {
+        var p = L[ci + k];
+        var dx = (p.x - c.x) * imgW, dy = (p.y - c.y) * imgH;
+        ir += Math.sqrt(dx*dx + dy*dy);
+      }
+      ir /= 4;
+      if (ir < 4) { if (hint) hint.textContent = 'Iris too small — using fallback'; _applyFitClassical(); return; }
+
+      // Transform from originalImgEl space → cropped imgEl space → stage
+      var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
+      var cy_img = c.y * imgH - (cropRegion ? cropRegion.y : 0);
+      var scaleX = drawInfo.dw / imgEl.width;
+      var scaleY = drawInfo.dh / imgEl.height;
+      donut.cx = drawInfo.dx + cx_img * scaleX;
+      donut.cy = drawInfo.dy + cy_img * scaleY;
+      var ripx = ir * scaleX;
+      var rpx  = ir * 0.38 * scaleX;
+      ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
+      rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
+      donut.rIris  = ripx;
+      donut.rPupil = rpx;
+      var ri = $('r-iris'), rp = $('r-pupil');
+      if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
+      if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
+      if (hint) hint.textContent = 'Auto-fit complete. Tap “Analyze Iris” or adjust manually.';
+      if (st)   st.textContent   = 'MediaPipe ✓  iris r=' + Math.round(ir) + 'px';
+      draw();
+    } catch(e) {
+      console.warn('MediaPipe detect error:', e);
+      if (hint) hint.textContent = 'Detection error — using fallback';
+      _applyFitClassical();
+    }
+  });
+}
+
+function _applyFitClassical(){
+  if (!imgEl) return false;
+  var hint = $('autofit-hint');
+  var st   = $('autofit-status');
   try {
     var fit = autoFit(imgEl);
     var scaleX = drawInfo.dw / imgEl.width;
     var scaleY = drawInfo.dh / imgEl.height;
     donut.cx = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
     donut.cy = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
-    var rpx = fit.rPupilFrac * imgEl.width * scaleX;
-    var ripx = fit.rIrisFrac * imgEl.width * scaleX;
-    // Sanity guards — pupil is typically 25-45% of iris radius
+    var rpx  = fit.rPupilFrac * imgEl.width * scaleX;
+    var ripx = fit.rIrisFrac  * imgEl.width * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
-    rpx = Math.max(6, Math.min(rpx, ripx*0.45));
-    donut.rIris = ripx;
+    rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
+    donut.rIris  = ripx;
     donut.rPupil = rpx;
     var ri = $('r-iris'), rp = $('r-pupil');
-    ri.max = Math.round(Math.max(stageW, stageH));
-    ri.value = Math.round(ripx);
-    rp.max = Math.round(ripx);
-    rp.value = Math.round(rpx);
-    var st = $('autofit-status');
-    if (st) st.textContent = fit.ok
-      ? 'Auto-fit: snapped to iris (L=' + fit.leftHit + ' R=' + fit.rightHit + ' dL=' + fit.leftGrad + ' dR=' + fit.rightGrad + ')'
-      : 'Auto-fit: iris estimated (L=' + fit.leftHit + ' R=' + fit.rightHit + ')';
+    if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
+    if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
+    if (hint) hint.textContent = 'Auto-fit complete. Tap “Analyze Iris” or adjust manually.';
+    if (st)   st.textContent   = 'Classical CV: ' + (fit.ok ? 'snapped' : 'estimated');
     draw();
     return fit.ok;
-  } catch (e) {
-    var st2 = $('autofit-status');
-    if (st2) st2.textContent = 'Auto-fit skipped: ' + (e.message || e);
+  } catch(e) {
+    if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
     return false;
   }
 }
