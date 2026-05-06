@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.51 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.52 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -1149,6 +1149,56 @@ function autoFit(src){
   };
 }
 
+// Refine the iris/pupil center by finding the weighted centroid of the darkest pixels
+// within searchR of the hint center. The pupil is always the darkest structure in the
+// eye, so this corrects MP's center error on close-up photos lacking face context.
+function findPupilCenter(imgEl, cxHint, cyHint, searchR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return null;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  function lum(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+  var r = Math.round(searchR);
+  var x0 = Math.max(0, Math.round(cxHint - r));
+  var x1 = Math.min(W-1, Math.round(cxHint + r));
+  var y0 = Math.max(0, Math.round(cyHint - r));
+  var y1 = Math.min(H-1, Math.round(cyHint + r));
+  // Collect luminances inside circle, find 40th-percentile threshold (darkest 40% = pupil)
+  var lums = [];
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var ddx = x - cxHint, ddy = y - cyHint;
+      if (ddx*ddx + ddy*ddy > r*r) continue;
+      lums.push(lum(x, y));
+    }
+  }
+  if (lums.length < 10) return null;
+  lums.sort(function(a,b){return a-b;});
+  var threshold = lums[Math.floor(lums.length * 0.40)];
+  // Weighted centroid of dark pixels (weight = how much darker than threshold)
+  var wx = 0, wy = 0, wt = 0;
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var ddx = x - cxHint, ddy = y - cyHint;
+      if (ddx*ddx + ddy*ddy > r*r) continue;
+      var l = lum(x, y);
+      if (l > threshold) continue;
+      var w = threshold - l + 1;
+      wx += x * w; wy += y * w; wt += w;
+    }
+  }
+  if (wt < 1) return null;
+  return { cx: wx / wt, cy: wy / wt };
+}
+
 // Radial brightness scan: find iris outer radius anchored on a known center point.
 // hintR: MP iris radius in crop pixels — used to set a minimum search radius so we
 // skip the pupil→iris boundary and only find the iris→sclera limbal transition.
@@ -1245,12 +1295,23 @@ function applyAutoFit(){
       // Transform from originalImgEl space → cropped imgEl space → stage
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
       var cy_img = c.y * imgH - (cropRegion ? cropRegion.y : 0);
+
+      // Refine center: MP drifts on close-up photos; pupil is always the darkest region
+      var refined = findPupilCenter(imgEl, cx_img, cy_img, ir * 0.55);
+      if (refined) {
+        var shiftX = refined.cx - cx_img, shiftY = refined.cy - cy_img;
+        if (Math.sqrt(shiftX*shiftX + shiftY*shiftY) < ir * 0.5) {
+          cx_img = refined.cx;
+          cy_img = refined.cy;
+        }
+      }
+
       var scaleX = drawInfo.dw / imgEl.width;
       var scaleY = drawInfo.dh / imgEl.height;
       donut.cx = drawInfo.dx + cx_img * scaleX;
       donut.cy = drawInfo.dy + cy_img * scaleY;
 
-      // Measure iris outer radius by scanning brightness outward from MP center.
+      // Measure iris outer radius by scanning brightness outward from refined center.
       // Pass ir as a hint so the scan skips the pupil zone and finds the limbal edge.
       var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir);
       // Use scan if it found something, but cap at 105% of MP's own estimate.
