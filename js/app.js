@@ -499,27 +499,20 @@ function applyAutoFit(){
         }
       }
 
-      // Step 2: Find iris OD via horizontal band + near-horizontal rays (v0.54)
+      // Step 2: Iris center — horizontal band gives a more direct x-center than MP.
+      //         Iris radius — radial scan with adaptive cap (proven reliable on real photos).
       var irisOD = findIrisODHorizontal(imgEl, cx_img, cy_img, ir * 0.5);
-      var cxIris_img, cyIris_img, irisR_img, radSrc;
-      if (irisOD && irisOD.irisR > 6) {
-        cxIris_img = irisOD.cxIris;
-        cyIris_img = irisOD.cyIris;
-        irisR_img  = Math.min(irisOD.irisR, ir * 1.20); // cap: don't stray past MP hint
-        radSrc = 'hband';
-      } else {
-        // Fall back to radial scan
-        cxIris_img = cx_img;
-        cyIris_img = cy_img;
-        var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
-        var isDarkIris = irisBright < 80;
-        var maxRFactor = isDarkIris ? 1.55 : 1.22;
-        var capFactor  = isDarkIris ? 1.40 : 1.12;
-        var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, maxRFactor);
-        var rawR  = (scanR && scanR > 6) ? scanR : ir;
-        irisR_img = Math.min(rawR, ir * capFactor);
-        radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
-      }
+      var cxIris_img = (irisOD && irisOD.irisR > 6) ? irisOD.cxIris : cx_img;
+      var cyIris_img = (irisOD && irisOD.irisR > 6) ? irisOD.cyIris : cy_img;
+
+      var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
+      var isDarkIris = irisBright < 80;
+      var maxRFactor = isDarkIris ? 1.55 : 1.22;
+      var capFactor  = isDarkIris ? 1.40 : 1.12;
+      var scanR = findIrisRadiusByRadialScan(imgEl, cxIris_img, cyIris_img, ir, maxRFactor);
+      var rawR  = (scanR && scanR > 6) ? scanR : ir;
+      var irisR_img = Math.min(rawR, ir * capFactor);
+      var radSrc = (irisOD && irisOD.irisR > 6 ? 'hband+' : '') + ((scanR && scanR > 6) ? 'scan' : 'MP');
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
