@@ -1,0 +1,291 @@
+'use strict';
+
+// ======================= AUTO-FIT =======================
+// Classical CV pupil+iris detection. Returns fractions (0..1) so we can apply
+// to the stage regardless of how the image is scaled in.
+function autoFit(src){
+  var sampleSide = 200;  // balanced: better than 160 but coarseR stays calibrated
+  var shorter = Math.min(src.width, src.height);
+  var scale = sampleSide / shorter;
+  var W = Math.max(2, Math.round(src.width * scale));
+  var H = Math.max(2, Math.round(src.height * scale));
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+  octx.drawImage(src, 0, 0, W, H);
+  var data = octx.getImageData(0, 0, W, H).data;
+  var lum = new Float32Array(W*H);
+  var sat = new Float32Array(W*H);
+  var totalLum = 0;
+  for (var i=0; i<W*H; i++){
+    var r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+    lum[i] = 0.299*r + 0.587*g + 0.114*b;
+    var mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+    sat[i] = mx>0 ? (mx-mn)/mx : 0;
+    totalLum += lum[i];
+  }
+  var meanLum = totalLum / (W*H);
+
+  var II = new Float64Array((W+1)*(H+1));
+  for (var y=0; y<H; y++){
+    var rowsum = 0;
+    for (var x=0; x<W; x++){
+      rowsum += lum[y*W + x];
+      II[(y+1)*(W+1) + (x+1)] = II[y*(W+1) + (x+1)] + rowsum;
+    }
+  }
+  function bs(x0,y0,x1,y1){
+    x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
+    if (x1<=x0||y1<=y0) return 0;
+    return II[y1*(W+1)+x1]-II[y0*(W+1)+x1]-II[y1*(W+1)+x0]+II[y0*(W+1)+x0];
+  }
+  function bm(x0,y0,x1,y1){
+    x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
+    var n=(x1-x0)*(y1-y0); return n>0 ? bs(x0,y0,x1,y1)/n : 1e9;
+  }
+
+  // Pupil: dark circle surrounded by brighter tissue.
+  // Compute inner mean excluding bright pixels (catch-light / flash reflection)
+  // so a white glare spot in the pupil center doesn't inflate the average.
+  var darkThresh = Math.min(75, meanLum * 0.48);
+  var glareThresh = 200;  // pixels brighter than this are reflections, ignore
+  function darkMean(x0,y0,x1,y1){
+    x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
+    var s=0, n=0;
+    for (var yy=y0;yy<y1;yy++) for (var xx=x0;xx<x1;xx++){
+      var v=lum[yy*W+xx]; if (v<glareThresh){ s+=v; n++; }
+    }
+    return n>0 ? s/n : 1e9;
+  }
+  function pupilScore(cx,cy,r){
+    var inner = darkMean(cx-r,cy-r,cx+r,cy+r);
+    if (inner > darkThresh + 35) return -1e9;
+    var hr = Math.max(1, r>>1), gap = Math.max(1, r>>2);
+    var surr = [
+      bm(cx+r+gap, cy-hr, cx+2*r+gap, cy+hr+1),
+      bm(cx-2*r-gap, cy-hr, cx-r-gap, cy+hr+1),
+      bm(cx-hr, cy-2*r-gap, cx+hr+1, cy-r-gap),
+      bm(cx-hr, cy+r+gap, cx+hr+1, cy+2*r+gap),
+      bm(cx+r, cy-2*r, cx+2*r, cy-r),
+      bm(cx-2*r, cy-2*r, cx-r, cy-r),
+      bm(cx+r, cy+r, cx+2*r, cy+2*r),
+      bm(cx-2*r, cy+r, cx-r, cy+2*r)
+    ].sort(function(a,b){return a-b;});
+    var medSurr = (surr[3]+surr[4])/2;  // median of 8 — robust to partial occlusion
+    if (medSurr - inner < 10) return -1e9;
+    var cd = Math.hypot(cx - W/2, cy - H/2);
+    var centerBonus = Math.max(0, 1 - cd/(W*0.25));
+    return (medSurr - inner) * (1 + centerBonus*0.4) - cd*0.3;
+  }
+
+  var best = {cx: W>>1, cy: H>>1, r: 6}, bestScore = -1e9;
+  var cxLo=Math.floor(W*0.15), cxHi=Math.ceil(W*0.85);
+  var cyLo=Math.floor(H*0.15), cyHi=Math.ceil(H*0.85);
+  var coarseR = [3,5,7,9,12,15,18,22,26];
+  for (var cx=cxLo; cx<cxHi; cx+=3){
+    for (var cy=cyLo; cy<cyHi; cy+=3){
+      for (var ri=0; ri<coarseR.length; ri++){
+        var s = pupilScore(cx,cy,coarseR[ri]);
+        if (s>bestScore){ bestScore=s; best={cx:cx, cy:cy, r:coarseR[ri]}; }
+      }
+    }
+  }
+  var bx=best.cx, by=best.cy, br=best.r;
+  for (var cx2=Math.max(cxLo,bx-5); cx2<=Math.min(cxHi,bx+5); cx2++){
+    for (var cy2=Math.max(cyLo,by-5); cy2<=Math.min(cyHi,by+5); cy2++){
+      for (var rr=Math.max(2,br-4); rr<=br+4; rr++){
+        var s2 = pupilScore(cx2,cy2,rr);
+        if (s2>bestScore){ bestScore=s2; best={cx:cx2, cy:cy2, r:rr}; }
+      }
+    }
+  }
+  var pcx=best.cx, pcy=best.cy, pr=best.r;
+
+  // Iris boundary: horizontal band gradient scan at pupil center row.
+  // Build a smoothed brightness profile then find the steepest brightness-drop on each side.
+  // The limbus (sclera→iris) is the sharpest edge — works even when nasal sclera is dim.
+  var bandH = 4;
+  var midY = Math.round(pcy);
+  var minGrad = 25;
+
+  var profile = new Float32Array(W);
+  for (var x = 0; x < W; x++){
+    var s=0, n=0;
+    for (var b=-bandH; b<=bandH; b++){
+      var ry=midY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
+    }
+    profile[x] = n ? s/n : 0;
+  }
+
+  var guardR = Math.round(pr * 1.3); // keep scan clear of pupil so iris→pupil drop is never detected
+
+  // Left limbus: largest drop when moving rightward (entering iris from sclera/caruncle)
+  var leftHit = -1, leftMax = minGrad;
+  for (var x = 2; x < Math.round(pcx) - guardR; x++){
+    var drop = profile[x-2] - profile[x];  // delta over 2px to tolerate 1-pixel noise
+    if (drop > leftMax){ leftMax = drop; leftHit = x; }
+  }
+
+  // Right limbus: largest drop when moving leftward (entering iris from sclera)
+  var rightHit = -1, rightMax = minGrad;
+  for (var x = W-3; x > Math.round(pcx) + guardR; x--){
+    var drop = profile[x+2] - profile[x];
+    if (drop > rightMax){ rightMax = drop; rightHit = x; }
+  }
+
+  var ok, irisR;
+  if (leftHit >= 0 && rightHit >= 0){
+    irisR = Math.round((rightHit - leftHit) / 2);
+    pcx   = Math.round((leftHit + rightHit) / 2);
+    ok = true;
+  } else if (leftHit >= 0){
+    irisR = Math.round(pcx - leftHit); ok = true;
+  } else if (rightHit >= 0){
+    irisR = Math.round(rightHit - pcx); ok = true;
+  } else {
+    irisR = Math.round(pr * 2.1); ok = false;
+  }
+
+  return {
+    cxFrac: pcx/W, cyFrac: pcy/H,
+    rPupilFrac: (pr*1.05)/W,
+    rIrisFrac: irisR/W,
+    ok: ok, leftHit: leftHit, rightHit: rightHit,
+    leftGrad: Math.round(leftMax), rightGrad: Math.round(rightMax)
+  };
+}
+
+// Refine the iris/pupil center by finding the weighted centroid of the darkest pixels
+// within searchR of the hint center. The pupil is always the darkest structure in the
+// eye, so this corrects MP's center error on close-up photos lacking face context.
+function findPupilCenter(imgEl, cxHint, cyHint, searchR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return null;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  function lum(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+  var r = Math.round(searchR);
+  var x0 = Math.max(0, Math.round(cxHint - r));
+  var x1 = Math.min(W-1, Math.round(cxHint + r));
+  var y0 = Math.max(0, Math.round(cyHint - r));
+  var y1 = Math.min(H-1, Math.round(cyHint + r));
+  // Collect luminances inside circle, find 40th-percentile threshold (darkest 40% = pupil)
+  var lums = [];
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var ddx = x - cxHint, ddy = y - cyHint;
+      if (ddx*ddx + ddy*ddy > r*r) continue;
+      lums.push(lum(x, y));
+    }
+  }
+  if (lums.length < 10) return null;
+  lums.sort(function(a,b){return a-b;});
+  // Use very dark pixels only (pupil core) — amber/hazel iris can pull the 40th-pct
+  // centroid off-center; capping at lum=50 isolates the true black pupil.
+  var threshold = Math.min(lums[Math.floor(lums.length * 0.30)], 50);
+  // Weighted centroid of dark pixels (weight = how much darker than threshold)
+  var wx = 0, wy = 0, wt = 0;
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var ddx = x - cxHint, ddy = y - cyHint;
+      if (ddx*ddx + ddy*ddy > r*r) continue;
+      var l = lum(x, y);
+      if (l > threshold) continue;
+      var w = threshold - l + 1;
+      wx += x * w; wy += y * w; wt += w;
+    }
+  }
+  if (wt < 1) return null;
+  return { cx: wx / wt, cy: wy / wt };
+}
+
+// Mean luminance of the iris annulus (innerR..outerR). Used to pick scan window:
+// dark irises need a wider maxR to reach the low-contrast limbal edge.
+function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return 128;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  var x0 = Math.max(0, Math.round(cx - outerR));
+  var x1 = Math.min(W-1, Math.round(cx + outerR));
+  var y0 = Math.max(0, Math.round(cy - outerR));
+  var y1 = Math.min(H-1, Math.round(cy + outerR));
+  var sum = 0, count = 0;
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var dx = x - cx, dy = y - cy, d2 = dx*dx + dy*dy;
+      if (d2 < innerR*innerR || d2 > outerR*outerR) continue;
+      var idx = (y * W + x) * 4;
+      sum += 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+      count++;
+    }
+  }
+  return count > 0 ? sum / count : 128;
+}
+
+// Radial brightness scan: find iris outer radius anchored on a known center point.
+// hintR: MP iris radius in crop pixels — used to set a minimum search radius so we
+// skip the pupil→iris boundary and only find the iris→sclera limbal transition.
+// maxRFactor: upper bound = hintR * maxRFactor (default 1.22; use ~1.55 for dark irises).
+// Returns median radius in imgEl pixels, or null if <3 rays succeed.
+function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR, maxRFactor) {
+  if (!maxRFactor) maxRFactor = 1.22;
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return null;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  function lum(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+
+  // If we have an MP hint, clamp the search window tightly around the expected limbal radius.
+  // Lower: skip pupil-iris gradient. Upper: 1.22× keeps Terri's limbal (×1.18) and blocks
+  // Bryan's eyelid/corner hit (×1.22 * 0.97 threshold = ×1.18 effective ceiling).
+  var minR  = hintR ? Math.max(Math.min(W,H)*0.05, hintR * 0.80) : Math.min(W,H)*0.05;
+  var maxR  = hintR ? Math.min(Math.min(W,H)*0.48, hintR * maxRFactor) : Math.min(W,H)*0.48;
+  var step  = Math.max(1, Math.round(Math.min(W, H) * 0.005));
+  var N     = 16;
+  var radii = [];
+
+  for (var a = 0; a < N; a++) {
+    var angle = (a / N) * 2 * Math.PI;
+    var cosA  = Math.cos(angle), sinA = Math.sin(angle);
+    if (sinA < -0.5) continue;   // skip rays toward upper eyelid
+
+    var profile = [];
+    for (var r = Math.ceil(minR); r < maxR; r += step) {
+      profile.push({ r: r, l: lum(cxCrop + r*cosA, cyCrop + r*sinA) });
+    }
+    if (profile.length < 6) continue;
+
+    // Find r of maximum positive gradient (steepest brightness rise = iris→sclera)
+    var bestR = null, bestGrad = 8;
+    for (var i = 2; i < profile.length - 2; i++) {
+      var g = profile[i+2].l - profile[i-2].l;
+      if (g > bestGrad) { bestGrad = g; bestR = profile[i].r; }
+    }
+    if (bestR && bestR > minR && bestR < maxR * 0.97) radii.push(bestR);
+  }
+
+  if (radii.length < 3) return null;
+  radii.sort(function(a,b){ return a-b; });
+  return radii[Math.floor(radii.length / 2)];   // median
+}
