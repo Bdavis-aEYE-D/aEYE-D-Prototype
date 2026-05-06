@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.36 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.37 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -970,23 +970,13 @@ function autoFit(src){
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
-  // Iris boundary: adaptive ray-casting from pupil center.
-  // Sample iris luminance at ~1.4x pupil radius to set an adaptive brightness threshold.
-  // Cast rays outward; a ray registers when it crosses from dark-iris into bright-sclera.
-  // Rays that hit eyelid/skin (dark) or exit the image produce no reading and are ignored.
-  // 35th-percentile of valid crossings gives iris radius (biased away from the rare
-  // eyelid rays that do find skin-bright falsely close in).
+  // Iris boundary: ray-casting from pupil center.
+  // Uses meanLum (whole image) to set threshold — avoids the tight-crop failure mode
+  // where sampling a ring at pr*1.4 lands in the sclera and miscalibrates the threshold.
+  // Sclera is reliably brighter than 1.3x the image mean; eyelid/skin is darker.
   var rMinI = Math.max(pr+4, Math.round(pr*1.9));
   var rMaxI = Math.round(Math.min(W,H)*0.49);
-  var irisLumSum=0, irisLumN=0;
-  var sampleR = Math.round(pr*1.4);
-  for (var i=0; i<32; i++){
-    var th=(i/32)*Math.PI*2;
-    var spx=Math.round(pcx+sampleR*Math.cos(th)), spy=Math.round(pcy+sampleR*Math.sin(th));
-    if (spx>=0&&spx<W&&spy>=0&&spy<H){ irisLumSum+=lum[spy*W+spx]; irisLumN++; }
-  }
-  var irisLum = irisLumN>0 ? irisLumSum/irisLumN : 80;
-  var brightThresh = Math.min(irisLum*1.8+20, 210);
+  var brightThresh = Math.min(Math.max(meanLum*1.3, 130), 200);
   var nRays=64, rayRadii=[];
   for (var ri=0; ri<nRays; ri++){
     var ang=(ri/nRays)*Math.PI*2;
@@ -1001,9 +991,9 @@ function autoFit(src){
   var irisR;
   if (ok){
     rayRadii.sort(function(a,b){return a-b;});
-    irisR = rayRadii[Math.floor(rayRadii.length*0.35)];
+    irisR = rayRadii[Math.floor(rayRadii.length*0.5)];  // median
   } else {
-    irisR = Math.round(pr*2.3);
+    irisR = Math.round(pr*2.1);
   }
 
   return {
@@ -1025,7 +1015,7 @@ function applyAutoFit(){
     var rpx = fit.rPupilFrac * imgEl.width * scaleX;
     var ripx = fit.rIrisFrac * imgEl.width * scaleX;
     // Sanity guards — pupil is typically 25-45% of iris radius
-    ripx = Math.max(rpx*1.8, Math.min(ripx, Math.min(stageW,stageH)*0.48));
+    ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
     rpx = Math.max(6, Math.min(rpx, ripx*0.45));
     donut.rIris = ripx;
     donut.rPupil = rpx;
