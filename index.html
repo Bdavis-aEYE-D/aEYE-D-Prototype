@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.52 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.53 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -1182,7 +1182,9 @@ function findPupilCenter(imgEl, cxHint, cyHint, searchR) {
   }
   if (lums.length < 10) return null;
   lums.sort(function(a,b){return a-b;});
-  var threshold = lums[Math.floor(lums.length * 0.40)];
+  // Use very dark pixels only (pupil core) — amber/hazel iris can pull the 40th-pct
+  // centroid off-center; capping at lum=50 isolates the true black pupil.
+  var threshold = Math.min(lums[Math.floor(lums.length * 0.30)], 50);
   // Weighted centroid of dark pixels (weight = how much darker than threshold)
   var wx = 0, wy = 0, wt = 0;
   for (var y = y0; y <= y1; y++) {
@@ -1199,11 +1201,40 @@ function findPupilCenter(imgEl, cxHint, cyHint, searchR) {
   return { cx: wx / wt, cy: wy / wt };
 }
 
+// Mean luminance of the iris annulus (innerR..outerR). Used to pick scan window:
+// dark irises need a wider maxR to reach the low-contrast limbal edge.
+function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return 128;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  var x0 = Math.max(0, Math.round(cx - outerR));
+  var x1 = Math.min(W-1, Math.round(cx + outerR));
+  var y0 = Math.max(0, Math.round(cy - outerR));
+  var y1 = Math.min(H-1, Math.round(cy + outerR));
+  var sum = 0, count = 0;
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var dx = x - cx, dy = y - cy, d2 = dx*dx + dy*dy;
+      if (d2 < innerR*innerR || d2 > outerR*outerR) continue;
+      var idx = (y * W + x) * 4;
+      sum += 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+      count++;
+    }
+  }
+  return count > 0 ? sum / count : 128;
+}
+
 // Radial brightness scan: find iris outer radius anchored on a known center point.
 // hintR: MP iris radius in crop pixels — used to set a minimum search radius so we
 // skip the pupil→iris boundary and only find the iris→sclera limbal transition.
-// Returns 65th-percentile radius in imgEl pixels, or null if <3 rays succeed.
-function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR) {
+// maxRFactor: upper bound = hintR * maxRFactor (default 1.22; use ~1.55 for dark irises).
+// Returns median radius in imgEl pixels, or null if <3 rays succeed.
+function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR, maxRFactor) {
+  if (!maxRFactor) maxRFactor = 1.22;
   var W = imgEl.naturalWidth  || imgEl.width;
   var H = imgEl.naturalHeight || imgEl.height;
   if (!W || !H) return null;
@@ -1223,7 +1254,7 @@ function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR) {
   // Lower: skip pupil-iris gradient. Upper: 1.22× keeps Terri's limbal (×1.18) and blocks
   // Bryan's eyelid/corner hit (×1.22 * 0.97 threshold = ×1.18 effective ceiling).
   var minR  = hintR ? Math.max(Math.min(W,H)*0.05, hintR * 0.80) : Math.min(W,H)*0.05;
-  var maxR  = hintR ? Math.min(Math.min(W,H)*0.48, hintR * 1.22) : Math.min(W,H)*0.48;
+  var maxR  = hintR ? Math.min(Math.min(W,H)*0.48, hintR * maxRFactor) : Math.min(W,H)*0.48;
   var step  = Math.max(1, Math.round(Math.min(W, H) * 0.005));
   var N     = 16;
   var radii = [];
@@ -1311,14 +1342,17 @@ function applyAutoFit(){
       donut.cx = drawInfo.dx + cx_img * scaleX;
       donut.cy = drawInfo.dy + cy_img * scaleY;
 
-      // Measure iris outer radius by scanning brightness outward from refined center.
-      // Pass ir as a hint so the scan skips the pupil zone and finds the limbal edge.
-      var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir);
-      // Use scan if it found something, but cap at 105% of MP's own estimate.
-      // This corrects dark-eye underestimation while preventing light-eye overshoot
-      // (outlier rays hitting eye corners inflate the scan for low-contrast irises).
+      // Adaptive scan window: dark irises (low limbal contrast) need a wider search
+      // range to reach the true limbal edge; light irises need a tight cap to block
+      // eyelid-corner outliers which produce stronger gradients than the limbal edge.
+      var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
+      var isDarkIris = irisBright < 80;
+      var maxRFactor = isDarkIris ? 1.55 : 1.22;
+      var capFactor  = isDarkIris ? 1.40 : 1.12;
+
+      var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, maxRFactor);
       var rawR  = (scanR && scanR > 6) ? scanR : ir;
-      var finalR = Math.min(rawR, ir * 1.12);
+      var finalR = Math.min(rawR, ir * capFactor);
       var radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
       var ripx  = Math.min(finalR * scaleX, Math.min(stageW,stageH) * 0.45);
 
@@ -1330,7 +1364,7 @@ function applyAutoFit(){
       } catch(e) {
         rpx = ripx * 0.28;
       }
-      rpx = Math.max(6, Math.min(rpx, ripx * 0.38));
+      rpx = Math.max(6, Math.min(rpx, ripx * 0.30));
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
