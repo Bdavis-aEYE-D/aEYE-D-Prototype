@@ -68,14 +68,19 @@
     color: #ffffffcc; text-shadow: 0 1px 4px #000;
   }
 
-  /* Screen flash overlay */
-  #flash-overlay {
-    position: fixed; inset: 0; background: #fff;
+  /* Black-screen capture overlay — covers entire screen so phone isn't a light source */
+  #capture-overlay {
+    position: fixed; inset: 0; background: #000;
     opacity: 0; pointer-events: none;
-    transition: opacity 0.1s ease;
+    transition: opacity 0.15s ease;
     z-index: 999;
   }
-  #flash-overlay.on { opacity: 1; }
+  #capture-overlay.on { opacity: 1; }
+  #capture-overlay .countdown {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255,255,255,0.18); font-size: 80px; font-weight: 800;
+  }
 
   /* Result preview */
   #result-wrap { display: none; margin-top: 12px; }
@@ -96,8 +101,8 @@
 </head>
 <body>
 
-<!-- Screen-flash overlay (covers entire screen) -->
-<div id="flash-overlay"></div>
+<!-- Black-screen overlay — phone goes dark so it's not a reflection source -->
+<div id="capture-overlay"><div class="countdown" id="countdown-num"></div></div>
 
 <header>
   <div class="logo">eye<span>D</span> Camera POC</div>
@@ -129,7 +134,7 @@
     </div>
     <div class="status" id="status">Camera ready</div>
 
-    <button type="button" id="btn-capture">Capture (with screen flash)</button>
+    <button type="button" id="btn-capture">Capture (black screen — 3 s countdown)</button>
     <button type="button" class="secondary" id="btn-torch" style="display:none">
       Toggle Torch (Android only)
     </button>
@@ -160,7 +165,8 @@
 
   var video      = document.getElementById('viewfinder');
   var canvas     = document.getElementById('capture-canvas');
-  var flashEl    = document.getElementById('flash-overlay');
+  var captureOverlay = document.getElementById('capture-overlay');
+  var countdownNum   = document.getElementById('countdown-num');
   var statusEl   = document.getElementById('status');
   var logEl      = document.getElementById('log');
   var guideText  = document.getElementById('guide-text');
@@ -188,7 +194,7 @@
         ok: typeof ImageCapture !== 'undefined' },
       { label: 'Torch (Android Chrome)',
         ok: false, id: 'cap-torch' }, // checked after stream starts
-      { label: 'Screen brightness trick (all platforms)',
+      { label: 'Black-screen capture (no phone reflections)',
         ok: true },
     ];
     list.innerHTML = caps.map(function(c) {
@@ -257,56 +263,47 @@
     });
   });
 
-  // ---- Screen-flash pre-constriction + capture ----
+  // ---- Black-screen capture — phone goes dark, eliminating it as a reflection source ----
   document.getElementById('btn-capture').addEventListener('click', function() {
     if (!stream) return;
     var btn = this;
     btn.disabled = true;
-    setStatus('Flashing to constrict pupil…');
+    setStatus('Going dark — hold still…');
     log('--- Capture sequence start ---');
-    log('Step 1: Screen flash ON');
 
-    // Step 1: Flash screen white (works on all platforms)
-    flashEl.classList.add('on');
+    // Step 1: Cover screen with black overlay — phone is no longer a light source
+    captureOverlay.classList.add('on');
+    log('Step 1: Screen black — phone reflection eliminated');
 
-    // If torch available, also turn it on
-    var torchPromise = Promise.resolve();
-    if (torchAvailable) {
-      log('Step 1b: Torch ON');
-      torchPromise = stream.getVideoTracks()[0].applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(function(e) { log('Torch on error: ' + e.message); });
-    }
+    // Step 2: Count down 3 s while dark — camera auto-exposure adjusts to ambient light
+    var remaining = 3;
+    countdownNum.textContent = remaining;
+    var ticker = setInterval(function() {
+      remaining--;
+      if (remaining > 0) {
+        countdownNum.textContent = remaining;
+      } else {
+        clearInterval(ticker);
+        countdownNum.textContent = '';
+      }
+    }, 1000);
 
-    torchPromise.then(function() {
-      // Step 2: Hold flash for 1.5s — pupil constricts in ~200-400ms
-      return new Promise(function(resolve) { setTimeout(resolve, 1500); });
-    }).then(function() {
-      log('Step 2: Flash held 1.5s — pupil should be constricted');
-      log('Step 3: Flash OFF, capturing frame…');
-
-      // Step 3: Turn off flash, capture immediately while pupil still constricted
-      flashEl.classList.remove('on');
+    new Promise(function(resolve) { setTimeout(resolve, 3000); })
+    .then(function() {
+      log('Step 2: 3s dark hold complete — capturing frame');
       setStatus('Capturing…');
 
-      // Turn torch off if it was on
-      if (torchAvailable) {
-        stream.getVideoTracks()[0].applyConstraints({
-          advanced: [{ torch: false }]
-        }).catch(function(){});
-      }
-
-      // Small delay for screen to go dark
-      return new Promise(function(resolve) { setTimeout(resolve, 80); });
-    }).then(function() {
-      // Step 4: Grab frame from video
+      // Step 3: Grab frame while screen is still black
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       var ctx = canvas.getContext('2d');
-      // Un-mirror for the captured image (was mirrored for selfie display)
+      // Un-mirror for the captured image (viewfinder mirrors for selfie feel)
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0);
+
+      // Step 4: Restore UI
+      captureOverlay.classList.remove('on');
 
       var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       resultImg.src = dataUrl;
@@ -316,12 +313,13 @@
 
       var kb = Math.round(dataUrl.length * 0.75 / 1024);
       resultStatus.textContent = 'Captured ' + canvas.width + '×' + canvas.height + ' — ' + kb + ' KB';
-      log('Step 4: Frame captured ' + canvas.width + 'x' + canvas.height + ' (' + kb + 'KB)');
+      log('Step 3: Frame captured ' + canvas.width + 'x' + canvas.height + ' (' + kb + 'KB)');
       log('--- Capture sequence complete ---');
       setStatus('Done — check result below');
     }).catch(function(e) {
+      clearInterval(ticker);
       log('Capture error: ' + e.message);
-      flashEl.classList.remove('on');
+      captureOverlay.classList.remove('on');
     }).finally(function() {
       btn.disabled = false;
     });
