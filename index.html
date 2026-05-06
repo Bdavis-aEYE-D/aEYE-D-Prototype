@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.41 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.42 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -970,30 +970,36 @@ function autoFit(src){
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
-  // Iris boundary: horizontal band scan at pupil center row.
-  // The horizontal midline has no eyelids — iris transitions cleanly to sclera on both sides.
-  // Average a ±bandH pixel band to smooth over iris texture variation.
-  var scleraThresh = Math.min(Math.max(meanLum * 1.35, 148), 200);
+  // Iris boundary: horizontal band gradient scan at pupil center row.
+  // Build a smoothed brightness profile then find the steepest brightness-drop on each side.
+  // The limbus (sclera→iris) is the sharpest edge — works even when nasal sclera is dim.
   var bandH = 4;
   var midY = Math.round(pcy);
-  var innerR = Math.round(pr * 1.15); // start scan just past pupil edge
+  var minGrad = 25;
 
-  var leftHit = -1;
-  for (var x = Math.round(pcx) - innerR; x >= 0; x--){
+  var profile = new Float32Array(W);
+  for (var x = 0; x < W; x++){
     var s=0, n=0;
     for (var b=-bandH; b<=bandH; b++){
       var ry=midY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
     }
-    if (s/n > scleraThresh){ leftHit = x; break; }
+    profile[x] = n ? s/n : 0;
   }
 
-  var rightHit = -1;
-  for (var x = Math.round(pcx) + innerR; x < W; x++){
-    var s=0, n=0;
-    for (var b=-bandH; b<=bandH; b++){
-      var ry=midY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
-    }
-    if (s/n > scleraThresh){ rightHit = x; break; }
+  var guardR = Math.round(pr * 1.3); // keep scan clear of pupil so iris→pupil drop is never detected
+
+  // Left limbus: largest drop when moving rightward (entering iris from sclera/caruncle)
+  var leftHit = -1, leftMax = minGrad;
+  for (var x = 2; x < Math.round(pcx) - guardR; x++){
+    var drop = profile[x-2] - profile[x];  // delta over 2px to tolerate 1-pixel noise
+    if (drop > leftMax){ leftMax = drop; leftHit = x; }
+  }
+
+  // Right limbus: largest drop when moving leftward (entering iris from sclera)
+  var rightHit = -1, rightMax = minGrad;
+  for (var x = W-3; x > Math.round(pcx) + guardR; x--){
+    var drop = profile[x+2] - profile[x];
+    if (drop > rightMax){ rightMax = drop; rightHit = x; }
   }
 
   var ok, irisR;
@@ -1013,7 +1019,8 @@ function autoFit(src){
     cxFrac: pcx/W, cyFrac: pcy/H,
     rPupilFrac: (pr*1.05)/W,
     rIrisFrac: irisR/W,
-    ok: ok, leftHit: leftHit, rightHit: rightHit, thresh: Math.round(scleraThresh)
+    ok: ok, leftHit: leftHit, rightHit: rightHit,
+    leftGrad: Math.round(leftMax), rightGrad: Math.round(rightMax)
   };
 }
 
@@ -1039,8 +1046,8 @@ function applyAutoFit(){
     rp.value = Math.round(rpx);
     var st = $('autofit-status');
     if (st) st.textContent = fit.ok
-      ? 'Auto-fit: snapped to iris (L=' + fit.leftHit + ' R=' + fit.rightHit + ' t=' + fit.thresh + ')'
-      : 'Auto-fit: iris estimated (t=' + fit.thresh + ')';
+      ? 'Auto-fit: snapped to iris (L=' + fit.leftHit + ' R=' + fit.rightHit + ' dL=' + fit.leftGrad + ' dR=' + fit.rightGrad + ')'
+      : 'Auto-fit: iris estimated (L=' + fit.leftHit + ' R=' + fit.rightHit + ')';
     draw();
     return fit.ok;
   } catch (e) {
