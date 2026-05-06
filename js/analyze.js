@@ -714,7 +714,7 @@ function renderHighlights(result){
   if (result.vibe) {
     items.push({
       title: '"' + result.vibe + '"',
-      desc: 'A descriptive nickname capturing your eye's overall character — based on category and lightness.',
+      desc: "A descriptive nickname capturing your eye's overall character — based on category and lightness.",
       swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
     });
   }
