@@ -508,7 +508,7 @@ function applyAutoFit(){
       var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
       var isDarkIris = irisBright < 80;
       var maxRFactor = isDarkIris ? 1.55 : 1.22;
-      var capFactor  = isDarkIris ? 1.40 : 1.12;
+      var capFactor  = isDarkIris ? 1.40 : 1.17;
       var scanR = findIrisRadiusByRadialScan(imgEl, cxIris_img, cyIris_img, ir, maxRFactor);
       var rawR  = (scanR && scanR > 6) ? scanR : ir;
       var irisR_img = Math.min(rawR, ir * capFactor);
