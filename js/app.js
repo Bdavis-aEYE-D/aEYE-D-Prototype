@@ -19,8 +19,6 @@ window.addEventListener('error', function(ev){
   showError((ev.message || 'unknown') + (ev.filename ? ' (' + ev.filename + ':' + ev.lineno + ')' : ''));
 });
 
-try {
-
 var $ = function (id) { return document.getElementById(id); };
 
 // ======================= TAB SWITCHING =======================
@@ -937,7 +935,3 @@ function uploadToSupabase(result) {
 
 // Everything attached — flip banner to green
 markRunning();
-
-} catch (err) {
-  showError(err && err.message ? err.message : String(err));
-}
