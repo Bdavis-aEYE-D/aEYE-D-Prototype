@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.47 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.48 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -1059,6 +1059,56 @@ function autoFit(src){
   };
 }
 
+// Radial brightness scan: find iris outer radius anchored on a known center point.
+// Scans outward along 16 rays; the steepest brightness jump on each ray marks the
+// iris→sclera boundary. Returns median radius in imgEl pixels, or null if <3 rays succeed.
+function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H) return null;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  function lum(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+
+  var minR  = Math.min(W, H) * 0.05;   // skip pupil zone
+  var maxR  = Math.min(W, H) * 0.48;
+  var step  = Math.max(1, Math.round(Math.min(W, H) * 0.005));
+  var N     = 16;
+  var radii = [];
+
+  for (var a = 0; a < N; a++) {
+    var angle = (a / N) * 2 * Math.PI;
+    var cosA  = Math.cos(angle), sinA = Math.sin(angle);
+    if (sinA < -0.5) continue;   // skip rays toward upper eyelid
+
+    var profile = [];
+    for (var r = Math.ceil(minR); r < maxR; r += step) {
+      profile.push({ r: r, l: lum(cxCrop + r*cosA, cyCrop + r*sinA) });
+    }
+    if (profile.length < 6) continue;
+
+    // Find r of maximum positive gradient (steepest brightness rise = iris→sclera)
+    var bestR = null, bestGrad = 12;
+    for (var i = 2; i < profile.length - 2; i++) {
+      var g = profile[i+2].l - profile[i-2].l;
+      if (g > bestGrad) { bestGrad = g; bestR = profile[i].r; }
+    }
+    if (bestR && bestR > minR * 1.3 && bestR < maxR * 0.92) radii.push(bestR);
+  }
+
+  if (radii.length < 3) return null;
+  radii.sort(function(a,b){ return a-b; });
+  return radii[Math.floor(radii.length / 2)];   // median
+}
+
 function applyAutoFit(){
   if (!imgEl) return false;
   var hint = $('autofit-hint');
@@ -1098,9 +1148,6 @@ function applyAutoFit(){
       ir /= 4;
       if (ir < 4) { if (hint) hint.textContent = 'Iris too small — using fallback'; _applyFitClassical(); return; }
 
-      // MediaPipe measures to the outer limbal ring edge; scale inward to true iris boundary
-      ir *= 0.87;
-
       // Transform from originalImgEl space → cropped imgEl space → stage
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
       var cy_img = c.y * imgH - (cropRegion ? cropRegion.y : 0);
@@ -1108,10 +1155,21 @@ function applyAutoFit(){
       var scaleY = drawInfo.dh / imgEl.height;
       donut.cx = drawInfo.dx + cx_img * scaleX;
       donut.cy = drawInfo.dy + cy_img * scaleY;
-      // Trust MediaPipe for iris radius; cap within stage bounds
-      var ripx = Math.min(ir * scaleX, Math.min(stageW,stageH) * 0.45);
 
-      // Classical CV for pupil inner ring only; capped relative to iris ring
+      // Measure iris outer radius by scanning brightness outward from MP center.
+      // Steepest brightness jump along each ray = iris→sclera transition.
+      // Falls back to MP landmark radius (with empirical 0.87 correction) if scan fails.
+      var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img);
+      var ripx, radSrc;
+      if (scanR && scanR > 6) {
+        ripx = Math.min(scanR * scaleX, Math.min(stageW,stageH) * 0.45);
+        radSrc = 'scan';
+      } else {
+        ripx = Math.min(ir * 0.87 * scaleX, Math.min(stageW,stageH) * 0.45);
+        radSrc = 'MP';
+      }
+
+      // Classical CV for pupil inner ring; capped relative to iris ring
       var rpx;
       try {
         var cf = autoFit(imgEl);
@@ -1127,7 +1185,7 @@ function applyAutoFit(){
       if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
       if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
       if (hint) hint.textContent = 'Auto-fit complete. Tap “Analyze Iris” or adjust manually.';
-      if (st)   st.textContent   = 'MP ✓ ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' r=' + Math.round(ir) + ' cw=' + cropRegion.w;
+      if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cx=' + Math.round(cx_img) + ' cy=' + Math.round(cy_img);
       draw();
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
