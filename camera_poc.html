@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Camera POC — eyeD</title>
+<style>
+  :root {
+    --bg: #0b1020; --card: #1a2240; --ink: #f4f6ff;
+    --ink-dim: #aab1cc; --accent: #6cc4ff; --line: #2a335c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    overscroll-behavior: none; }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+  header { padding: 14px 18px 8px; display: flex; align-items: center;
+    justify-content: space-between; }
+  .logo { font-weight: 800; font-size: 20px; }
+  .logo span { color: var(--accent); }
+  .tag { font-size: 11px; color: var(--ink-dim); text-transform: uppercase;
+    letter-spacing: 1.4px; }
+
+  main { padding: 8px 16px 40px; max-width: 520px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; padding: 16px; margin: 12px 0; }
+  h2 { margin: 0 0 6px; font-size: 17px; }
+  p, li { color: var(--ink-dim); font-size: 14px; line-height: 1.5; margin: 6px 0; }
+
+  button {
+    -webkit-appearance: none; appearance: none; border: none;
+    background: var(--accent); color: #002338; font-family: inherit;
+    font-weight: 700; font-size: 15px; padding: 14px 18px;
+    border-radius: 14px; cursor: pointer; width: 100%;
+    touch-action: manipulation; margin-top: 10px;
+  }
+  button.secondary { background: transparent; color: var(--ink);
+    border: 1px solid var(--line); }
+  button:disabled { opacity: 0.4; }
+  button:active { opacity: 0.7; }
+
+  /* Viewfinder */
+  .viewfinder-wrap {
+    position: relative; background: #000; border-radius: 14px;
+    overflow: hidden; aspect-ratio: 3/4; width: 100%;
+  }
+  #viewfinder { display: block; width: 100%; height: 100%;
+    object-fit: cover; transform: scaleX(-1); } /* mirror for selfie */
+  #capture-canvas { display: none; }
+
+  /* Face guide overlay */
+  .face-guide {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .face-oval {
+    width: 62%; padding-top: 82%; border-radius: 50%;
+    border: 2px dashed rgba(108,196,255,0.5);
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .guide-text {
+    position: absolute; bottom: 14px; left: 0; right: 0;
+    text-align: center; font-size: 13px; font-weight: 600;
+    color: #ffffffcc; text-shadow: 0 1px 4px #000;
+  }
+
+  /* Screen flash overlay */
+  #flash-overlay {
+    position: fixed; inset: 0; background: #fff;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.1s ease;
+    z-index: 999;
+  }
+  #flash-overlay.on { opacity: 1; }
+
+  /* Result preview */
+  #result-wrap { display: none; margin-top: 12px; }
+  #result-wrap img { width: 100%; border-radius: 14px; display: block; }
+
+  /* Status + log */
+  .status { font-size: 13px; color: var(--accent); margin: 8px 0 4px;
+    min-height: 20px; font-weight: 600; }
+  .log { font-size: 11px; color: var(--ink-dim); font-family: monospace;
+    white-space: pre-wrap; background: #00000055; border-radius: 8px;
+    padding: 8px; margin-top: 6px; max-height: 120px; overflow-y: auto; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px; margin-left: 6px; }
+  .badge.ok { background: #00aa5533; color: #44ffaa; border: 1px solid #00aa55; }
+  .badge.no { background: #aa000033; color: #ff6688; border: 1px solid #aa0033; }
+</style>
+</head>
+<body>
+
+<!-- Screen-flash overlay (covers entire screen) -->
+<div id="flash-overlay"></div>
+
+<header>
+  <div class="logo">eye<span>D</span> Camera POC</div>
+  <div class="tag">v1.0</div>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>Custom camera proof-of-concept</h2>
+    <p>Tests getUserMedia viewfinder, screen-flash pupil constriction, torch
+      control (Android), and frame capture — all without leaving the app.</p>
+
+    <div id="capability-list" style="margin:10px 0"></div>
+
+    <button type="button" id="btn-start">Start Camera</button>
+  </div>
+
+  <!-- Live viewfinder (hidden until camera starts) -->
+  <div class="card" id="card-viewfinder" style="display:none">
+    <h2>Viewfinder</h2>
+    <div class="viewfinder-wrap">
+      <video id="viewfinder" autoplay playsinline muted></video>
+      <canvas id="capture-canvas"></canvas>
+      <div class="face-guide">
+        <div class="face-oval"></div>
+        <div class="guide-text" id="guide-text">Centre your face in the oval</div>
+      </div>
+    </div>
+    <div class="status" id="status">Camera ready</div>
+
+    <button type="button" id="btn-capture">Capture (with screen flash)</button>
+    <button type="button" class="secondary" id="btn-torch" style="display:none">
+      Toggle Torch (Android only)
+    </button>
+    <button type="button" class="secondary" id="btn-stop">Stop Camera</button>
+  </div>
+
+  <!-- Captured result -->
+  <div class="card" id="card-result" style="display:none">
+    <h2>Captured frame</h2>
+    <div id="result-wrap">
+      <img id="result-img" alt="Captured frame">
+    </div>
+    <div class="status" id="result-status"></div>
+    <button type="button" id="btn-retake" class="secondary">Retake</button>
+  </div>
+
+  <!-- Debug log -->
+  <div class="card">
+    <h2>Log</h2>
+    <div class="log" id="log">Waiting…</div>
+  </div>
+
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  var video      = document.getElementById('viewfinder');
+  var canvas     = document.getElementById('capture-canvas');
+  var flashEl    = document.getElementById('flash-overlay');
+  var statusEl   = document.getElementById('status');
+  var logEl      = document.getElementById('log');
+  var guideText  = document.getElementById('guide-text');
+  var resultImg  = document.getElementById('result-img');
+  var resultStatus = document.getElementById('result-status');
+
+  var stream = null;
+  var torchOn = false;
+  var torchAvailable = false;
+
+  // ---- Logging ----
+  function log(msg) {
+    logEl.textContent += '\n' + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  // ---- Capability detection ----
+  function checkCapabilities() {
+    var list = document.getElementById('capability-list');
+    var caps = [
+      { label: 'getUserMedia',
+        ok: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) },
+      { label: 'ImageCapture API',
+        ok: typeof ImageCapture !== 'undefined' },
+      { label: 'Torch (Android Chrome)',
+        ok: false, id: 'cap-torch' }, // checked after stream starts
+      { label: 'Screen brightness trick (all platforms)',
+        ok: true },
+    ];
+    list.innerHTML = caps.map(function(c) {
+      var badge = c.ok
+        ? '<span class="badge ok">Available</span>'
+        : '<span class="badge no">Not available</span>';
+      return '<p style="margin:4px 0" id="' + (c.id||'') + '">'
+        + c.label + badge + '</p>';
+    }).join('');
+  }
+  checkCapabilities();
+
+  // ---- Start camera ----
+  document.getElementById('btn-start').addEventListener('click', function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Camera not available in this browser. Try Chrome or Safari.');
+      return;
+    }
+    log('Requesting camera…');
+    navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'user',        // front camera for selfies
+        width:  { ideal: 1280 },
+        height: { ideal: 960 },
+      },
+      audio: false
+    }).then(function(s) {
+      stream = s;
+      video.srcObject = s;
+      video.play();
+      document.getElementById('card-viewfinder').style.display = 'block';
+      document.getElementById('card-capture').style.display = 'none';
+      setStatus('Camera ready');
+      log('Stream started: '
+        + s.getVideoTracks()[0].label);
+
+      // Check torch
+      var track = s.getVideoTracks()[0];
+      var caps = track.getCapabilities ? track.getCapabilities() : {};
+      torchAvailable = !!(caps.torch);
+      log('Torch available: ' + torchAvailable);
+      if (torchAvailable) {
+        document.getElementById('btn-torch').style.display = 'block';
+        var torchBadge = document.getElementById('cap-torch');
+        if (torchBadge) torchBadge.innerHTML =
+          'Torch (Android Chrome)<span class="badge ok">Available</span>';
+      }
+    }).catch(function(e) {
+      log('Camera error: ' + e.name + ' — ' + e.message);
+      alert('Could not access camera: ' + e.message);
+    });
+  });
+
+  // ---- Torch toggle ----
+  document.getElementById('btn-torch').addEventListener('click', function() {
+    if (!stream || !torchAvailable) return;
+    torchOn = !torchOn;
+    stream.getVideoTracks()[0].applyConstraints({
+      advanced: [{ torch: torchOn }]
+    }).then(function() {
+      log('Torch: ' + (torchOn ? 'ON' : 'OFF'));
+      document.getElementById('btn-torch').textContent =
+        torchOn ? 'Turn Torch Off' : 'Toggle Torch (Android only)';
+    }).catch(function(e) {
+      log('Torch error: ' + e.message);
+    });
+  });
+
+  // ---- Screen-flash pre-constriction + capture ----
+  document.getElementById('btn-capture').addEventListener('click', function() {
+    if (!stream) return;
+    var btn = this;
+    btn.disabled = true;
+    setStatus('Flashing to constrict pupil…');
+    log('--- Capture sequence start ---');
+    log('Step 1: Screen flash ON');
+
+    // Step 1: Flash screen white (works on all platforms)
+    flashEl.classList.add('on');
+
+    // If torch available, also turn it on
+    var torchPromise = Promise.resolve();
+    if (torchAvailable) {
+      log('Step 1b: Torch ON');
+      torchPromise = stream.getVideoTracks()[0].applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(function(e) { log('Torch on error: ' + e.message); });
+    }
+
+    torchPromise.then(function() {
+      // Step 2: Hold flash for 1.5s — pupil constricts in ~200-400ms
+      return new Promise(function(resolve) { setTimeout(resolve, 1500); });
+    }).then(function() {
+      log('Step 2: Flash held 1.5s — pupil should be constricted');
+      log('Step 3: Flash OFF, capturing frame…');
+
+      // Step 3: Turn off flash, capture immediately while pupil still constricted
+      flashEl.classList.remove('on');
+      setStatus('Capturing…');
+
+      // Turn torch off if it was on
+      if (torchAvailable) {
+        stream.getVideoTracks()[0].applyConstraints({
+          advanced: [{ torch: false }]
+        }).catch(function(){});
+      }
+
+      // Small delay for screen to go dark
+      return new Promise(function(resolve) { setTimeout(resolve, 80); });
+    }).then(function() {
+      // Step 4: Grab frame from video
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      // Un-mirror for the captured image (was mirrored for selfie display)
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0);
+
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      resultImg.src = dataUrl;
+      document.getElementById('result-wrap').style.display = 'block';
+      document.getElementById('card-result').style.display = 'block';
+      document.getElementById('card-result').scrollIntoView({ behavior: 'smooth' });
+
+      var kb = Math.round(dataUrl.length * 0.75 / 1024);
+      resultStatus.textContent = 'Captured ' + canvas.width + '×' + canvas.height + ' — ' + kb + ' KB';
+      log('Step 4: Frame captured ' + canvas.width + 'x' + canvas.height + ' (' + kb + 'KB)');
+      log('--- Capture sequence complete ---');
+      setStatus('Done — check result below');
+    }).catch(function(e) {
+      log('Capture error: ' + e.message);
+      flashEl.classList.remove('on');
+    }).finally(function() {
+      btn.disabled = false;
+    });
+  });
+
+  // ---- Retake ----
+  document.getElementById('btn-retake').addEventListener('click', function() {
+    document.getElementById('card-result').style.display = 'none';
+    document.getElementById('result-wrap').style.display = 'none';
+    setStatus('Camera ready');
+  });
+
+  // ---- Stop camera ----
+  document.getElementById('btn-stop').addEventListener('click', function() {
+    if (stream) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      stream = null;
+    }
+    video.srcObject = null;
+    document.getElementById('card-viewfinder').style.display = 'none';
+    document.getElementById('card-capture').style.display = 'block';
+    log('Camera stopped.');
+  });
+
+  log('Page loaded. Ready.');
+})();
+</script>
+
+</body>
+</html>
