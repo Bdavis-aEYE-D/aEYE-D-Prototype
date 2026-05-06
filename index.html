@@ -169,7 +169,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.49 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.50 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -216,7 +216,7 @@
       </div>
       <div class="hint">Tap the center of the iris. Use the slider to adjust the crop.</div>
       <label class="tinylabel">Crop size</label>
-      <input class="slider" id="r-crop" type="range" min="8" max="60" value="22">
+      <input class="slider" id="r-crop" type="range" min="8" max="60" value="14">
       <div class="controls">
         <button type="button" class="secondary" id="btn-locate-back">Back</button>
         <button type="button" id="btn-zoom-in" disabled style="opacity:0.5">Zoom In &rarr;</button>
@@ -739,7 +739,7 @@ var locCanvas = $('locate-canvas'), lctx = locCanvas.getContext('2d');
 var locStageW = 600, locStageH = 600;
 var locDraw = { dx:0, dy:0, dw:600, dh:600 };
 var locTap = null;      // {sx, sy} in stage pixels, or null
-var cropPct = 22;       // crop size as % of longer image side
+var cropPct = 14;       // crop size as % of longer image side
 
 function loadOriginalFromUrl(url){
   var img = new Image();
@@ -1150,9 +1150,10 @@ function autoFit(src){
 }
 
 // Radial brightness scan: find iris outer radius anchored on a known center point.
-// Scans outward along 16 rays; the steepest brightness jump on each ray marks the
-// iris→sclera boundary. Returns median radius in imgEl pixels, or null if <3 rays succeed.
-function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop) {
+// hintR: MP iris radius in crop pixels — used to set a minimum search radius so we
+// skip the pupil→iris boundary and only find the iris→sclera limbal transition.
+// Returns 65th-percentile radius in imgEl pixels, or null if <3 rays succeed.
+function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR) {
   var W = imgEl.naturalWidth  || imgEl.width;
   var H = imgEl.naturalHeight || imgEl.height;
   if (!W || !H) return null;
@@ -1168,8 +1169,11 @@ function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop) {
     return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
   }
 
-  var minR  = Math.min(W, H) * 0.05;   // skip pupil zone
-  var maxR  = Math.min(W, H) * 0.48;
+  // If we have an MP hint, clamp the search window tightly around the expected limbal radius.
+  // Lower: skip pupil-iris gradient. Upper: 1.22× keeps Terri's limbal (×1.18) and blocks
+  // Bryan's eyelid/corner hit (×1.22 * 0.97 threshold = ×1.18 effective ceiling).
+  var minR  = hintR ? Math.max(Math.min(W,H)*0.05, hintR * 0.80) : Math.min(W,H)*0.05;
+  var maxR  = hintR ? Math.min(Math.min(W,H)*0.48, hintR * 1.22) : Math.min(W,H)*0.48;
   var step  = Math.max(1, Math.round(Math.min(W, H) * 0.005));
   var N     = 16;
   var radii = [];
@@ -1186,12 +1190,12 @@ function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop) {
     if (profile.length < 6) continue;
 
     // Find r of maximum positive gradient (steepest brightness rise = iris→sclera)
-    var bestR = null, bestGrad = 12;
+    var bestR = null, bestGrad = 8;
     for (var i = 2; i < profile.length - 2; i++) {
       var g = profile[i+2].l - profile[i-2].l;
       if (g > bestGrad) { bestGrad = g; bestR = profile[i].r; }
     }
-    if (bestR && bestR > minR * 1.3 && bestR < maxR * 0.92) radii.push(bestR);
+    if (bestR && bestR > minR && bestR < maxR * 0.97) radii.push(bestR);
   }
 
   if (radii.length < 3) return null;
@@ -1247,17 +1251,15 @@ function applyAutoFit(){
       donut.cy = drawInfo.dy + cy_img * scaleY;
 
       // Measure iris outer radius by scanning brightness outward from MP center.
-      // Steepest brightness jump along each ray = iris→sclera transition.
-      // Falls back to MP landmark radius (with empirical 0.87 correction) if scan fails.
-      var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img);
-      var ripx, radSrc;
-      if (scanR && scanR > 6) {
-        ripx = Math.min(scanR * scaleX, Math.min(stageW,stageH) * 0.45);
-        radSrc = 'scan';
-      } else {
-        ripx = Math.min(ir * 0.87 * scaleX, Math.min(stageW,stageH) * 0.45);
-        radSrc = 'MP';
-      }
+      // Pass ir as a hint so the scan skips the pupil zone and finds the limbal edge.
+      var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir);
+      // Use scan if it found something, but cap at 105% of MP's own estimate.
+      // This corrects dark-eye underestimation while preventing light-eye overshoot
+      // (outlier rays hitting eye corners inflate the scan for low-contrast irises).
+      var rawR  = (scanR && scanR > 6) ? scanR : ir;
+      var finalR = Math.min(rawR, ir * 1.05);
+      var radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+      var ripx  = Math.min(finalR * scaleX, Math.min(stageW,stageH) * 0.45);
 
       // Classical CV for pupil inner ring; capped relative to iris ring
       var rpx;
