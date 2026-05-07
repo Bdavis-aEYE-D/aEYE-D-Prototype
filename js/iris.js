@@ -732,3 +732,64 @@ function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
   // Return in imgEl (not crop-local) coordinates
   return { cx: fCx + rx0, cy: fCy + ry0, r: fR, score: fBest };
 }
+
+// ---- Gross-error placement check ----
+// After the iris circle is set, verify that the boundary makes anatomical sense.
+// Samples small patches just outside the iris at 3 o'clock and 9 o'clock:
+//   • Those spots should be bright white sclera (lum > SCLERA_MIN)
+//   • They should be noticeably brighter than the iris body at the same radius
+// Returns { ok, leftOk, rightOk, advisory } in imgEl pixel space.
+// "ok" = at least one side passes; advisory = null when ok, human-readable string otherwise.
+function checkIrisPlacement(imgEl, cx, cy, rIris) {
+  var W = imgEl.naturalWidth || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || rIris < 5) return { ok: true, advisory: null };
+
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  // Average luminance in a small square patch centred on (px, py)
+  function patchLum(px, py, pr) {
+    pr = Math.max(2, Math.round(pr));
+    var s = 0, n = 0;
+    for (var dy = -pr; dy <= pr; dy++) {
+      for (var dx = -pr; dx <= pr; dx++) {
+        var xx = Math.round(px + dx), yy = Math.round(py + dy);
+        if (xx < 0 || xx >= W || yy < 0 || yy >= H) continue;
+        var idx = (yy * W + xx) * 4;
+        s += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        n++;
+      }
+    }
+    return n > 0 ? s / n : 0;
+  }
+
+  var pr       = Math.max(3, Math.round(rIris * 0.08)); // patch half-size
+  var outerMul = 1.18;   // just outside the iris boundary
+  var innerMul = 0.72;   // inside the iris body
+
+  var rightOuterLum = patchLum(cx + rIris * outerMul, cy, pr);
+  var leftOuterLum  = patchLum(cx - rIris * outerMul, cy, pr);
+  var rightInnerLum = patchLum(cx + rIris * innerMul, cy, pr);
+  var leftInnerLum  = patchLum(cx - rIris * innerMul, cy, pr);
+
+  var SCLERA_MIN    = 110;  // sclera should be at least this bright
+  var CONTRAST_MIN  = 25;   // and at least this much brighter than the iris body beside it
+
+  var rightOk = rightOuterLum >= SCLERA_MIN &&
+                (rightOuterLum - rightInnerLum) >= CONTRAST_MIN;
+  var leftOk  = leftOuterLum  >= SCLERA_MIN &&
+                (leftOuterLum  - leftInnerLum)  >= CONTRAST_MIN;
+  var ok = rightOk || leftOk;
+
+  return {
+    ok:             ok,
+    leftOk:         leftOk,
+    rightOk:        rightOk,
+    leftOuterLum:   Math.round(leftOuterLum),
+    rightOuterLum:  Math.round(rightOuterLum),
+    advisory:       ok ? null : 'Circle may be off — tap to reposition or drag to adjust'
+  };
+}

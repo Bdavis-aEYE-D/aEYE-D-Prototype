@@ -509,22 +509,34 @@ function applyAutoFit(){
         }
       }
 
-      // Step 2: Find iris by ring contrast — search around MP hint for the position
-      // where sclera (outside) is brightest relative to iris body (inside).
-      var rc = findIrisByRingContrast(imgEl, cx_img, cy_img, ir);
+      // Step 2a: Pupil radius (needed as guard for horizontal limbus scan)
+      var pupilR_pre = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, ir);
+
+      // Step 2b: Iris OD via horizontal limbus — the iris→sclera boundary at 3 and 9 o'clock
+      // has the highest contrast and no eyelid occlusion. Use this as the primary radius finder.
+      var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
       var cxIris_img, cyIris_img, irisR_img, radSrc;
-      if (rc) {
-        cxIris_img = rc.cx;
-        cyIris_img = rc.cy;
-        irisR_img  = rc.r;
-        radSrc = 'RC' + Math.round(rc.score);
+      if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 3.5) {
+        cxIris_img = odh.cxIris;
+        cyIris_img = odh.cyIris;
+        irisR_img  = odh.irisR;
+        radSrc = 'OD';
       } else {
-        // Ring contrast found nothing — keep MP hint position and try radial scan for radius
-        cxIris_img = cx_img;
-        cyIris_img = cy_img;
-        var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
-        irisR_img  = (scanR && scanR > 6) ? scanR : ir;
-        radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+        // Fallback 1: ring contrast (global search)
+        var rc = findIrisByRingContrast(imgEl, cx_img, cy_img, ir);
+        if (rc) {
+          cxIris_img = rc.cx;
+          cyIris_img = rc.cy;
+          irisR_img  = rc.r;
+          radSrc = 'RC' + Math.round(rc.score);
+        } else {
+          // Fallback 2: radial scan or raw MP hint
+          cxIris_img = cx_img;
+          cyIris_img = cy_img;
+          var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
+          irisR_img  = (scanR && scanR > 6) ? scanR : ir;
+          radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+        }
       }
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
@@ -764,24 +776,56 @@ function zoomToEye() {
     donut.rPupil  = iPR * nsx;
 
     // Refinement pass on the zoomed crop.
-    // Use PUPIL (darkest blob) to anchor the center — far more reliable than
-    // ring contrast. Limit the search to within the iris radius to avoid
-    // eyelashes (which are darker than the pupil and pull the centroid off).
+    // Step A: pupil blob anchors the center (most reliable — darkest region within iris).
+    // Step B: horizontal limbus scan finds the iris OD at 3 and 9 o'clock (highest contrast,
+    //         no eyelid occlusion). Ring contrast is kept as fallback only.
     var zPupil = findPupilCenter(imgEl, niCx, niCy, iR * 0.65);
     if (zPupil && Math.hypot(zPupil.cx - niCx, zPupil.cy - niCy) < iR * 0.55) {
       donut.cx      = drawInfo.dx + zPupil.cx * nsx;
       donut.cy      = drawInfo.dy + zPupil.cy * nsy;
       donut.cxPupil = donut.cx;
       donut.cyPupil = donut.cy;
-      // Ring contrast from pupil center, capped to ≤1.3× the MP hint radius
-      var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
-      if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
-        donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+
+      // Pupil radius (guard for limbus scan)
+      var zPR0 = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, iR);
+
+      // Horizontal limbus: iris→sclera edge at 3 and 9 o'clock — primary radius finder
+      var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
+      if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 2.2) {
+        donut.rIris = Math.min(zODH.irisR * nsx, Math.min(stageW, stageH) * 0.45);
+        // If horizontal scan also refined the x-center, adopt it
+        if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
+          donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
+          donut.cxPupil = donut.cx;
+        }
+      } else {
+        // Fallback: ring contrast (global)
+        var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
+        if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
+          donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+        }
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
       donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.45));
     }
     draw();
+
+    // Gross-error check: verify sclera is visible just outside the iris circle at 3 and 9 o'clock.
+    // Advisory-only — never blocks the user; they can always adjust manually.
+    var hint = $('autofit-hint');
+    var cx_chk  = (donut.cx     - drawInfo.dx) / nsx;
+    var cy_chk  = (donut.cy     - drawInfo.dy) / nsy;
+    var rIris_chk = donut.rIris / nsx;
+    var placement = checkIrisPlacement(imgEl, cx_chk, cy_chk, rIris_chk);
+    if (hint) {
+      if (!placement.ok) {
+        hint.textContent = 'Circle may be off — tap to reposition or drag to adjust';
+        hint.style.color = '#f5a623';  // amber advisory
+      } else {
+        hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
+        hint.style.color = '';
+      }
+    }
   };
   newImg.src = off.toDataURL();
 }
