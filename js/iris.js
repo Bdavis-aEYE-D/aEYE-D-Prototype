@@ -181,6 +181,53 @@ function autoFit(src, closeup){
     }
   }
 
+  // Tier-2 fallback for close-up: global bilateral limbus sweep.
+  // When pupil-anchored detection fails (ok=false or weak iris radius),
+  // scan every row independently for simultaneous left+right sclera→iris
+  // brightness drops. The row with the widest bilateral span = iris center Y.
+  // No pupil position needed — works even when the pupil finder locked onto
+  // a tear duct, inner-corner shadow, or any other off-center dark region.
+  if (closeup && (!ok || irisR < W * 0.10)) {
+    var gBestSpan = 0, gBestCy = -1, gBestCx = W>>1, gBestR = 0;
+    var gyLo = Math.floor(H * 0.15), gyHi = Math.ceil(H * 0.85);
+    for (var gy = gyLo; gy <= gyHi; gy += 2) {
+      var gprof = new Float32Array(W);
+      for (var gx = 0; gx < W; gx++) {
+        var gs = 0, gn = 0;
+        for (var gb = -bandH; gb <= bandH; gb++) {
+          var gry = gy + gb; if (gry >= 0 && gry < H) { gs += lum[gry*W+gx]; gn++; }
+        }
+        gprof[gx] = gn ? gs/gn : 0;
+      }
+      // Find the strongest left-side drop (sclera→iris entering from left half)
+      var gleft = -1, gleftMax = minGrad;
+      for (var gx = 2; gx < (W>>1); gx++) {
+        var gd = gprof[gx-2] - gprof[gx];
+        if (gd > gleftMax) { gleftMax = gd; gleft = gx; }
+      }
+      // Find the strongest right-side drop (sclera→iris entering from right half)
+      var gright = -1, grightMax = minGrad;
+      for (var gx = W-3; gx > (W>>1); gx--) {
+        var gd = gprof[gx+2] - gprof[gx];
+        if (gd > grightMax) { grightMax = gd; gright = gx; }
+      }
+      if (gleft >= 0 && gright > gleft) {
+        var gspan = gright - gleft;
+        if (gspan > gBestSpan) {
+          gBestSpan = gspan; gBestCy = gy;
+          gBestCx = Math.round((gleft + gright) / 2);
+          gBestR   = Math.round(gspan / 2);
+        }
+      }
+    }
+    // Accept if the found iris fills at least 18% of image width
+    if (gBestCy >= 0 && gBestR > W * 0.09) {
+      pcy = gBestCy; pcx = gBestCx; irisR = gBestR; ok = true;
+      leftHit = Math.round(gBestCx - gBestR);
+      rightHit = Math.round(gBestCx + gBestR);
+    }
+  }
+
   return {
     cxFrac: pcx/W, cyFrac: pcy/H,
     rPupilFrac: (pr*1.05)/W,
