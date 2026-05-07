@@ -150,6 +150,7 @@ var currentSide = null;       // 'Left' or 'Right'
 var cropRegion = null;        // {x,y,w,h} of crop in originalImgEl pixels
 var mpEyes = null;            // {Right:{ci,cx,cy}, Left:{ci,cx,cy}} in natural pixels, from MP detection
 var isCloseupMode = false;    // true when no face was detected and we used close-up detection directly
+var preZoomState  = null;     // {imgEl, cropRegion} saved before zoomToEye so Auto-Fit Again can reset
 
 // ======================= MEDIAPIPE =======================
 var mpLandmarker = null;
@@ -448,6 +449,13 @@ $('btn-zoom-in').addEventListener('click', function(){
 
 function applyAutoFit(){
   if (!imgEl) return false;
+  // Restore pre-zoom state so we always fit on the original (un-zoomed) image
+  if (preZoomState) {
+    imgEl       = preZoomState.imgEl;
+    cropRegion  = preZoomState.cropRegion;
+    preZoomState = null;
+    layoutStage();
+  }
   var hint = $('autofit-hint');
   var st   = $('autofit-status');
   if (hint) hint.textContent = 'Detecting iris…';
@@ -540,6 +548,7 @@ function applyAutoFit(){
       if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
       if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
       draw();
+      zoomToEye();
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
       if (hint) hint.textContent = 'Detection error — using fallback';
@@ -573,6 +582,7 @@ function _applyFitClassical(closeup){
     if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
     if (st)   st.textContent   = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
     draw();
+    zoomToEye();
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
@@ -644,6 +654,62 @@ function layoutStage(){
   donut.rIris  = Math.min(dw, dh) * 0.42;
   donut.rPupil = donut.rIris * 0.30;
   draw();
+}
+
+// After auto-fit: crop imgEl to just outside the eye corners so the stage is
+// filled with the eye and adjustment is easy. Accumulates into cropRegion.
+function zoomToEye() {
+  if (!imgEl || !donut.rIris) return;
+  // Save pre-zoom imgEl so Auto-Fit Again can start fresh from the un-zoomed image
+  preZoomState = { imgEl: imgEl, cropRegion: cropRegion ? Object.assign({}, cropRegion) : null };
+  var sx = drawInfo.dw / imgEl.width;
+  var sy = drawInfo.dh / imgEl.height;
+
+  // Current donut positions in imgEl pixel space
+  var iCx  = (donut.cx     - drawInfo.dx) / sx;
+  var iCy  = (donut.cy     - drawInfo.dy) / sy;
+  var iPCx = ((donut.cxPupil != null ? donut.cxPupil : donut.cx) - drawInfo.dx) / sx;
+  var iPCy = ((donut.cyPupil != null ? donut.cyPupil : donut.cy) - drawInfo.dy) / sy;
+  var iR   = donut.rIris  / sx;
+  var iPR  = donut.rPupil / sx;
+
+  // Pad 2.2× irisR in each direction — captures eye corners
+  var pad = Math.round(iR * 2.2);
+  var x0  = Math.max(0, Math.round(iCx - pad));
+  var y0  = Math.max(0, Math.round(iCy - pad));
+  var x1  = Math.min(imgEl.width,  Math.round(iCx + pad));
+  var y1  = Math.min(imgEl.height, Math.round(iCy + pad));
+  if (x1 - x0 < 40 || y1 - y0 < 40) return;
+
+  var cw = x1 - x0, ch = y1 - y0;
+  var off = document.createElement('canvas');
+  off.width = cw; off.height = ch;
+  off.getContext('2d').drawImage(imgEl, x0, y0, cw, ch, 0, 0, cw, ch);
+
+  var newImg = new Image();
+  newImg.onload = function() {
+    if (cropRegion) {
+      cropRegion = { x: cropRegion.x + x0, y: cropRegion.y + y0, w: cw, h: ch };
+    }
+    imgEl = newImg;
+
+    // Positions in new imgEl space (subtract the crop origin)
+    var niCx  = iCx  - x0, niCy  = iCy  - y0;
+    var niPCx = iPCx - x0, niPCy = iPCy - y0;
+
+    layoutStage();  // resets donut defaults, updates drawInfo for new imgEl
+
+    var nsx = drawInfo.dw / imgEl.width;
+    var nsy = drawInfo.dh / imgEl.height;
+    donut.cx      = drawInfo.dx + niCx  * nsx;
+    donut.cy      = drawInfo.dy + niCy  * nsy;
+    donut.cxPupil = drawInfo.dx + niPCx * nsx;
+    donut.cyPupil = drawInfo.dy + niPCy * nsy;
+    donut.rIris   = iR  * nsx;
+    donut.rPupil  = iPR * nsx;
+    draw();
+  };
+  newImg.src = off.toDataURL();
 }
 
 function draw(){
@@ -786,19 +852,40 @@ canvas.addEventListener('mousemove', function(ev) {
 canvas.addEventListener('mouseup',    function() { fitDrag = null; });
 canvas.addEventListener('mouseleave', function() { fitDrag = null; });
 
+var pinchStart = null;  // {dist, r} — two-finger pinch to resize
+
 canvas.addEventListener('touchstart', function(ev) {
-  if (!ev.touches || !ev.touches[0]) return;
-  if (fitOnDown(ev.touches[0].clientX, ev.touches[0].clientY)) ev.preventDefault();
+  if (!imgLoaded) return;
+  ev.preventDefault();
+  if (ev.touches.length === 2) {
+    fitDrag = null;
+    var dx = ev.touches[1].clientX - ev.touches[0].clientX;
+    var dy = ev.touches[1].clientY - ev.touches[0].clientY;
+    pinchStart = { dist: Math.hypot(dx, dy), r: fitActiveR() };
+  } else if (ev.touches.length === 1) {
+    pinchStart = null;
+    fitOnDown(ev.touches[0].clientX, ev.touches[0].clientY);
+  }
 }, {passive: false});
 canvas.addEventListener('touchmove', function(ev) {
-  if (!ev.touches || !ev.touches[0]) return;
-  fitOnMove(ev.touches[0].clientX, ev.touches[0].clientY);
+  if (!imgLoaded) return;
   ev.preventDefault();
+  if (ev.touches.length === 2 && pinchStart) {
+    var dx = ev.touches[1].clientX - ev.touches[0].clientX;
+    var dy = ev.touches[1].clientY - ev.touches[0].clientY;
+    fitSetRadius(pinchStart.r * (Math.hypot(dx, dy) / pinchStart.dist));
+    draw();
+  } else if (ev.touches.length === 1 && !pinchStart) {
+    fitOnMove(ev.touches[0].clientX, ev.touches[0].clientY);
+  }
 }, {passive: false});
-canvas.addEventListener('touchend',   function() { fitDrag = null; });
+canvas.addEventListener('touchend', function(ev) {
+  if (ev.touches.length < 2) pinchStart = null;
+  if (ev.touches.length === 0) fitDrag = null;
+});
 
 $('r-thresh').addEventListener('input', function(e){ donut.threshHi = +e.target.value; });
-$('btn-reset').addEventListener('click', function(){ layoutStage(); var st=$('autofit-status'); if (st) st.textContent=' '; });
+$('btn-reset').addEventListener('click', function(){ if (preZoomState) { imgEl = preZoomState.imgEl; cropRegion = preZoomState.cropRegion; preZoomState = null; } layoutStage(); var st=$('autofit-status'); if (st) st.textContent=' '; });
 $('btn-autofit').addEventListener('click', function(){ applyAutoFit(); });
 $('btn-fit-back').addEventListener('click', function(){
   $('card-fit').style.display = 'none';
