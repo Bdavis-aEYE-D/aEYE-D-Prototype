@@ -8,6 +8,8 @@ function analyze(){
   octx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
   var d = octx.getImageData(0, 0, stageW, stageH).data;
   var cx = donut.cx, cy = donut.cy, rIn = donut.rPupil, rOut = donut.rIris;
+  var cxP = donut.cxPupil != null ? donut.cxPupil : cx;
+  var cyP = donut.cyPupil != null ? donut.cyPupil : cy;
   var innerBand = rIn + (rOut - rIn) * 0.45;
   // Tighter zones for central-heterochromia gradient detection. The pupillary
   // zone (innermost 25% of the iris-pupil annulus) and ciliary zone (outermost
@@ -42,6 +44,7 @@ function analyze(){
     for (var x = x0; x < x1; x++){
       var dx = x - cx, dy = y - cy;
       var dist = Math.sqrt(dx*dx + dy*dy);
+      var distP = Math.sqrt((x-cxP)*(x-cxP) + (y-cyP)*(y-cyP));
       var i = (y * stageW + x) * 4;
       var r = d[i], g = d[i+1], b = d[i+2], a = d[i+3];
       // Always populate Lbuf for the bbox so the freckle DoG pass has padding.
@@ -50,7 +53,7 @@ function analyze(){
       Lbuf[bboxIdx] = (a >= 200) ? rgbLab(r, g, b)[0] : 0;
       // Freckle mask: iris ring (with limbal pullback) + skip glare/sclera/lid,
       // but KEEP dark pixels (no lash/shadow filter — those would kill freckles).
-      if (a >= 200 && dist >= rIn * FRK_INNER_F && dist <= rOut * FRK_OUTER_F) {
+      if (a >= 200 && distP >= rIn * FRK_INNER_F && dist <= rOut * FRK_OUTER_F) {
         var lumF = 0.299*r + 0.587*g + 0.114*b;
         var mxF = Math.max(r,g,b), mnF = Math.min(r,g,b);
         var satF = mxF>0 ? (mxF - mnF)/mxF : 0;
@@ -59,7 +62,7 @@ function analyze(){
           validFrk[bboxIdx] = 1;
         }
       }
-      if (dist < rIn || dist > rOut) continue;
+      if (distP < rIn || dist > rOut) continue;
       if (a < 200) continue;
       var lum = 0.299*r + 0.587*g + 0.114*b;
       var mxc = Math.max(r,g,b), mnc = Math.min(r,g,b);
@@ -493,6 +496,15 @@ function analyze(){
     freckles = kept;
   }
 
+  // ---- Rayid iris type classification ----
+  var rayid = null;
+  try {
+    var stripGray = unwrapIris(d, stageW, stageH, cx, cy, cxP, cyP, rOut, rIn);
+    rayid = classifyRayid(stripGray, 360, 64);
+  } catch(e) {
+    console.warn('Rayid classify failed:', e);
+  }
+
   // Build result
   // Read optional birthdate for age-adjusted scoring
   var birthdateEl = document.getElementById('birthdate-input');
@@ -546,7 +558,8 @@ function analyze(){
                     dw: drawInfo.dw, dh: drawInfo.dh }
       }
     },
-    portraitImage: null   // populated by btn-portrait flow
+    portraitImage: null,   // populated by btn-portrait flow
+    rayid: rayid           // {label, streamScore, jewelScore, flowerScore} or null
   };
   // Compute composite rarity score now that all fields are in result
   result.rarityScore = computeRarityScore(result);
@@ -634,6 +647,14 @@ function renderResult(result){
     : 'None';
   $('r-brightness').textContent = result.brightness;
   $('r-saturation').textContent = result.saturation;
+  if (result.rayid && RAYID_META[result.rayid.label]) {
+    var rm = RAYID_META[result.rayid.label];
+    var rv = $('r-rayid');
+    if (rv) {
+      rv.textContent = result.rayid.label + ' · ' + rm.short;
+      rv.style.color = rm.color;
+    }
+  }
 
   // If both eyes have been analyzed, show the two-eye summary
   var hasBoth = eyeResults['Left'] && eyeResults['Right'];
@@ -714,7 +735,7 @@ function renderHighlights(result){
   if (result.vibe) {
     items.push({
       title: '"' + result.vibe + '"',
-      desc: 'A descriptive nickname capturing your eye's overall character — based on category and lightness.',
+      desc: "A descriptive nickname capturing your eye's overall character — based on category and lightness.",
       swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
     });
   }
@@ -787,6 +808,15 @@ function renderHighlights(result){
       title: nf + ' iris freckle' + (nf === 1 ? '' : 's'),
       desc: 'Pigmented spot' + (nf === 1 ? '' : 's') + ' at clock ' + clocks + (nf > 3 ? ' (+' + (nf-3) + ' more)' : ''),
       swatch: { type: 'solid', c1: rgbCss(result.freckles[0].rgb || [60,40,20]) },
+    });
+  }
+  // ===== Rayid iris type =====
+  if (result.rayid && RAYID_META[result.rayid.label]) {
+    var rm2 = RAYID_META[result.rayid.label];
+    items.push({
+      title: result.rayid.label + ' iris · ' + rm2.short,
+      desc:  rm2.story.replace(/<[^>]+>/g, ''),
+      swatch: { type: 'solid', c1: rm2.color }
     });
   }
   // ===== Color fingerprint (always shown last, smaller) =====
@@ -898,6 +928,10 @@ function renderStory(result){
   // If nothing detected beyond the base color
   if (paras.length === 1) {
     paras.push('No heterochromia, limbal ring, sectoral patches, or iris freckles were detected at the current resolution. That does not mean none exist — subtle features may need a closer crop or better lighting to surface.');
+  }
+  // Rayid type
+  if (result.rayid && RAYID_META[result.rayid.label]) {
+    paras.push(RAYID_META[result.rayid.label].story);
   }
   // Closing
   paras.push('<em style="color: var(--ink-dim); font-size:12px">Measurements are computed in CIE Lab space using a curated palette of ' + (typeof PALETTE !== 'undefined' ? PALETTE.length : 38) + ' eye-color anchors. Rarity figures are global approximations from published prevalence research. No two irises produce identical fingerprints — your eye is mathematically unique.</em>');

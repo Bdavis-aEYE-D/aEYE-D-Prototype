@@ -19,8 +19,6 @@ window.addEventListener('error', function(ev){
   showError((ev.message || 'unknown') + (ev.filename ? ' (' + ev.filename + ':' + ev.lineno + ')' : ''));
 });
 
-try {
-
 var $ = function (id) { return document.getElementById(id); };
 
 // ======================= TAB SWITCHING =======================
@@ -44,13 +42,22 @@ for (var i=0;i<tabs.length;i++){
 var fileInput = $('file-input');
 
 $('btn-camera').addEventListener('click', function(){
-  fileInput.setAttribute('capture','environment');
-  fileInput.click();
+  // Use in-app viewfinder if getUserMedia is available (requires HTTPS)
+  if (cameraAvailable()) {
+    cameraStart();
+  } else {
+    // Fallback: native camera via file input (desktop or non-HTTPS)
+    fileInput.setAttribute('capture', 'user');
+    fileInput.click();
+  }
 });
 $('btn-upload').addEventListener('click', function(){
   fileInput.removeAttribute('capture');
   fileInput.click();
 });
+$('btn-cam-capture').addEventListener('click', function(){ cameraCaptureSequence(); });
+$('btn-cam-stop').addEventListener('click', function(){ cameraStop(); });
+
 $('btn-sample').addEventListener('click', function(){
   drawSyntheticFace();
 });
@@ -185,7 +192,7 @@ var locDraw = { dx:0, dy:0, dw:600, dh:600 };
 var locTap = null;      // {sx, sy} in stage pixels, or null
 var cropPct = 14;       // crop size as % of longer image side
 
-function loadOriginalFromUrl(url){
+var loadOriginalFromUrl = function(url){
   var img = new Image();
   img.onload = function(){
     originalImgEl = img;
@@ -481,44 +488,51 @@ function applyAutoFit(){
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
       var cy_img = c.y * imgH - (cropRegion ? cropRegion.y : 0);
 
-      // Refine center: MP drifts on close-up photos; pupil is always the darkest region
+      // Step 1: Refine pupil center — pupil is always the darkest region
       var refined = findPupilCenter(imgEl, cx_img, cy_img, ir * 0.55);
+      var cxPupil_img = cx_img, cyPupil_img = cy_img;
       if (refined) {
         var shiftX = refined.cx - cx_img, shiftY = refined.cy - cy_img;
         if (Math.sqrt(shiftX*shiftX + shiftY*shiftY) < ir * 0.5) {
-          cx_img = refined.cx;
-          cy_img = refined.cy;
+          cxPupil_img = refined.cx;
+          cyPupil_img = refined.cy;
         }
       }
 
+      // Step 2: Find iris OD via horizontal band + near-horizontal rays (v0.54)
+      var irisOD = findIrisODHorizontal(imgEl, cx_img, cy_img, ir * 0.5);
+      var cxIris_img, cyIris_img, irisR_img, radSrc;
+      if (irisOD && irisOD.irisR > 6) {
+        cxIris_img = irisOD.cxIris;
+        cyIris_img = irisOD.cyIris;
+        irisR_img  = Math.min(irisOD.irisR, ir * 1.20); // cap: don't stray past MP hint
+        radSrc = 'hband';
+      } else {
+        // Fall back to radial scan
+        cxIris_img = cx_img;
+        cyIris_img = cy_img;
+        var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
+        var isDarkIris = irisBright < 80;
+        var maxRFactor = isDarkIris ? 1.55 : 1.22;
+        var capFactor  = isDarkIris ? 1.40 : 1.12;
+        var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, maxRFactor);
+        var rawR  = (scanR && scanR > 6) ? scanR : ir;
+        irisR_img = Math.min(rawR, ir * capFactor);
+        radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+      }
+
+      // Step 3: Pupil radius via 8-ray scan anchored on pupil center
+      var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
+
       var scaleX = drawInfo.dw / imgEl.width;
       var scaleY = drawInfo.dh / imgEl.height;
-      donut.cx = drawInfo.dx + cx_img * scaleX;
-      donut.cy = drawInfo.dy + cy_img * scaleY;
+      donut.cx     = drawInfo.dx + cxIris_img  * scaleX;
+      donut.cy     = drawInfo.dy + cyIris_img  * scaleY;
+      donut.cxPupil = drawInfo.dx + cxPupil_img * scaleX;
+      donut.cyPupil = drawInfo.dy + cyPupil_img * scaleY;
 
-      // Adaptive scan window: dark irises (low limbal contrast) need a wider search
-      // range to reach the true limbal edge; light irises need a tight cap to block
-      // eyelid-corner outliers which produce stronger gradients than the limbal edge.
-      var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
-      var isDarkIris = irisBright < 80;
-      var maxRFactor = isDarkIris ? 1.55 : 1.22;
-      var capFactor  = isDarkIris ? 1.40 : 1.12;
-
-      var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, maxRFactor);
-      var rawR  = (scanR && scanR > 6) ? scanR : ir;
-      var finalR = Math.min(rawR, ir * capFactor);
-      var radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
-      var ripx  = Math.min(finalR * scaleX, Math.min(stageW,stageH) * 0.45);
-
-      // Classical CV for pupil inner ring; capped relative to iris ring
-      var rpx;
-      try {
-        var cf = autoFit(imgEl);
-        rpx = cf.rPupilFrac * imgEl.width * scaleX;
-      } catch(e) {
-        rpx = ripx * 0.28;
-      }
-      rpx = Math.max(6, Math.min(rpx, ripx * 0.30));
+      var ripx = Math.min(irisR_img  * scaleX, Math.min(stageW,stageH) * 0.45);
+      var rpx  = Math.max(6, Math.min(pupilR_img * scaleX, ripx * 0.32));
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
@@ -526,7 +540,7 @@ function applyAutoFit(){
       if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
       if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
       if (hint) hint.textContent = 'Auto-fit complete. Tap "Analyze Iris" or adjust manually.';
-      if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cx=' + Math.round(cx_img) + ' cy=' + Math.round(cy_img);
+      if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
       draw();
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
@@ -544,8 +558,10 @@ function _applyFitClassical(){
     var fit = autoFit(imgEl);
     var scaleX = drawInfo.dw / imgEl.width;
     var scaleY = drawInfo.dh / imgEl.height;
-    donut.cx = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
-    donut.cy = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
+    donut.cx     = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
+    donut.cy     = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
+    donut.cxPupil = donut.cx;
+    donut.cyPupil = donut.cy;
     var rpx  = fit.rPupilFrac * imgEl.width * scaleX;
     var ripx = fit.rIrisFrac  * imgEl.width * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
@@ -568,7 +584,7 @@ function _applyFitClassical(){
 // ======================= FIT STAGE / ANALYZER =======================
 var canvas = $('canvas-main'), ctx = canvas.getContext('2d');
 var stageW = 600, stageH = 600;
-var donut = { cx: 300, cy: 300, rIris: 180, rPupil: 60, threshHi: 230 };
+var donut = { cx: 300, cy: 300, cxPupil: 300, cyPupil: 300, rIris: 180, rPupil: 60, threshHi: 230 };
 var drawInfo = { dx: 0, dy: 0, dw: 600, dh: 600 };
 
 function sizeCanvas(){
@@ -608,6 +624,8 @@ function layoutStage(){
 
 function draw(){
   if (!imgEl) return;
+  var cxP = donut.cxPupil != null ? donut.cxPupil : donut.cx;
+  var cyP = donut.cyPupil != null ? donut.cyPupil : donut.cy;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, stageW, stageH);
   ctx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
   ctx.save();
@@ -619,13 +637,13 @@ function draw(){
   ctx.restore();
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rPupil, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.fill();
   ctx.restore();
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#6cc4ff';
   ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2); ctx.stroke();
   ctx.strokeStyle = '#ffd66c';
-  ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rPupil, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.stroke();
   ctx.strokeStyle = '#ffffffaa';
   ctx.beginPath();
   ctx.moveTo(donut.cx-6, donut.cy); ctx.lineTo(donut.cx+6, donut.cy);
@@ -636,16 +654,16 @@ function draw(){
 canvas.addEventListener('click', function(ev){
   if (!imgLoaded) return;
   var rect = canvas.getBoundingClientRect();
-  donut.cx = ev.clientX - rect.left;
-  donut.cy = ev.clientY - rect.top;
+  donut.cx = donut.cxPupil = ev.clientX - rect.left;
+  donut.cy = donut.cyPupil = ev.clientY - rect.top;
   draw();
 });
 canvas.addEventListener('touchstart', function(ev){
   if (!imgLoaded) return;
   if (!ev.touches || !ev.touches[0]) return;
   var rect = canvas.getBoundingClientRect();
-  donut.cx = ev.touches[0].clientX - rect.left;
-  donut.cy = ev.touches[0].clientY - rect.top;
+  donut.cx = donut.cxPupil = ev.touches[0].clientX - rect.left;
+  donut.cy = donut.cyPupil = ev.touches[0].clientY - rect.top;
   draw();
   ev.preventDefault();
 }, {passive: false});
@@ -875,6 +893,7 @@ function uploadToSupabase(result) {
       hex_color: result.fingerprint ? result.fingerprint.hex : null,
       sectoral_color: result.sectoral ? result.sectoral.color : null,
       freckle_count: safeInt(result.freckles ? result.freckles.length : 0),
+      rayid_type: result.rayid ? result.rayid.label : null,
       iris_position: irisPos,
       photo_path: irisFileName,
       face_photo_path: faceFileName
@@ -928,7 +947,3 @@ function uploadToSupabase(result) {
 
 // Everything attached — flip banner to green
 markRunning();
-
-} catch (err) {
-  showError(err && err.message ? err.message : String(err));
-}
