@@ -79,14 +79,17 @@ function autoFit(src, closeup){
     var medSurr = (surr[3]+surr[4])/2;  // median of 8 — robust to partial occlusion
     if (medSurr - inner < 10) return -1e9;
     var cd = Math.hypot(cx - W/2, cy - H/2);
-    if (closeup) return (medSurr - inner);
+    // Close-up: require 6/8 surround quadrants bright (surr[2] = 3rd-lowest after sort).
+    // Black padding bar has 3 dark upper surround samples → surr[2]≈0, so it can't win.
+    if (closeup) return (surr[2] - inner);
     var centerBonus = Math.max(0, 1 - cd/(W*0.25));
     return (medSurr - inner) * (1 + centerBonus*0.4) - cd*0.3;
   }
 
   var best = {cx: W>>1, cy: H>>1, r: 6}, bestScore = -1e9;
-  var cxLo=Math.floor(W*0.15), cxHi=Math.ceil(W*0.85);
-  var cyLo=Math.floor(H*0.15), cyHi=Math.ceil(H*0.85);
+  var cxLo=Math.floor(W*0.10), cxHi=Math.ceil(W*0.90);
+  var cyLo= closeup ? Math.floor(H*0.22) : Math.floor(H*0.15);
+  var cyHi= closeup ? Math.ceil(H*0.78)  : Math.ceil(H*0.85);
   var coarseR = [3,5,7,9,12,15,18,22,26];
   for (var cx=cxLo; cx<cxHi; cx+=3){
     for (var cy=cyLo; cy<cyHi; cy+=3){
@@ -107,38 +110,34 @@ function autoFit(src, closeup){
   }
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
-  // Iris boundary: horizontal band gradient scan at pupil center row.
-  // Build a smoothed brightness profile then find the steepest brightness-drop on each side.
-  // The limbus (sclera→iris) is the sharpest edge — works even when nasal sclera is dim.
   var bandH = 4;
-  var midY = Math.round(pcy);
   var minGrad = 25;
+  var guardR = Math.round(pr * 1.3);
 
-  var profile = new Float32Array(W);
-  for (var x = 0; x < W; x++){
-    var s=0, n=0;
-    for (var b=-bandH; b<=bandH; b++){
-      var ry=midY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
+  // Helper: scan one horizontal band at scanY, return {leftHit, rightHit} or {-1,-1}.
+  function scanBand(scanY, refCx) {
+    var prof = new Float32Array(W);
+    for (var x = 0; x < W; x++){
+      var s=0, n=0;
+      for (var b=-bandH; b<=bandH; b++){
+        var ry=scanY+b; if(ry>=0&&ry<H){ s+=lum[ry*W+x]; n++; }
+      }
+      prof[x] = n ? s/n : 0;
     }
-    profile[x] = n ? s/n : 0;
+    var lh = -1, lm = minGrad;
+    for (var x = 2; x < Math.round(refCx) - guardR; x++){
+      var d = prof[x-2] - prof[x]; if (d > lm){ lm = d; lh = x; }
+    }
+    var rh = -1, rm = minGrad;
+    for (var x = W-3; x > Math.round(refCx) + guardR; x--){
+      var d = prof[x+2] - prof[x]; if (d > rm){ rm = d; rh = x; }
+    }
+    return { lh: lh, rh: rh };
   }
 
-  var guardR = Math.round(pr * 1.3); // keep scan clear of pupil so iris→pupil drop is never detected
-
-  // Left limbus: largest drop when moving rightward (entering iris from sclera/caruncle)
-  var leftHit = -1, leftMax = minGrad;
-  for (var x = 2; x < Math.round(pcx) - guardR; x++){
-    var drop = profile[x-2] - profile[x];  // delta over 2px to tolerate 1-pixel noise
-    if (drop > leftMax){ leftMax = drop; leftHit = x; }
-  }
-
-  // Right limbus: largest drop when moving leftward (entering iris from sclera)
-  var rightHit = -1, rightMax = minGrad;
-  for (var x = W-3; x > Math.round(pcx) + guardR; x--){
-    var drop = profile[x+2] - profile[x];
-    if (drop > rightMax){ rightMax = drop; rightHit = x; }
-  }
-
+  // Iris boundary: scan horizontally at the pupil row first.
+  var init = scanBand(Math.round(pcy), pcx);
+  var leftHit = init.lh, rightHit = init.rh;
   var ok, irisR;
   if (leftHit >= 0 && rightHit >= 0){
     irisR = Math.round((rightHit - leftHit) / 2);
@@ -152,12 +151,42 @@ function autoFit(src, closeup){
     irisR = Math.round(pr * 2.1); ok = false;
   }
 
+  // Secondary validation for close-up mode: the iris is a circle, so its
+  // horizontal span is WIDEST at the iris center Y. If the pupil detector placed
+  // pcy at the upper (eyelid-occluded) edge, scanning downward will find a wider
+  // span. Scan pcy → pcy+30% and use the Y with the largest bilateral span.
+  if (closeup) {
+    // Seed bestSpan from the current irisR so the Y-scan can only win if it finds
+    // a wider bilateral span — prevents a half-limbus initial scan (irisR reasonable
+    // but one edge missing) from being displaced by a tiny bilateral hit below.
+    var bestSpan = ok ? irisR * 2 : 0;
+    var bestCy = pcy, bestCx = pcx, bestIrisR = irisR;
+    var yEnd = Math.min(H - 1, Math.round(pcy + H * 0.30));
+    for (var ty = Math.round(pcy) + 3; ty <= yEnd; ty += 3) {
+      var b2 = scanBand(ty, pcx);
+      if (b2.lh >= 0 && b2.rh >= 0) {
+        var span = b2.rh - b2.lh;
+        if (span > bestSpan) {
+          bestSpan = span;
+          bestCy = ty;
+          bestCx = Math.round((b2.lh + b2.rh) / 2);
+          bestIrisR = Math.round(span / 2);
+        }
+      }
+    }
+    if (bestSpan > 0) {
+      pcy = bestCy; pcx = bestCx; irisR = bestIrisR; ok = true;
+      leftHit = Math.round(bestCx - bestIrisR);
+      rightHit = Math.round(bestCx + bestIrisR);
+    }
+  }
+
   return {
     cxFrac: pcx/W, cyFrac: pcy/H,
     rPupilFrac: (pr*1.05)/W,
     rIrisFrac: irisR/W,
     ok: ok, leftHit: leftHit, rightHit: rightHit,
-    leftGrad: Math.round(leftMax), rightGrad: Math.round(rightMax)
+    leftGrad: 0, rightGrad: 0
   };
 }
 
