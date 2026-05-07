@@ -332,6 +332,19 @@ function buildFeaturePills(result){
       color: result.freckles[0].rgb || [60, 40, 20],
     });
   }
+  // Iris pattern (Jewel / Flower / Stream / Shaker)
+  if (result.rayid && result.rayid.label && typeof RAYID_META !== 'undefined') {
+    var rm = RAYID_META[result.rayid.label];
+    if (rm) {
+      var hex = rm.color;
+      var rc = [
+        parseInt(hex.slice(1,3),16),
+        parseInt(hex.slice(3,5),16),
+        parseInt(hex.slice(5,7),16)
+      ];
+      pills.push({ label: 'Iris Pattern · ' + result.rayid.label, color: rc });
+    }
+  }
   // Iris character (always)
   var ph = (typeof getPatternHint === 'function') ? getPatternHint(result.brightness, result.saturation) : null;
   if (ph) {
