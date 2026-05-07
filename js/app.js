@@ -789,10 +789,12 @@ function zoomToEye() {
       // Pupil radius (guard for limbus scan)
       var zPR0 = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, iR);
 
-      // Horizontal limbus: iris→sclera edge at 3 and 9 o'clock — primary radius finder
+      // Horizontal limbus: iris→sclera edge at 3 and 9 o'clock — primary radius finder.
+      // Apply 0.96× trim: the gradient peak falls at the midpoint of the ~5px transition
+      // band, so the raw radius slightly overshoots the true limbus edge.
       var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
       if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 2.2) {
-        donut.rIris = Math.min(zODH.irisR * nsx, Math.min(stageW, stageH) * 0.45);
+        donut.rIris = Math.min(zODH.irisR * 0.96 * nsx, Math.min(stageW, stageH) * 0.45);
         // If horizontal scan also refined the x-center, adopt it
         if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
           donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
@@ -806,7 +808,8 @@ function zoomToEye() {
         }
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
-      donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.45));
+      // Cap pupil at 35% of iris radius — dilated pupils rarely exceed this in a selfie context
+      donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.35));
     }
     draw();
 
