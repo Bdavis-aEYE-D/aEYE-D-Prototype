@@ -545,8 +545,8 @@ function applyAutoFit(){
         if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
         zoomToEye();
       } else {
-        if (hint) { hint.textContent = 'Iris not detected — please adjust the circle manually or retake.'; hint.style.color = '#fa0'; }
-        if (st)   st.textContent = 'low confidence';
+        // MP position failed validation — try classical CV before falling back to manual
+        _applyFitClassical(isCloseupMode);
       }
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
@@ -584,7 +584,13 @@ function _applyFitClassical(closeup){
       if (st)   st.textContent = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
       zoomToEye();
     } else {
-      if (hint) { hint.textContent = 'Iris not detected — please adjust the circle manually or retake.'; hint.style.color = '#fa0'; }
+      // Both MP and classical failed — center a default circle so manual adjustment starts from the middle
+      donut.cx = stageW / 2; donut.cy = stageH / 2;
+      donut.cxPupil = stageW / 2; donut.cyPupil = stageH / 2;
+      donut.rIris  = Math.round(Math.min(stageW, stageH) * 0.28);
+      donut.rPupil = Math.round(donut.rIris * 0.38);
+      draw();
+      if (hint) { hint.textContent = 'Iris not detected — tap the iris center, then pinch to size the circle.'; hint.style.color = '#fa0'; }
       if (st)   st.textContent = 'low confidence';
     }
     return fit.ok;
@@ -704,8 +710,8 @@ function zoomToEye() {
   var iR   = donut.rIris  / sx;
   var iPR  = donut.rPupil / sx;
 
-  // Pad 2.2× irisR in each direction — captures eye corners
-  var pad = Math.round(iR * 2.2);
+  // Pad 1.5× irisR in each direction — tight crop showing just the eye
+  var pad = Math.round(iR * 1.5);
   var x0  = Math.max(0, Math.round(iCx - pad));
   var y0  = Math.max(0, Math.round(iCy - pad));
   var x1  = Math.min(imgEl.width,  Math.round(iCx + pad));
@@ -883,8 +889,9 @@ canvas.addEventListener('mousemove', function(ev) {
 canvas.addEventListener('mouseup',    function() { fitDrag = null; });
 canvas.addEventListener('mouseleave', function() { fitDrag = null; });
 
-var pinchStart = null;  // {dist, r} — two-finger pinch to resize
+var pinchStart = null;  // {dist, r, midX, midY} — two-finger pinch to resize
 
+// Touch model: 1 finger always moves center | 2 fingers always resize (+ track midpoint as center)
 canvas.addEventListener('touchstart', function(ev) {
   if (!imgLoaded) return;
   ev.preventDefault();
@@ -892,10 +899,18 @@ canvas.addEventListener('touchstart', function(ev) {
     fitDrag = null;
     var dx = ev.touches[1].clientX - ev.touches[0].clientX;
     var dy = ev.touches[1].clientY - ev.touches[0].clientY;
+    var mx = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+    var my = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+    var mid = fitCanvasPt(mx, my);
+    fitSetCenter(mid.x, mid.y);
     pinchStart = { dist: Math.hypot(dx, dy), r: fitActiveR() };
+    draw();
   } else if (ev.touches.length === 1) {
     pinchStart = null;
-    fitOnDown(ev.touches[0].clientX, ev.touches[0].clientY);
+    var p = fitCanvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
+    fitSetCenter(p.x, p.y);
+    fitDrag = { type: 'move' };
+    draw();
   }
 }, {passive: false});
 canvas.addEventListener('touchmove', function(ev) {
@@ -904,10 +919,16 @@ canvas.addEventListener('touchmove', function(ev) {
   if (ev.touches.length === 2 && pinchStart) {
     var dx = ev.touches[1].clientX - ev.touches[0].clientX;
     var dy = ev.touches[1].clientY - ev.touches[0].clientY;
+    var mx = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+    var my = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+    var mid = fitCanvasPt(mx, my);
+    fitSetCenter(mid.x, mid.y);
     fitSetRadius(pinchStart.r * (Math.hypot(dx, dy) / pinchStart.dist));
     draw();
-  } else if (ev.touches.length === 1 && !pinchStart) {
-    fitOnMove(ev.touches[0].clientX, ev.touches[0].clientY);
+  } else if (ev.touches.length === 1 && fitDrag) {
+    var p = fitCanvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
+    fitSetCenter(p.x, p.y);
+    draw();
   }
 }, {passive: false});
 canvas.addEventListener('touchend', function(ev) {
