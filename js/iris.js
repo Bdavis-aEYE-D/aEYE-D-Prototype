@@ -617,3 +617,95 @@ function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR, maxRFactor) {
   radii.sort(function(a,b){ return a-b; });
   return radii[Math.floor(radii.length / 2)];   // median
 }
+
+// ---- Ring-contrast iris finder ----
+// Searches for the (cx, cy, r) that maximizes outer_mean - inner_mean, where
+// outer is sampled at 1.2× r (sclera) and inner at 0.5× r (iris body + pupil).
+// This signature is unique to a real iris — dark backgrounds, skin, and hair all
+// score near zero because there is no bright sclera ring surrounding them.
+//
+// cxHint, cyHint, rHint: starting point in imgEl pixel space (e.g. MediaPipe iris landmark).
+// Returns { cx, cy, r, score } in imgEl pixels, or null if no iris found (score < 15).
+function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
+  var W = imgEl.naturalWidth || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || !rHint || rHint < 4) return null;
+
+  // Clamp hint to image bounds so an off-frame MP landmark doesn't break the search
+  cxHint = Math.max(rHint, Math.min(W - rHint, cxHint));
+  cyHint = Math.max(rHint, Math.min(H - rHint, cyHint));
+
+  // Crop to 2.5× rHint around hint — avoids processing a multi-megapixel image
+  var margin = Math.round(rHint * 2.5);
+  var rx0 = Math.max(0, Math.round(cxHint - margin));
+  var ry0 = Math.max(0, Math.round(cyHint - margin));
+  var rx1 = Math.min(W, Math.round(cxHint + margin));
+  var ry1 = Math.min(H, Math.round(cyHint + margin));
+  var rw = rx1 - rx0, rh = ry1 - ry0;
+  if (rw < 20 || rh < 20) return null;
+
+  var tmp = document.createElement('canvas');
+  tmp.width = rw; tmp.height = rh;
+  tmp.getContext('2d').drawImage(imgEl, rx0, ry0, rw, rh, 0, 0, rw, rh);
+  var d = tmp.getContext('2d').getImageData(0, 0, rw, rh).data;
+  var lumArr = new Float32Array(rw * rh);
+  for (var i = 0; i < rw * rh; i++) {
+    var idx = i * 4;
+    lumArr[i] = 0.299 * d[idx] + 0.587 * d[idx+1] + 0.114 * d[idx+2];
+  }
+
+  function sL(x, y) {
+    return lumArr[Math.max(0, Math.min(rh-1, Math.round(y))) * rw +
+                  Math.max(0, Math.min(rw-1, Math.round(x)))];
+  }
+
+  // Ring contrast score at candidate (cx, cy, r) — all in local crop coords
+  var N_RAYS = 16;
+  function ringScore(cx, cy, r) {
+    var inS = 0, outS = 0, outN = 0;
+    for (var a = 0; a < N_RAYS; a++) {
+      var ang = (a / N_RAYS) * 2 * Math.PI;
+      var cosA = Math.cos(ang), sinA = Math.sin(ang);
+      inS += sL(cx + r * 0.5 * cosA, cy + r * 0.5 * sinA);
+      var ox = cx + r * 1.2 * cosA, oy = cy + r * 1.2 * sinA;
+      if (ox >= 0 && ox < rw && oy >= 0 && oy < rh) { outS += sL(ox, oy); outN++; }
+    }
+    if (outN < N_RAYS / 2) return -1e9;
+    return (outS / outN) - (inS / N_RAYS);
+  }
+
+  // Local hint coords
+  var lcx = cxHint - rx0, lcy = cyHint - ry0;
+
+  var SCORE_MIN = 15;
+  var best = SCORE_MIN - 1, bCx = -1, bCy = -1, bR = -1;
+  var searchR = rHint * 0.65;
+  var step    = Math.max(2, Math.round(rHint * 0.07));
+  var rMin    = rHint * 0.70, rMax = rHint * 1.30;
+  var rStep   = Math.max(1, Math.round(rHint * 0.05));
+
+  for (var cx = lcx - searchR; cx <= lcx + searchR; cx += step) {
+    for (var cy = lcy - searchR; cy <= lcy + searchR; cy += step) {
+      for (var r = rMin; r <= rMax; r += rStep) {
+        var s = ringScore(cx, cy, r);
+        if (s > best) { best = s; bCx = cx; bCy = cy; bR = r; }
+      }
+    }
+  }
+  if (bCx < 0) return null;
+
+  // Fine-tune ±step around coarse best
+  var fBest = best, fCx = bCx, fCy = bCy, fR = bR;
+  for (var cx2 = bCx - step; cx2 <= bCx + step; cx2++) {
+    for (var cy2 = bCy - step; cy2 <= bCy + step; cy2++) {
+      for (var r2 = Math.max(4, bR - rStep); r2 <= bR + rStep; r2++) {
+        var s2 = ringScore(cx2, cy2, r2);
+        if (s2 > fBest) { fBest = s2; fCx = cx2; fCy = cy2; fR = r2; }
+      }
+    }
+  }
+
+  if (fBest < SCORE_MIN) return null;
+  // Return in imgEl (not crop-local) coordinates
+  return { cx: fCx + rx0, cy: fCy + ry0, r: fR, score: fBest };
+}
