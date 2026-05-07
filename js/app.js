@@ -199,6 +199,7 @@ var loadOriginalFromUrl = function(url){
   img.onload = function(){
     originalImgEl = img;
     mpEyes = null;
+    preZoomState = null;  // clear any leftover zoom state from previous image
     $('card-capture').scrollIntoView({behavior:'smooth', block:'start'});
     autoDetectAndJumpToFit();
   };
@@ -754,12 +755,32 @@ function zoomToEye() {
 
     var nsx = drawInfo.dw / imgEl.width;
     var nsy = drawInfo.dh / imgEl.height;
+    // Set initial position from full-image detection (rough estimate)
     donut.cx      = drawInfo.dx + niCx  * nsx;
     donut.cy      = drawInfo.dy + niCy  * nsy;
     donut.cxPupil = drawInfo.dx + niPCx * nsx;
     donut.cyPupil = drawInfo.dy + niPCy * nsy;
     donut.rIris   = iR  * nsx;
     donut.rPupil  = iPR * nsx;
+
+    // Refinement pass on the zoomed crop.
+    // Use PUPIL (darkest blob) to anchor the center — far more reliable than
+    // ring contrast. Limit the search to within the iris radius to avoid
+    // eyelashes (which are darker than the pupil and pull the centroid off).
+    var zPupil = findPupilCenter(imgEl, niCx, niCy, iR * 0.65);
+    if (zPupil && Math.hypot(zPupil.cx - niCx, zPupil.cy - niCy) < iR * 0.55) {
+      donut.cx      = drawInfo.dx + zPupil.cx * nsx;
+      donut.cy      = drawInfo.dy + zPupil.cy * nsy;
+      donut.cxPupil = donut.cx;
+      donut.cyPupil = donut.cy;
+      // Ring contrast from pupil center, capped to ≤1.3× the MP hint radius
+      var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
+      if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
+        donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+      }
+      var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
+      donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.45));
+    }
     draw();
   };
   newImg.src = off.toDataURL();
