@@ -43,7 +43,7 @@ canvas.thumb { display: block; }
 <div style="font-size:12px;color:#666;margin-bottom:4px">
   Ground truth from localStorage (annotate.html session).
   Dashed = algorithm &nbsp;|&nbsp; Solid = ground truth.<br>
-  * Algo has no independent pupil center — pupil ctr error is algo iris center vs GT pupil center; pupil radius uses fallback 35% of iris radius.
+  Pupil radius uses fallback 35% of iris radius when not detected independently.
 </div>
 
 <div id="summary"></div>
@@ -60,8 +60,8 @@ canvas.thumb { display: block; }
       <th>Iris Ctr err</th>
       <th>Iris R err</th>
       <th>Iris Grade</th>
-      <th>Pupil Ctr err*</th>
-      <th>Pupil R err*</th>
+      <th>Pupil Ctr err</th>
+      <th>Pupil R err</th>
     </tr>
   </thead>
   <tbody id="tbody"></tbody>
@@ -100,21 +100,23 @@ function runAll() {
       var iw = img.naturalWidth, ih = img.naturalHeight;
 
       // Algorithm values in image pixels
-      var aCx = r.ok ? r.cxFrac   * iw : null;
-      var aCy = r.ok ? r.cyFrac   * ih : null;
-      var aRi = r.ok ? r.rIrisFrac * iw : null;
-      var aRp = r.ok ? (r.rPupilFrac ? r.rPupilFrac * iw : aRi * 0.35) : null;
+      var aCx  = r.ok ? r.cxFrac        * iw : null;
+      var aCy  = r.ok ? r.cyFrac        * ih : null;
+      var aPCx = r.ok ? (r.cxPupilFrac != null ? r.cxPupilFrac * iw : aCx) : null;
+      var aPCy = r.ok ? (r.cyPupilFrac != null ? r.cyPupilFrac * ih : aCy) : null;
+      var aRi  = r.ok ? r.rIrisFrac     * iw : null;
+      var aRp  = r.ok ? (r.rPupilFrac   ? r.rPupilFrac * iw : aRi * 0.35) : null;
 
       // Errors
-      var iCtrErr  = r.ok ? dist(aCx, aCy, g.irisCx,  g.irisCy)  : null;
-      var pCtrErr  = r.ok ? dist(aCx, aCy, g.pupilCx, g.pupilCy) : null;
-      var iRErr    = r.ok ? Math.abs(aRi - g.irisR)  / g.irisR   : null;
-      var pRErr    = r.ok ? Math.abs(aRp - g.pupilR) / g.pupilR  : null;
+      var iCtrErr  = r.ok ? dist(aCx,  aCy,  g.irisCx,  g.irisCy)  : null;
+      var pCtrErr  = r.ok ? dist(aPCx, aPCy, g.pupilCx, g.pupilCy) : null;
+      var iRErr    = r.ok ? Math.abs(aRi - g.irisR)  / g.irisR     : null;
+      var pRErr    = r.ok ? Math.abs(aRp - g.pupilR) / g.pupilR    : null;
 
       results.push({
         name: name, img: img,
         ok: r.ok,
-        aCx: aCx, aCy: aCy, aRi: aRi, aRp: aRp,
+        aCx: aCx, aCy: aCy, aPCx: aPCx, aPCy: aPCy, aRi: aRi, aRp: aRp,
         iCtrErr: iCtrErr, pCtrErr: pCtrErr,
         iRErr:   iRErr,   pRErr:   pRErr,
         gt: g
@@ -246,8 +248,8 @@ function makeThumb(res) {
 
   // Algorithm: dashed lines
   if (res.ok) {
-    circleDash(ctx, res.aCx * scale, res.aCy * scale, res.aRi * scale, 'rgba(80,80,255,0.9)', 1);
-    circleDash(ctx, res.aCx * scale, res.aCy * scale, res.aRp * scale, 'rgba(255,130,30,0.9)', 1);
+    circleDash(ctx, res.aCx  * scale, res.aCy  * scale, res.aRi * scale, 'rgba(80,80,255,0.9)', 1);
+    circleDash(ctx, res.aPCx * scale, res.aPCy * scale, res.aRp * scale, 'rgba(255,130,30,0.9)', 1);
   }
 
   return '<img src="' + c.toDataURL() + '" width="' + tw + '" height="' + th + '" style="display:block">';

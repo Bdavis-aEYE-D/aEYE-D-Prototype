@@ -283,10 +283,12 @@ function draw() {
   if (algoResult && algoResult.ok) {
     var aCx = algoResult.cxFrac  * canvas.width;
     var aCy = algoResult.cyFrac  * canvas.height;
+    var aPCx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * canvas.width;
+    var aPCy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * canvas.height;
     var aRi = algoResult.rIrisFrac * canvas.width;
     drawCircle(aCx, aCy, aRi,  'rgba(80,80,200,0.35)', 1.5, [5,4]);
     if (algoResult.rPupilFrac)
-      drawCircle(aCx, aCy, algoResult.rPupilFrac*canvas.width,
+      drawCircle(aPCx, aPCy, algoResult.rPupilFrac*canvas.width,
                  'rgba(200,120,30,0.35)', 1.5, [5,4]);
   }
 
@@ -361,8 +363,8 @@ function resetToAlgo() {
     iris.cy = algoResult.cyFrac * ih;
     iris.r  = algoResult.rIrisFrac * iw;
   } else {
-    pupil.cx = algoResult.cxFrac * iw;
-    pupil.cy = algoResult.cyFrac * ih;
+    pupil.cx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * iw;
+    pupil.cy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * ih;
     pupil.r  = algoResult.rPupilFrac ? algoResult.rPupilFrac * iw : iris.r * 0.35;
   }
   placing = null;
@@ -443,7 +445,8 @@ function loadImage(i) {
                   r:  algoResult.rIrisFrac*iw };
         // Pupil: use algorithm pupil if available, otherwise estimate
         // NOTE: pupil is independent of iris — same starting center is just the algo's guess
-        pupil = { cx: algoResult.cxFrac*iw, cy: algoResult.cyFrac*ih,
+        pupil = { cx: (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac)*iw,
+                  cy: (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac)*ih,
                   r:  algoResult.rPupilFrac ? algoResult.rPupilFrac*iw : iris.r*0.35 };
       } else {
         iris  = { cx: -1, cy: -1, r: -1 };

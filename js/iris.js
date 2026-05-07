@@ -280,10 +280,47 @@ function autoFit(src, closeup){
     }
   }
 
+  // Independent pupil center re-search (close-up + ok only).
+  // The coarse pupil grid above runs before iris detection and may place the pupil
+  // at the iris center rather than the true (offset) pupil center. Here we do a
+  // focused search anchored on the final iris center within 50% of irisR.
+  var pupilCx = pcx, pupilCy = pcy, pupilR = pr;
+  if (closeup && ok) {
+    var pSR    = Math.round(irisR * 0.50);   // search radius from iris center
+    var pMaxR  = Math.round(irisR * 0.45);   // pupil can't exceed 45% of irisR
+    var pLo    = Math.max(0, pcx - pSR);
+    var pHi    = Math.min(W, pcx + pSR + 1);
+    var pyLo   = Math.max(0, pcy - pSR);
+    var pyHi   = Math.min(H, pcy + pSR + 1);
+    var pBest  = -1e9;
+    for (var ppx = pLo; ppx < pHi; ppx += 2) {
+      for (var ppy = pyLo; ppy < pyHi; ppy += 2) {
+        if (Math.hypot(ppx - pcx, ppy - pcy) > pSR) continue;
+        for (var ri2 = 0; ri2 < coarseR.length; ri2++) {
+          if (coarseR[ri2] > pMaxR) break;
+          var ps = pupilScore(ppx, ppy, coarseR[ri2]);
+          if (ps > pBest) { pBest = ps; pupilCx = ppx; pupilCy = ppy; pupilR = coarseR[ri2]; }
+        }
+      }
+    }
+    // Fine-tune ±4px, ±3r
+    var bpx2 = pupilCx, bpy2 = pupilCy, bpr2 = pupilR;
+    for (var fpx = Math.max(pLo, bpx2-4); fpx <= Math.min(pHi-1, bpx2+4); fpx++) {
+      for (var fpy = Math.max(pyLo, bpy2-4); fpy <= Math.min(pyHi-1, bpy2+4); fpy++) {
+        if (Math.hypot(fpx - pcx, fpy - pcy) > pSR) continue;
+        for (var frr = Math.max(2, bpr2-3); frr <= Math.min(pMaxR, bpr2+3); frr++) {
+          var fps = pupilScore(fpx, fpy, frr);
+          if (fps > pBest) { pBest = fps; pupilCx = fpx; pupilCy = fpy; pupilR = frr; }
+        }
+      }
+    }
+  }
+
   return {
-    cxFrac: pcx/W, cyFrac: pcy/H,
-    rPupilFrac: (pr*1.05)/W,
-    rIrisFrac: irisR/W,
+    cxFrac:      pcx/W,      cyFrac:      pcy/H,
+    cxPupilFrac: pupilCx/W,  cyPupilFrac: pupilCy/H,
+    rPupilFrac:  (pupilR*1.05)/W,
+    rIrisFrac:   irisR/W,
     ok: ok, leftHit: leftHit, rightHit: rightHit,
     leftGrad: 0, rightGrad: 0
   };

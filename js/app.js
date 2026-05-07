@@ -561,8 +561,12 @@ function _applyFitClassical(closeup){
     var scaleY = drawInfo.dh / imgEl.height;
     donut.cx     = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
     donut.cy     = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
-    donut.cxPupil = donut.cx;
-    donut.cyPupil = donut.cy;
+    donut.cxPupil = fit.cxPupilFrac != null
+      ? drawInfo.dx + fit.cxPupilFrac * imgEl.width  * scaleX
+      : donut.cx;
+    donut.cyPupil = fit.cyPupilFrac != null
+      ? drawInfo.dy + fit.cyPupilFrac * imgEl.height * scaleY
+      : donut.cy;
     var rpx  = fit.rPupilFrac * imgEl.width * scaleX;
     var ripx = fit.rIrisFrac  * imgEl.width * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
