@@ -426,7 +426,10 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
   }
 
   var cx = Math.round(cxHint), cy = Math.round(cyHint);
-  var guardR = Math.round((pupilRHint || 0) * 1.4);
+  // Guard must clear the pupil AND any catch-light (specular highlight) inside the iris.
+  // Catch-lights typically extend to ~1.8× the pupil radius, so use 2.0× to be safe.
+  // Minimum of 12px so tiny pupils don't leave guardR at zero.
+  var guardR = Math.max(12, Math.round((pupilRHint || 0) * 2.0));
   var bandH = 6;
 
   // Smooth horizontal profile across ±6px band
@@ -443,17 +446,27 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
   var hits = [];       // collected limbal distances from center
   var leftHit = -1, rightHit = -1;
 
-  // Left limbus: scan rightward from left edge, find steepest brightness DROP entering iris
+  // Restrict horizontal scan to a plausible limbus zone.
+  // Scanning all the way to the image edge picks up face/skin boundaries far outside
+  // the iris (e.g. when the eye is near the crop edge) and produces r > 1.5× iris.
+  // Cap at 5.5× pupil radius (iris is ~3–4× pupil, so this allows generous margin).
+  var maxSearchR = pupilRHint > 0
+    ? Math.min(Math.min(W, H) * 0.47, Math.round(pupilRHint * 5.5))
+    : Math.min(W, H) * 0.47;
+
+  // Left limbus: scan rightward from the capped start, find steepest brightness DROP entering iris
   var leftMax = 20;   // minimum gradient threshold (lum units over 2px)
-  for (var x = 2; x < cx - guardR; x++) {
+  var leftFrom = Math.max(2, Math.round(cx - maxSearchR));
+  for (var x = leftFrom; x < cx - guardR; x++) {
     var drop = profile[x-2] - profile[x];
     if (drop > leftMax) { leftMax = drop; leftHit = x; }
   }
   if (leftHit >= 0) hits.push(cx - leftHit);
 
-  // Right limbus: scan leftward from right edge
+  // Right limbus: scan leftward from the capped end
   var rightMax = 20;
-  for (var x = W - 3; x > cx + guardR; x--) {
+  var rightTo = Math.min(W - 3, Math.round(cx + maxSearchR));
+  for (var x = rightTo; x > cx + guardR; x--) {
     var drop = profile[x+2] - profile[x];
     if (drop > rightMax) { rightMax = drop; rightHit = x; }
   }

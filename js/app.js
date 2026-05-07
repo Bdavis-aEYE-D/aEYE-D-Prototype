@@ -790,11 +790,11 @@ function zoomToEye() {
       var zPR0 = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, iR);
 
       // Horizontal limbus: iris→sclera edge at 3 and 9 o'clock — primary radius finder.
-      // Apply 0.96× trim: the gradient peak falls at the midpoint of the ~5px transition
-      // band, so the raw radius slightly overshoots the true limbus edge.
+      // findIrisODHorizontal now uses 33rd-percentile of hits (not median) so that
+      // angular rays hitting eyelid corners don't inflate the result.
       var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
       if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 2.2) {
-        donut.rIris = Math.min(zODH.irisR * 0.96 * nsx, Math.min(stageW, stageH) * 0.45);
+        donut.rIris = Math.min(zODH.irisR * nsx, Math.min(stageW, stageH) * 0.45);
         // If horizontal scan also refined the x-center, adopt it
         if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
           donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
