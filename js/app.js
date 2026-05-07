@@ -963,7 +963,20 @@ $('btn-fit-back').addEventListener('click', function(){
   showLocate();
 });
 
-window.addEventListener('resize', function(){ if (imgLoaded) layoutStage(); });
+window.addEventListener('resize', function(){
+  if (!imgLoaded) return;
+  // Preserve the user's (or auto-fit's) circle positions across the resize —
+  // iOS fires 'resize' whenever the browser chrome shows/hides (scroll, keyboard,
+  // safe-area change). layoutStage() resets donut to defaults, so we save and
+  // restore to prevent the circles from jumping after Analyze Iris or manual adjust.
+  var saved = { cx: donut.cx, cy: donut.cy, rIris: donut.rIris, rPupil: donut.rPupil,
+                cxPupil: donut.cxPupil, cyPupil: donut.cyPupil };
+  layoutStage();
+  donut.cx = saved.cx; donut.cy = saved.cy;
+  donut.rIris = saved.rIris; donut.rPupil = saved.rPupil;
+  donut.cxPupil = saved.cxPupil; donut.cyPupil = saved.cyPupil;
+  draw();
+});
 
 $('btn-analyze').addEventListener('click', function(){
   if (captureMode === 'portrait') {
