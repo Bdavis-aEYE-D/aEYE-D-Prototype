@@ -106,6 +106,69 @@ function analyze(){
     }
   }
   window.__lastMaskStats = maskStats;
+
+  // === Sclera white-balance ===
+  // Sample the whites of the eye flanking the iris as a neutral reference.
+  // Gray-world correction: scale each channel so the sclera reads as neutral,
+  // removing the color cast from warm/cool ambient light before any color match.
+  var scleraSamples = [];
+  var sclWBands = [
+    [Math.max(0, Math.floor(cx - rOut * 2.6)), Math.max(0, Math.floor(cx - rOut * 1.15))],
+    [Math.min(stageW, Math.ceil(cx + rOut * 1.15)), Math.min(stageW, Math.ceil(cx + rOut * 2.6))]
+  ];
+  var sclYlo = Math.max(0, Math.floor(cy - rOut * 0.4));
+  var sclYhi = Math.min(stageH, Math.ceil(cy + rOut * 0.4));
+  for (var si = 0; si < 2; si++) {
+    var sxLo = sclWBands[si][0], sxHi = sclWBands[si][1];
+    for (var sy = sclYlo; sy < sclYhi; sy++) {
+      for (var sx = sxLo; sx < sxHi; sx++) {
+        var sIdx = (sy * stageW + sx) * 4;
+        if (d[sIdx+3] < 200) continue;
+        var sr = d[sIdx], sg = d[sIdx+1], sb = d[sIdx+2];
+        var slum = 0.299*sr + 0.587*sg + 0.114*sb;
+        var smx = Math.max(sr, sg, sb);
+        var ssat = smx > 0 ? (smx - Math.min(sr, sg, sb)) / smx : 0;
+        if (slum > 160 && ssat < 0.20) scleraSamples.push([sr, sg, sb]);
+      }
+    }
+  }
+  var wbR = 1, wbG = 1, wbB = 1;
+  if (scleraSamples.length >= 30) {
+    var wbSumR = 0, wbSumG = 0, wbSumB = 0;
+    for (var pi = 0; pi < scleraSamples.length; pi++) {
+      wbSumR += scleraSamples[pi][0];
+      wbSumG += scleraSamples[pi][1];
+      wbSumB += scleraSamples[pi][2];
+    }
+    var wbMeanR = wbSumR / scleraSamples.length;
+    var wbMeanG = wbSumG / scleraSamples.length;
+    var wbMeanB = wbSumB / scleraSamples.length;
+    var wbGray = (wbMeanR + wbMeanG + wbMeanB) / 3;
+    wbR = wbMeanR > 0 ? Math.min(1.35, Math.max(0.74, wbGray / wbMeanR)) : 1;
+    wbG = wbMeanG > 0 ? Math.min(1.35, Math.max(0.74, wbGray / wbMeanG)) : 1;
+    wbB = wbMeanB > 0 ? Math.min(1.35, Math.max(0.74, wbGray / wbMeanB)) : 1;
+  }
+  window.__lastWB = { n: scleraSamples.length, wbR: wbR, wbG: wbG, wbB: wbB };
+  function applyWB(arr) {
+    for (var wi = 0; wi < arr.length; wi++) {
+      arr[wi][0] = Math.min(255, Math.round(arr[wi][0] * wbR));
+      arr[wi][1] = Math.min(255, Math.round(arr[wi][1] * wbG));
+      arr[wi][2] = Math.min(255, Math.round(arr[wi][2] * wbB));
+    }
+  }
+  applyWB(inner); applyWB(outer); applyWB(edge);
+  applyWB(pupilZone); applyWB(ciliaryZone);
+  for (var wbi = 0; wbi < SECT_WEDGES; wbi++) applyWB(wedgePix[wbi]);
+  // Recompute base-band Lab means from corrected wedge pixels
+  baseLsum = 0; baseAsum = 0; baseBsum = 0; baseN = 0;
+  for (var wbi2 = 0; wbi2 < SECT_WEDGES; wbi2++) {
+    for (var wpi = 0; wpi < wedgePix[wbi2].length; wpi++) {
+      var wp = wedgePix[wbi2][wpi];
+      var wpl = rgbLab(wp[0], wp[1], wp[2]);
+      baseLsum += wpl[0]; baseAsum += wpl[1]; baseBsum += wpl[2]; baseN++;
+    }
+  }
+
   if (outer.length < 50){
     showError('Not enough iris pixels. Try enlarging the iris ring or reducing the pupil circle.');
     return;
