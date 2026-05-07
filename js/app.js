@@ -537,10 +537,7 @@ function applyAutoFit(){
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
-      var ri = $('r-iris'), rp = $('r-pupil');
-      if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
-      if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
-      if (hint) hint.textContent = 'Auto-fit complete. Tap "Analyze Iris" or adjust manually.';
+      if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
       if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
       draw();
     } catch(e) {
@@ -573,10 +570,7 @@ function _applyFitClassical(closeup){
     rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
     donut.rIris  = ripx;
     donut.rPupil = rpx;
-    var ri = $('r-iris'), rp = $('r-pupil');
-    if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
-    if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
-    if (hint) hint.textContent = 'Auto-fit complete. Tap "Analyze Iris" or adjust manually.';
+    if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
     if (st)   st.textContent   = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
     draw();
     return fit.ok;
@@ -647,13 +641,8 @@ function layoutStage(){
   drawInfo.dh = dh;
   donut.cx = stageW / 2;
   donut.cy = stageH / 2;
-  donut.rIris = Math.min(dw, dh) * 0.42;
+  donut.rIris  = Math.min(dw, dh) * 0.42;
   donut.rPupil = donut.rIris * 0.30;
-  var ri = $('r-iris'), rp = $('r-pupil');
-  ri.max = Math.round(Math.max(stageW, stageH));
-  ri.value = Math.round(donut.rIris);
-  rp.max = Math.round(donut.rIris);
-  rp.value = Math.round(donut.rPupil);
   draw();
 }
 
@@ -661,8 +650,11 @@ function draw(){
   if (!imgEl) return;
   var cxP = donut.cxPupil != null ? donut.cxPupil : donut.cx;
   var cyP = donut.cyPupil != null ? donut.cyPupil : donut.cy;
+
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, stageW, stageH);
   ctx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
+
+  // Dark overlay cut out by iris
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath();
@@ -670,46 +662,141 @@ function draw(){
   ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2, true);
   ctx.fill('evenodd');
   ctx.restore();
+
+  // Pupil fill
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.fill();
   ctx.restore();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#6cc4ff';
+
+  var irisActive  = fitActiveCircle === 'iris';
+  var irisColor   = irisActive  ? '#6cc4ff' : 'rgba(108,196,255,0.35)';
+  var pupilColor  = !irisActive ? '#ffd66c' : 'rgba(255,214,108,0.35)';
+  var irisLW      = irisActive  ? 2 : 1;
+  var pupilLW     = !irisActive ? 2 : 1;
+
+  // Iris ring
+  ctx.lineWidth = irisLW; ctx.strokeStyle = irisColor;
   ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2); ctx.stroke();
-  ctx.strokeStyle = '#ffd66c';
+
+  // Pupil ring
+  ctx.lineWidth = pupilLW; ctx.strokeStyle = pupilColor;
   ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.stroke();
-  ctx.strokeStyle = '#ffffffaa';
+
+  // Active circle: crosshair at center + 4 edge handles
+  var acx = irisActive ? donut.cx    : cxP;
+  var acy = irisActive ? donut.cy    : cyP;
+  var ar  = irisActive ? donut.rIris : donut.rPupil;
+  var ac  = irisActive ? '#6cc4ff'   : '#ffd66c';
+  ctx.strokeStyle = ac; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(donut.cx-6, donut.cy); ctx.lineTo(donut.cx+6, donut.cy);
-  ctx.moveTo(donut.cx, donut.cy-6); ctx.lineTo(donut.cx, donut.cy+6);
+  ctx.moveTo(acx - 7, acy); ctx.lineTo(acx + 7, acy);
+  ctx.moveTo(acx, acy - 7); ctx.lineTo(acx, acy + 7);
   ctx.stroke();
+  [[acx+ar,acy],[acx-ar,acy],[acx,acy-ar],[acx,acy+ar]].forEach(function(h){
+    ctx.beginPath(); ctx.arc(h[0], h[1], 5, 0, Math.PI*2);
+    ctx.fillStyle = ac; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+  });
 }
 
-canvas.addEventListener('click', function(ev){
-  if (!imgLoaded) return;
-  var rect = canvas.getBoundingClientRect();
-  donut.cx = donut.cxPupil = ev.clientX - rect.left;
-  donut.cy = donut.cyPupil = ev.clientY - rect.top;
+// ── Direct-drag circle editing (annotate-style) ───────────────────────────────
+// Inside circle  → move   |   On edge (±EDGE_TOL px) → resize   |   Outside → draw fresh
+var fitActiveCircle = 'iris';
+var fitDrag = null;
+var EDGE_TOL = 18;   // display pixels
+
+function selectFitCircle(which) {
+  fitActiveCircle = which;
+  var ti = $('tab-iris'), tp = $('tab-pupil');
+  if (ti) { ti.className = 'circ-tab iris'  + (which === 'iris'  ? ' active' : ''); }
+  if (tp) { tp.className = 'circ-tab pupil' + (which === 'pupil' ? ' active' : ''); }
   draw();
+}
+
+function fitCanvasPt(clientX, clientY) {
+  var rect = canvas.getBoundingClientRect();
+  var sx = canvas.width  / rect.width;
+  var sy = canvas.height / rect.height;
+  return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
+}
+
+function fitActiveCx()  { return fitActiveCircle === 'iris' ? donut.cx     : (donut.cxPupil != null ? donut.cxPupil : donut.cx); }
+function fitActiveCy()  { return fitActiveCircle === 'iris' ? donut.cy     : (donut.cyPupil != null ? donut.cyPupil : donut.cy); }
+function fitActiveR()   { return fitActiveCircle === 'iris' ? donut.rIris  : donut.rPupil; }
+function fitSetCenter(x, y) {
+  if (fitActiveCircle === 'iris') { donut.cx = x; donut.cy = y; }
+  else { donut.cxPupil = x; donut.cyPupil = y; }
+}
+function fitSetRadius(r) {
+  if (fitActiveCircle === 'iris') {
+    donut.rIris = Math.max(10, r);
+    if (donut.rPupil >= donut.rIris) donut.rPupil = Math.round(donut.rIris * 0.4);
+  } else {
+    donut.rPupil = Math.max(4, Math.min(r, donut.rIris * 0.9));
+  }
+}
+
+function fitOnDown(clientX, clientY) {
+  if (!imgLoaded) return false;
+  var p   = fitCanvasPt(clientX, clientY);
+  var cx  = fitActiveCx(), cy = fitActiveCy(), r = fitActiveR();
+  var et  = EDGE_TOL * (canvas.width / canvas.getBoundingClientRect().width);
+  var d   = Math.hypot(p.x - cx, p.y - cy);
+  if (r > 0 && Math.abs(d - r) <= et) {
+    fitDrag = { type: 'resize', startCx: cx, startCy: cy };
+  } else if (r > 0 && d < r - et) {
+    fitDrag = { type: 'move', startMx: p.x, startMy: p.y, startCx: cx, startCy: cy };
+  } else {
+    fitSetCenter(p.x, p.y); fitSetRadius(2);
+    fitDrag = { type: 'draw', startCx: p.x, startCy: p.y };
+  }
+  draw();
+  return true;
+}
+
+function fitOnMove(clientX, clientY) {
+  if (!fitDrag) return;
+  var p = fitCanvasPt(clientX, clientY);
+  if (fitDrag.type === 'move') {
+    fitSetCenter(fitDrag.startCx + (p.x - fitDrag.startMx),
+                 fitDrag.startCy + (p.y - fitDrag.startMy));
+  } else {
+    fitSetRadius(Math.max(2, Math.hypot(p.x - fitDrag.startCx, p.y - fitDrag.startCy)));
+  }
+  draw();
+}
+
+canvas.addEventListener('mousedown', function(ev) {
+  if (ev.button !== 0) return;
+  if (fitOnDown(ev.clientX, ev.clientY)) ev.preventDefault();
 });
-canvas.addEventListener('touchstart', function(ev){
+canvas.addEventListener('mousemove', function(ev) {
   if (!imgLoaded) return;
+  fitOnMove(ev.clientX, ev.clientY);
+  // cursor feedback
+  var p  = fitCanvasPt(ev.clientX, ev.clientY);
+  var cx = fitActiveCx(), cy = fitActiveCy(), r = fitActiveR();
+  var et = EDGE_TOL * (canvas.width / canvas.getBoundingClientRect().width);
+  var d  = Math.hypot(p.x - cx, p.y - cy);
+  canvas.style.cursor = fitDrag ? '' :
+    (r > 0 && Math.abs(d - r) <= et) ? 'ew-resize' :
+    (r > 0 && d < r - et)            ? 'move'       : 'crosshair';
+});
+canvas.addEventListener('mouseup',    function() { fitDrag = null; });
+canvas.addEventListener('mouseleave', function() { fitDrag = null; });
+
+canvas.addEventListener('touchstart', function(ev) {
   if (!ev.touches || !ev.touches[0]) return;
-  var rect = canvas.getBoundingClientRect();
-  donut.cx = donut.cxPupil = ev.touches[0].clientX - rect.left;
-  donut.cy = donut.cyPupil = ev.touches[0].clientY - rect.top;
-  draw();
+  if (fitOnDown(ev.touches[0].clientX, ev.touches[0].clientY)) ev.preventDefault();
+}, {passive: false});
+canvas.addEventListener('touchmove', function(ev) {
+  if (!ev.touches || !ev.touches[0]) return;
+  fitOnMove(ev.touches[0].clientX, ev.touches[0].clientY);
   ev.preventDefault();
 }, {passive: false});
+canvas.addEventListener('touchend',   function() { fitDrag = null; });
 
-$('r-iris').addEventListener('input', function(e){
-  donut.rIris = +e.target.value;
-  if (donut.rPupil >= donut.rIris) { donut.rPupil = donut.rIris * 0.5; $('r-pupil').value = donut.rPupil; }
-  $('r-pupil').max = donut.rIris;
-  draw();
-});
-$('r-pupil').addEventListener('input', function(e){ donut.rPupil = +e.target.value; draw(); });
 $('r-thresh').addEventListener('input', function(e){ donut.threshHi = +e.target.value; });
 $('btn-reset').addEventListener('click', function(){ layoutStage(); var st=$('autofit-status'); if (st) st.textContent=' '; });
 $('btn-autofit').addEventListener('click', function(){ applyAutoFit(); });
@@ -852,16 +939,6 @@ $('btn-again').addEventListener('click', function(){
   $('card-locate').style.display = 'none';
   window.scrollTo({top: 0, behavior: 'smooth'});
 });
-// Manual slider toggle
-var btnToggleManual = $('btn-toggle-manual');
-if (btnToggleManual) {
-  btnToggleManual.addEventListener('click', function(){
-    var sliders = $('manual-sliders');
-    var showing = sliders.style.display !== 'none';
-    sliders.style.display = showing ? 'none' : 'block';
-    btnToggleManual.textContent = showing ? 'Adjust Manually' : 'Hide Sliders';
-  });
-}
 
 $('btn-toggle-reveal').addEventListener('click', function(){ revealed = !revealed; drawPostStage(); });
 $('btn-export-post').addEventListener('click', function(){
