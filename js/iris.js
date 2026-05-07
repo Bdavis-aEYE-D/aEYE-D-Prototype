@@ -81,7 +81,9 @@ function autoFit(src, closeup){
     var cd = Math.hypot(cx - W/2, cy - H/2);
     // Close-up: require 6/8 surround quadrants bright (surr[2] = 3rd-lowest after sort).
     // Black padding bar has 3 dark upper surround samples → surr[2]≈0, so it can't win.
-    if (closeup) return (surr[2] - inner);
+    // Small center penalty: close-up photos frame the iris near center; 0.15/px breaks
+    // ties toward center without blocking legitimately off-center irises.
+    if (closeup) return (surr[2] - inner) - cd * 0.15;
     var centerBonus = Math.max(0, 1 - cd/(W*0.25));
     return (medSurr - inner) * (1 + centerBonus*0.4) - cd*0.3;
   }
@@ -135,6 +137,11 @@ function autoFit(src, closeup){
     return { lh: lh, rh: rh };
   }
 
+  // Iris radius bounds for close-up mode.
+  // Upper bound: iris can't plausibly span more than 48% of the shorter image dimension —
+  // anything larger is the algorithm locking onto an eyelid, brow ridge, or glasses frame.
+  var R_MAX_CU = closeup ? Math.round(Math.min(W, H) * 0.38) : Infinity;
+
   // Iris boundary: scan horizontally at the pupil row first.
   var init = scanBand(Math.round(pcy), pcx);
   var leftHit = init.lh, rightHit = init.rh;
@@ -142,53 +149,91 @@ function autoFit(src, closeup){
   if (leftHit >= 0 && rightHit >= 0){
     irisR = Math.round((rightHit - leftHit) / 2);
     pcx   = Math.round((leftHit + rightHit) / 2);
-    ok = true;
+    ok = irisR <= R_MAX_CU;
   } else if (leftHit >= 0){
-    irisR = Math.round(pcx - leftHit); ok = true;
+    irisR = Math.round(pcx - leftHit); ok = irisR <= R_MAX_CU;
   } else if (rightHit >= 0){
-    irisR = Math.round(rightHit - pcx); ok = true;
+    irisR = Math.round(rightHit - pcx); ok = irisR <= R_MAX_CU;
   } else {
     irisR = Math.round(pr * 2.1); ok = false;
   }
 
   // Secondary validation for close-up mode: the iris is a circle, so its
-  // horizontal span is WIDEST at the iris center Y. If the pupil detector placed
-  // pcy at the upper (eyelid-occluded) edge, scanning downward will find a wider
-  // span. Scan pcy → pcy+30% and use the Y with the largest bilateral span.
+  // horizontal span is WIDEST at its center Y. Scan pcy → pcy+30% looking for
+  // a row with a wider, DARK-INTERIOR bilateral span.
+  //
+  // Scoring uses span × (exterior_lum − interior_lum) instead of span alone.
+  // This rejects lower-eyelid lash lines and padding-edge artifacts: both have
+  // similar lum inside and outside the span, scoring near zero. A real iris has
+  // bright sclera flanking a dark interior, scoring much higher.
   if (closeup) {
-    // Seed bestSpan from the current irisR so the Y-scan can only win if it finds
-    // a wider bilateral span — prevents a half-limbus initial scan (irisR reasonable
-    // but one edge missing) from being displaced by a tiny bilateral hit below.
-    var bestSpan = ok ? irisR * 2 : 0;
+    // Seed score from current reading; scan must beat this to displace it.
+    var bestScore = ok ? irisR * 2 * 12 : 0;
     var bestCy = pcy, bestCx = pcx, bestIrisR = irisR;
+    var tier1Hit = false; // track whether any scan actually improved on the seed
     var yEnd = Math.min(H - 1, Math.round(pcy + H * 0.30));
     for (var ty = Math.round(pcy) + 3; ty <= yEnd; ty += 3) {
       var b2 = scanBand(ty, pcx);
       if (b2.lh >= 0 && b2.rh >= 0) {
         var span = b2.rh - b2.lh;
-        if (span > bestSpan) {
-          bestSpan = span;
-          bestCy = ty;
-          bestCx = Math.round((b2.lh + b2.rh) / 2);
-          bestIrisR = Math.round(span / 2);
+        var tCx  = Math.round((b2.lh + b2.rh) / 2);
+        var tFlk = Math.max(5, Math.round(span * 0.10));
+        var tInt  = bm(b2.lh, ty - bandH, b2.rh, ty + bandH + 1);
+        var tExtL = (b2.lh >= tFlk) ? bm(b2.lh - tFlk, ty - bandH, b2.lh, ty + bandH + 1) : tInt;
+        var tExtR = (b2.rh + tFlk <= W) ? bm(b2.rh, ty - bandH, b2.rh + tFlk, ty + bandH + 1) : tInt;
+        var tExt  = (tExtL + tExtR) * 0.5;
+        var tScore = span * Math.max(0, tExt - tInt);
+        var tR = Math.round(span / 2);
+        // When initial scan succeeded, cap Tier-1 radius at 1.35× the initial
+        // estimate. Eyelid skin rows score high (wide span, good contrast) but
+        // produce a radius ~40-60% larger than the true limbal span — this
+        // rejects them while still allowing the equatorial row to widen slightly.
+        var tRinRange = tR <= R_MAX_CU && (!ok || tR <= irisR * 1.20);
+        if (tScore > bestScore && tRinRange) {
+          bestScore = tScore;
+          bestCy = ty; bestCx = tCx; bestIrisR = tR;
+          tier1Hit = true;
         }
       }
     }
-    if (bestSpan > 0) {
+    // Only update if Tier-1 actually found a bilateral improvement. If no scan
+    // beat the seed, keep the original leftHit/rightHit from the initial band scan
+    // rather than overwriting them with pcx ± irisR (which can be negative when
+    // the initial scan found only one limbus and irisR = rightHit - pcx).
+    if (tier1Hit) {
       pcy = bestCy; pcx = bestCx; irisR = bestIrisR; ok = true;
       leftHit = Math.round(bestCx - bestIrisR);
       rightHit = Math.round(bestCx + bestIrisR);
     }
   }
 
-  // Tier-2 fallback for close-up: global bilateral limbus sweep.
-  // When pupil-anchored detection fails (ok=false or weak iris radius),
-  // scan every row independently for simultaneous left+right sclera→iris
-  // brightness drops. The row with the widest bilateral span = iris center Y.
-  // No pupil position needed — works even when the pupil finder locked onto
-  // a tear duct, inner-corner shadow, or any other off-center dark region.
-  if (closeup && (!ok || irisR < W * 0.10)) {
-    var gBestSpan = 0, gBestCy = -1, gBestCx = W>>1, gBestR = 0;
+  // Post-Tier-1 darkness validation: verify the accepted ring has a dark interior
+  // (iris body) vs bright sclera flanking it. Catches lash lines and skin creases.
+  // Only run when both flanks have enough room from the image edge to sample real
+  // sclera — for very large/close-up irises the sclera may not be visible, and
+  // the limbal detection is trusted as-is.
+  if (closeup && ok) {
+    var vFlk  = Math.max(6, Math.round(irisR * 0.12));
+    var vHasL = leftHit  >= vFlk;
+    var vHasR = rightHit + vFlk <= W;
+    if (vHasL && vHasR) {
+      var vPcy  = Math.round(pcy);
+      var vInt  = bm(leftHit, vPcy - bandH, rightHit, vPcy + bandH + 1);
+      var vExtL = bm(leftHit - vFlk, vPcy - bandH, leftHit,         vPcy + bandH + 1);
+      var vExtR = bm(rightHit,       vPcy - bandH, rightHit + vFlk, vPcy + bandH + 1);
+      var vExt  = (vExtL + vExtR) * 0.5;
+      if (vExt - vInt < minGrad * 0.6) ok = false; // interior not dark → not iris
+    }
+  }
+
+  // Tier-2 fallback: global bilateral limbus sweep with darkness scoring.
+  // Runs when ok=false, weak radius, a single-limbus detection, OR the accepted
+  // circle center is implausibly far from the image center (>35% of W) — which
+  // indicates the seed landed on a non-iris dark region (lash shadow, canthus, etc.)
+  // and the bilateral scan built a wrong circle from it.
+  var centerDist = Math.hypot(pcx - W/2, pcy - H/2);
+  if (closeup && (!ok || irisR < W * 0.10 || leftHit < 0 || centerDist > W * 0.35)) {
+    var gBestScore = 0, gBestCy = -1, gBestCx = W>>1, gBestR = 0;
     var gyLo = Math.floor(H * 0.15), gyHi = Math.ceil(H * 0.85);
     for (var gy = gyLo; gy <= gyHi; gy += 2) {
       var gprof = new Float32Array(W);
@@ -212,26 +257,70 @@ function autoFit(src, closeup){
         if (gd > grightMax) { grightMax = gd; gright = gx; }
       }
       if (gleft >= 0 && gright > gleft) {
-        var gspan = gright - gleft;
-        if (gspan > gBestSpan) {
-          gBestSpan = gspan; gBestCy = gy;
-          gBestCx = Math.round((gleft + gright) / 2);
-          gBestR   = Math.round(gspan / 2);
+        var gspan  = gright - gleft;
+        var gcx_g  = Math.round((gleft + gright) / 2);
+        var gFlk    = Math.max(5, Math.round(gspan * 0.10));
+        var gIntL   = bm(gleft, gy - bandH, gright, gy + bandH + 1);
+        var gExtLL  = (gleft >= gFlk) ? bm(gleft - gFlk, gy - bandH, gleft, gy + bandH + 1) : gIntL;
+        var gExtRL  = (gright + gFlk <= W) ? bm(gright, gy - bandH, gright + gFlk, gy + bandH + 1) : gIntL;
+        var gExtL   = (gExtLL + gExtRL) * 0.5;
+        var gScore  = gspan * Math.max(0, gExtL - gIntL);
+        if (gScore > gBestScore) {
+          gBestScore = gScore; gBestCy = gy;
+          gBestCx = gcx_g;
+          gBestR  = Math.round(gspan / 2);
         }
       }
     }
-    // Accept if the found iris fills at least 18% of image width
-    if (gBestCy >= 0 && gBestR > W * 0.09) {
+    // Accept if iris spans ≥18% of image width, ≤48% of shorter dimension, and has a positive darkness score
+    if (gBestCy >= 0 && gBestR > W * 0.09 && gBestR <= R_MAX_CU && gBestScore > 0) {
       pcy = gBestCy; pcx = gBestCx; irisR = gBestR; ok = true;
       leftHit = Math.round(gBestCx - gBestR);
       rightHit = Math.round(gBestCx + gBestR);
     }
   }
 
+  // Independent pupil center re-search (close-up + ok only).
+  // The coarse pupil grid above runs before iris detection and may place the pupil
+  // at the iris center rather than the true (offset) pupil center. Here we do a
+  // focused search anchored on the final iris center within 50% of irisR.
+  var pupilCx = pcx, pupilCy = pcy, pupilR = pr;
+  if (closeup && ok) {
+    var pSR    = Math.round(irisR * 0.50);   // search radius from iris center
+    var pMaxR  = Math.round(irisR * 0.45);   // pupil can't exceed 45% of irisR
+    var pLo    = Math.max(0, pcx - pSR);
+    var pHi    = Math.min(W, pcx + pSR + 1);
+    var pyLo   = Math.max(0, pcy - pSR);
+    var pyHi   = Math.min(H, pcy + pSR + 1);
+    var pBest  = -1e9;
+    for (var ppx = pLo; ppx < pHi; ppx += 2) {
+      for (var ppy = pyLo; ppy < pyHi; ppy += 2) {
+        if (Math.hypot(ppx - pcx, ppy - pcy) > pSR) continue;
+        for (var ri2 = 0; ri2 < coarseR.length; ri2++) {
+          if (coarseR[ri2] > pMaxR) break;
+          var ps = pupilScore(ppx, ppy, coarseR[ri2]);
+          if (ps > pBest) { pBest = ps; pupilCx = ppx; pupilCy = ppy; pupilR = coarseR[ri2]; }
+        }
+      }
+    }
+    // Fine-tune ±4px, ±3r
+    var bpx2 = pupilCx, bpy2 = pupilCy, bpr2 = pupilR;
+    for (var fpx = Math.max(pLo, bpx2-4); fpx <= Math.min(pHi-1, bpx2+4); fpx++) {
+      for (var fpy = Math.max(pyLo, bpy2-4); fpy <= Math.min(pyHi-1, bpy2+4); fpy++) {
+        if (Math.hypot(fpx - pcx, fpy - pcy) > pSR) continue;
+        for (var frr = Math.max(2, bpr2-3); frr <= Math.min(pMaxR, bpr2+3); frr++) {
+          var fps = pupilScore(fpx, fpy, frr);
+          if (fps > pBest) { pBest = fps; pupilCx = fpx; pupilCy = fpy; pupilR = frr; }
+        }
+      }
+    }
+  }
+
   return {
-    cxFrac: pcx/W, cyFrac: pcy/H,
-    rPupilFrac: (pr*1.05)/W,
-    rIrisFrac: irisR/W,
+    cxFrac:      pcx/W,      cyFrac:      pcy/H,
+    cxPupilFrac: pupilCx/W,  cyPupilFrac: pupilCy/H,
+    rPupilFrac:  (pupilR*1.05)/W,
+    rIrisFrac:   irisR/W,
     ok: ok, leftHit: leftHit, rightHit: rightHit,
     leftGrad: 0, rightGrad: 0
   };

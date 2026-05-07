@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ground-Truth Annotator</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0e0e0e; color: #ddd; font-family: monospace; display: flex;
+       flex-direction: column; height: 100vh; overflow: hidden; user-select: none; }
+
+#topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+          background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; }
+#topbar h1 { font-size: 15px; color: #fff; }
+#imgLabel  { font-size: 13px; color: #fa0; flex: 1; }
+#progress  { font-size: 12px; color: #888; }
+
+#main { display: flex; flex: 1; overflow: hidden; }
+
+#canvasWrap { flex: 1; display: flex; align-items: center; justify-content: center;
+              background: #111; overflow: hidden; }
+canvas { image-rendering: pixelated; display: block; }
+
+#sidebar { width: 270px; background: #181818; border-left: 1px solid #333;
+           display: flex; flex-direction: column; padding: 12px; gap: 8px;
+           overflow-y: auto; flex-shrink: 0; }
+
+/* Circle selector tabs */
+#circleSelect { display: flex; gap: 6px; }
+.circ-tab { flex: 1; padding: 8px 4px; border: 2px solid transparent;
+            border-radius: 6px; text-align: center; cursor: pointer;
+            font-size: 12px; font-family: monospace; transition: all 0.15s; }
+.circ-tab.iris  { background: #0e2233; color: #5ae; border-color: #1a3a5c; }
+.circ-tab.iris.active  { background: #1a3a5c; color: #4cf; border-color: #4cf; }
+.circ-tab.pupil { background: #2a1a00; color: #ca6; border-color: #5c3a00; }
+.circ-tab.pupil.active { background: #5c3a00; color: #fc4; border-color: #fc4; }
+
+.section { background: #222; border-radius: 6px; padding: 10px; }
+.section h3 { font-size: 11px; color: #888; text-transform: uppercase;
+              letter-spacing: 1px; margin-bottom: 8px; }
+
+#instrBox { font-size: 12px; color: #4f4; line-height: 1.6; white-space: pre-wrap; }
+#instrBox.warn { color: #fa0; }
+
+.val { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+.val span:first-child { color: #888; }
+.val span:last-child  { color: #cfc; }
+
+.btn { width: 100%; padding: 7px; border: none; border-radius: 5px;
+       font-size: 12px; font-family: monospace; cursor: pointer; }
+.btn-green  { background: #1a5c1a; color: #8f8; }
+.btn-green:hover  { background: #246624; }
+.btn-blue   { background: #1a3a5c; color: #88f; }
+.btn-blue:hover   { background: #1e4a78; }
+.btn-orange { background: #5c3a00; color: #fb8; }
+.btn-orange:hover { background: #7a4e00; }
+.btn-red    { background: #5c1a1a; color: #f88; }
+.btn-red:hover    { background: #7a2222; }
+.btn-gray   { background: #333; color: #aaa; }
+.btn-gray:hover   { background: #444; }
+
+#algoBox { font-size: 11px; color: #666; line-height: 1.6; white-space: pre; }
+#noteBox { width:100%; background:#111; color:#ccc; border:1px solid #444;
+           border-radius:4px; padding:5px; font-family:monospace; font-size:11px;
+           resize:vertical; height:48px; }
+
+.imglist { display: flex; flex-wrap: wrap; gap: 4px; }
+.imgthumb { width: 36px; height: 27px; border: 2px solid #444; border-radius:3px;
+            cursor: pointer; object-fit: cover; }
+.imgthumb.done   { border-color: #4a4; }
+.imgthumb.active { border-color: #fa0; }
+.imgthumb.skip   { border-color: #555; opacity:.5; }
+
+#exportWrap { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>Ground-Truth Annotator</h1>
+  <span id="imgLabel">—</span>
+  <span id="progress">0 / 0 annotated</span>
+</div>
+
+<div id="main">
+  <div id="canvasWrap"><canvas id="c"></canvas></div>
+
+  <div id="sidebar">
+
+    <!-- Circle selector -->
+    <div id="circleSelect">
+      <div class="circ-tab iris active" id="tab-iris"  onclick="selectCircle('iris')">
+        🔵 IRIS
+      </div>
+      <div class="circ-tab pupil" id="tab-pupil" onclick="selectCircle('pupil')">
+        🟠 PUPIL
+      </div>
+    </div>
+
+    <!-- Instructions for active circle -->
+    <div class="section">
+      <h3>Instructions</h3>
+      <div id="instrBox">—</div>
+    </div>
+
+    <!-- Active circle values -->
+    <div class="section">
+      <h3 id="valTitle">Iris values</h3>
+      <div class="val"><span>Center</span>     <span id="vCx">—</span></div>
+      <div class="val"><span>Radius (px)</span><span id="vR">—</span></div>
+      <div style="display:flex;gap:4px;margin-top:6px">
+        <button class="btn btn-gray" style="flex:1" onclick="placeNew()">
+          Place New</button>
+        <button class="btn btn-gray" style="flex:1" onclick="resetToAlgo()">
+          From Algo</button>
+      </div>
+    </div>
+
+    <!-- Other circle values (read-only) -->
+    <div class="section" style="opacity:0.55">
+      <h3 id="otherTitle">Pupil values</h3>
+      <div class="val"><span>Center</span>     <span id="vOtherCx">—</span></div>
+      <div class="val"><span>Radius (px)</span><span id="vOtherR">—</span></div>
+    </div>
+
+    <!-- Algorithm -->
+    <div class="section">
+      <h3>Algorithm result</h3>
+      <div id="algoBox">—</div>
+    </div>
+
+    <!-- Notes -->
+    <div class="section">
+      <h3>Notes</h3>
+      <textarea id="noteBox" placeholder="Optional: occlusion, poor quality…"></textarea>
+    </div>
+
+    <!-- Thumbnails -->
+    <div class="section">
+      <h3>Images</h3>
+      <div class="imglist" id="thumbList"></div>
+    </div>
+
+    <div id="exportWrap">
+      <button class="btn btn-red"   onclick="skipImage()">Skip Image</button>
+      <button class="btn btn-green" onclick="saveAndNext()"
+              style="font-size:14px;padding:10px">✓ Confirm &amp; Next →</button>
+      <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">
+        Export ground-truth.json</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="/js/iris.js"></script>
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+var IMG_DIR = '/ubiris-check/';
+var IMAGE_NAMES = [
+  'C11_S1_I13','C112_S1_I8','C122_S1_I7','C155_S1_I9','C204_S1_I13',
+  'C223_S1_I6','C307_S2_I11','C318_S2_I11','C326_S2_I7','C328_S1_I4',
+  'C329_S1_I13','C334_S1_I7','C338_S1_I4','C349_S1_I4','C379_S1_I13',
+  'C390_S1_I6','C394_S1_I1','C465_S1_I5','C492_S1_I11','C58_S1_I3'
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+var gt  = JSON.parse(localStorage.getItem('aeye_gt') || '{}');
+var idx = 0;
+var imgEl      = null;
+var SCALE      = 1;
+var algoResult = null;
+
+// Circles — completely independent objects
+var iris  = { cx: -1, cy: -1, r: -1 };
+var pupil = { cx: -1, cy: -1, r: -1 };
+
+// Which circle the user is currently working on
+var activeCircle = 'iris';   // 'iris' | 'pupil'
+
+// No separate placement state — draw/move/resize all happen via drag
+
+// Drag state — type: 'draw' | 'move' | 'resize'
+// Only ever affects the active circle. Inactive circle is never touched.
+var drag = null;
+
+var EDGE_TOL_PX = 16;   // display pixels for edge grab zone
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+var canvas = document.getElementById('c');
+var ctx    = canvas.getContext('2d');
+
+canvas.addEventListener('mousedown',  onDown);
+canvas.addEventListener('mousemove',  onMove);
+canvas.addEventListener('mouseup',    onUp);
+canvas.addEventListener('mouseleave', onUp);
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'i' || e.key === 'I') selectCircle('iris');
+  if (e.key === 'p' || e.key === 'P') selectCircle('pupil');
+});
+
+function imgPt(e) {
+  var r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / SCALE, y: (e.clientY - r.top) / SCALE };
+}
+function dist(ax, ay, bx, by) {
+  var dx = bx-ax, dy = by-ay; return Math.sqrt(dx*dx+dy*dy);
+}
+
+// ── Active circle accessor ────────────────────────────────────────────────────
+function active()  { return activeCircle === 'iris' ? iris  : pupil; }
+function inactive(){ return activeCircle === 'iris' ? pupil : iris;  }
+function activeColor()   { return activeCircle === 'iris' ? '#3cf' : '#fc4'; }
+function inactiveColor() { return activeCircle === 'iris' ? 'rgba(255,196,64,0.45)' : 'rgba(60,200,255,0.45)'; }
+
+// ── Mouse ─────────────────────────────────────────────────────────────────────
+// PowerPoint-style — no mode buttons needed:
+//   Drag inside circle   → MOVE (translate whole circle)
+//   Drag circle edge     → RESIZE (radius only, center fixed)
+//   Drag outside circle  → DRAW new circle (center = mousedown, radius = drag distance)
+
+function onDown(e) {
+  if (e.button !== 0) return;
+  var p   = imgPt(e);
+  var obj = active();
+  var et  = EDGE_TOL_PX / SCALE;
+
+  if (obj.r > 0) {
+    var d = dist(p.x, p.y, obj.cx, obj.cy);
+    if (Math.abs(d - obj.r) <= et) {
+      drag = { type:'resize', startCx: obj.cx, startCy: obj.cy };
+      e.preventDefault(); return;
+    }
+    if (d < obj.r - et) {
+      drag = { type:'move', startMx: p.x, startMy: p.y,
+               startCx: obj.cx, startCy: obj.cy };
+      e.preventDefault(); return;
+    }
+  }
+
+  // Outside (or no circle yet) — start drawing a new circle from scratch
+  obj.cx = p.x; obj.cy = p.y; obj.r = 2;
+  drag = { type:'draw', startCx: p.x, startCy: p.y };
+  e.preventDefault();
+}
+
+function onMove(e) {
+  var p   = imgPt(e);
+  var obj = active();
+
+  if (drag) {
+    if (drag.type === 'move') {
+      obj.cx = drag.startCx + (p.x - drag.startMx);
+      obj.cy = drag.startCy + (p.y - drag.startMy);
+    } else {
+      // resize or draw: radius = distance from (fixed) center to mouse
+      obj.r = Math.max(2, dist(drag.startCx, drag.startCy, p.x, p.y));
+    }
+    updateUI(); draw(); return;
+  }
+
+  // Cursor feedback
+  if (obj.r > 0) {
+    var d  = dist(p.x, p.y, obj.cx, obj.cy);
+    var et = EDGE_TOL_PX / SCALE;
+    if (Math.abs(d - obj.r) <= et) canvas.style.cursor = 'ew-resize';
+    else if (d < obj.r - et)       canvas.style.cursor = 'move';
+    else                           canvas.style.cursor = 'crosshair';
+  } else {
+    canvas.style.cursor = 'crosshair';
+  }
+  draw();
+}
+
+function onUp() { drag = null; }
+
+// ── Drawing ───────────────────────────────────────────────────────────────────
+function draw() {
+  if (!imgEl) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(imgEl, 0, 0);
+
+  // Algorithm overlay — always dim dashed
+  if (algoResult && algoResult.ok) {
+    var aCx = algoResult.cxFrac  * canvas.width;
+    var aCy = algoResult.cyFrac  * canvas.height;
+    var aPCx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * canvas.width;
+    var aPCy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * canvas.height;
+    var aRi = algoResult.rIrisFrac * canvas.width;
+    drawCircle(aCx, aCy, aRi,  'rgba(80,80,200,0.35)', 1.5, [5,4]);
+    if (algoResult.rPupilFrac)
+      drawCircle(aPCx, aPCy, algoResult.rPupilFrac*canvas.width,
+                 'rgba(200,120,30,0.35)', 1.5, [5,4]);
+  }
+
+  var act = active(), inact = inactive();
+
+  // Inactive circle — drawn dimly, no handles
+  if (inact.r > 0)
+    drawCircle(inact.cx, inact.cy, inact.r, inactiveColor(), 0.7 / SCALE);
+
+  // Active circle — bright with handles
+  if (act.r > 0) {
+    drawCircle(act.cx, act.cy, act.r, activeColor(), 1 / SCALE);
+    drawCross(act.cx, act.cy, activeColor());
+    // 4 edge grab handles
+    ['E','W','N','S'].forEach(function(dir) {
+      var hx = act.cx + (dir==='E' ? act.r : dir==='W' ? -act.r : 0);
+      var hy = act.cy + (dir==='S' ? act.r : dir==='N' ? -act.r : 0);
+      drawHandle(hx, hy, activeColor());
+    });
+  } else if (act.cx >= 0) {
+    // center placed but no radius yet
+    drawCross(act.cx, act.cy, activeColor());
+  }
+
+}
+
+function drawCircle(cx, cy, r, color, lw, dash) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.strokeStyle = color; ctx.lineWidth = lw || 2;
+  if (dash) ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawCross(cx, cy, color) {
+  var s = 8 / SCALE;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx-s,cy); ctx.lineTo(cx+s,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx,cy+s); ctx.stroke();
+  ctx.restore();
+}
+function drawHandle(x, y, color) {
+  var s = 5 / SCALE;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.restore();
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function selectCircle(which) {
+  placing = null;
+  activeCircle = which;
+  document.getElementById('tab-iris').className  = 'circ-tab iris'  + (which==='iris'  ? ' active':'');
+  document.getElementById('tab-pupil').className = 'circ-tab pupil' + (which==='pupil' ? ' active':'');
+  updateUI(); draw();
+}
+
+function placeNew() {
+  // Reset the active circle so the next drag draws a fresh one
+  var obj = active();
+  obj.cx = -1; obj.cy = -1; obj.r = -1;
+  canvas.style.cursor = 'crosshair';
+  updateUI(); draw();
+}
+
+function resetToAlgo() {
+  if (!algoResult || !algoResult.ok) return;
+  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+  if (activeCircle === 'iris') {
+    iris.cx = algoResult.cxFrac * iw;
+    iris.cy = algoResult.cyFrac * ih;
+    iris.r  = algoResult.rIrisFrac * iw;
+  } else {
+    pupil.cx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * iw;
+    pupil.cy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * ih;
+    pupil.r  = algoResult.rPupilFrac ? algoResult.rPupilFrac * iw : iris.r * 0.35;
+  }
+  placing = null;
+  updateUI(); draw();
+}
+
+function updateUI() {
+  var box   = document.getElementById('instrBox');
+  var label = activeCircle === 'iris' ? 'IRIS' : 'PUPIL';
+  box.className = '';
+  box.textContent =
+    'Working on: ' + label + '\n\n' +
+    'Drag outside  → draw new circle\nDrag interior → move\nDrag edge     → resize\n\n' +
+    'Switch:  I = iris   P = pupil';
+
+  // Values
+  var act   = active();
+  var inact = inactive();
+  var iw    = imgEl ? imgEl.naturalWidth : 1;
+
+  document.getElementById('valTitle').textContent   = activeCircle === 'iris' ? 'Iris values' : 'Pupil values';
+  document.getElementById('otherTitle').textContent = activeCircle === 'iris' ? 'Pupil values (inactive)' : 'Iris values (inactive)';
+
+  document.getElementById('vCx').textContent =
+    act.cx >= 0 ? Math.round(act.cx)+', '+Math.round(act.cy) : '—';
+  document.getElementById('vR').textContent =
+    act.r  > 0  ? Math.round(act.r)+'  ('+( act.r/iw).toFixed(3)+')' : '—';
+
+  document.getElementById('vOtherCx').textContent =
+    inact.cx >= 0 ? Math.round(inact.cx)+', '+Math.round(inact.cy) : '—';
+  document.getElementById('vOtherR').textContent =
+    inact.r  > 0  ? Math.round(inact.r)+'  ('+(inact.r/iw).toFixed(3)+')' : '—';
+}
+
+function showAlgo() {
+  var box = document.getElementById('algoBox');
+  if (!algoResult) { box.textContent = 'n/a'; return; }
+  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+  box.textContent =
+    'ok: ' + algoResult.ok + '\n' +
+    'cx: ' + (algoResult.cxFrac*iw).toFixed(1) +
+    '  cy: ' + (algoResult.cyFrac*ih).toFixed(1) + '\n' +
+    'irisR: ' + (algoResult.rIrisFrac*iw).toFixed(1) + '\n' +
+    'pupilR: ' + (algoResult.rPupilFrac ? (algoResult.rPupilFrac*iw).toFixed(1) : '—');
+}
+
+// ── Load image ────────────────────────────────────────────────────────────────
+function loadImage(i) {
+  idx = i;
+  drag = null;
+  document.getElementById('imgLabel').textContent =
+    IMAGE_NAMES[i] + '.jpg  (' + (i+1) + '/' + IMAGE_NAMES.length + ')';
+
+  imgEl = new Image();
+  imgEl.onload = function() {
+    var wrapEl = document.getElementById('canvasWrap');
+    var maxW = wrapEl.clientWidth  - 20;
+    var maxH = wrapEl.clientHeight - 20;
+    SCALE = Math.min(maxW / imgEl.naturalWidth, maxH / imgEl.naturalHeight);
+    canvas.style.width  = Math.round(imgEl.naturalWidth  * SCALE) + 'px';
+    canvas.style.height = Math.round(imgEl.naturalHeight * SCALE) + 'px';
+    canvas.width  = imgEl.naturalWidth;
+    canvas.height = imgEl.naturalHeight;
+
+    algoResult = autoFit(imgEl, true);
+    showAlgo();
+
+    var name = IMAGE_NAMES[i];
+    if (gt[name] && !gt[name]._skip) {
+      // Restore saved annotation — each circle completely independent
+      iris  = { cx: gt[name].irisCx,  cy: gt[name].irisCy,  r: gt[name].irisR  };
+      pupil = { cx: gt[name].pupilCx, cy: gt[name].pupilCy, r: gt[name].pupilR };
+    } else {
+      // Auto-fill from algorithm — iris and pupil placed at algorithm values
+      var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+      if (algoResult && algoResult.ok) {
+        iris  = { cx: algoResult.cxFrac*iw, cy: algoResult.cyFrac*ih,
+                  r:  algoResult.rIrisFrac*iw };
+        // Pupil: use algorithm pupil if available, otherwise estimate
+        // NOTE: pupil is independent of iris — same starting center is just the algo's guess
+        pupil = { cx: (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac)*iw,
+                  cy: (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac)*ih,
+                  r:  algoResult.rPupilFrac ? algoResult.rPupilFrac*iw : iris.r*0.35 };
+      } else {
+        iris  = { cx: -1, cy: -1, r: -1 };
+        pupil = { cx: -1, cy: -1, r: -1 };
+      }
+    }
+
+    updateUI(); draw();
+    updateThumbs(); updateProgress();
+  };
+  imgEl.onerror = function() {
+    document.getElementById('instrBox').textContent = 'Failed to load image.';
+  };
+  imgEl.src = IMG_DIR + IMAGE_NAMES[i] + '.jpg';
+}
+
+// ── Save / navigation ─────────────────────────────────────────────────────────
+function saveAndNext() {
+  if (iris.r <= 0) { alert('Iris circle not placed yet. Place it or click Skip.'); return; }
+  if (pupil.r <= 0) pupil.r = iris.r * 0.35;
+
+  var name = IMAGE_NAMES[idx];
+  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+  gt[name] = {
+    imgW: iw, imgH: ih,
+    irisCx:  Math.round(iris.cx),  irisCy:  Math.round(iris.cy),  irisR:  Math.round(iris.r),
+    pupilCx: Math.round(pupil.cx), pupilCy: Math.round(pupil.cy), pupilR: Math.round(pupil.r),
+    note: document.getElementById('noteBox').value
+  };
+  localStorage.setItem('aeye_gt', JSON.stringify(gt));
+  document.getElementById('noteBox').value = '';
+  updateThumbs(); updateProgress();
+
+  var next = idx + 1;
+  while (next < IMAGE_NAMES.length && gt[IMAGE_NAMES[next]] && gt[IMAGE_NAMES[next]]._skip) next++;
+  if (next < IMAGE_NAMES.length) loadImage(next);
+  else alert('All images done!');
+}
+
+function skipImage() {
+  gt[IMAGE_NAMES[idx]] = { _skip: true };
+  localStorage.setItem('aeye_gt', JSON.stringify(gt));
+  updateThumbs(); updateProgress();
+  if (idx + 1 < IMAGE_NAMES.length) loadImage(idx + 1);
+}
+
+function exportJSON() {
+  var out = {};
+  for (var k in gt) { if (!gt[k]._skip) out[k] = gt[k]; }
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], {type:'application/json'}));
+  a.download = 'ground-truth.json'; a.click();
+}
+
+// ── Thumbnails ────────────────────────────────────────────────────────────────
+function buildThumbs() {
+  var list = document.getElementById('thumbList');
+  IMAGE_NAMES.forEach(function(name, i) {
+    var img = document.createElement('img');
+    img.src = IMG_DIR + name + '.jpg';
+    img.className = 'imgthumb'; img.title = name;
+    img.onclick = (function(ii){ return function(){ loadImage(ii); }; })(i);
+    list.appendChild(img);
+  });
+}
+function updateThumbs() {
+  var thumbs = document.getElementById('thumbList').querySelectorAll('img');
+  IMAGE_NAMES.forEach(function(name, i) {
+    thumbs[i].className = 'imgthumb' +
+      (i === idx                        ? ' active' : '') +
+      (gt[name] && !gt[name]._skip      ? ' done'   : '') +
+      (gt[name] &&  gt[name]._skip      ? ' skip'   : '');
+  });
+}
+function updateProgress() {
+  var done = 0;
+  IMAGE_NAMES.forEach(function(n){ if (gt[n] && !gt[n]._skip) done++; });
+  document.getElementById('progress').textContent = done+' / '+IMAGE_NAMES.length+' annotated';
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+buildThumbs(); updateProgress();
+var start = 0;
+while (start < IMAGE_NAMES.length-1 && gt[IMAGE_NAMES[start]] && !gt[IMAGE_NAMES[start]]._skip) start++;
+loadImage(start);
+</script>
+</body>
+</html>

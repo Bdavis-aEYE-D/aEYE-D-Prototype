@@ -65,6 +65,11 @@
   .slider { width: 100%; margin: 4px 0; }
   label.tinylabel { display: block; font-size: 12px; color: var(--ink-dim); margin: 8px 0 2px; }
 
+  .circ-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1.5px solid #444;
+    background: #1a1a1a; color: #888; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .circ-tab.iris.active  { background: #0d2236; color: #6cc4ff; border-color: #6cc4ff; }
+  .circ-tab.pupil.active { background: #2a1e00; color: #ffd66c; border-color: #ffd66c; }
+
   .swatch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff2; }
 
@@ -233,7 +238,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.60 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.66 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -309,16 +314,16 @@
     <div class="card" id="card-fit" style="display:none">
       <div class="step">Step 2 &middot; <span id="fit-side-label">&mdash;</span></div>
       <h2>Fit the donut to the iris</h2>
-      <p>Auto-detected from your photo. Tap to re-center, or use the sliders to adjust. Flash and eyelids are filtered out automatically.</p>
+      <p>Auto-detected and zoomed in. Drag the circle to move it, pinch to resize. Switch between Iris and Pupil below.</p>
       <div class="stage" id="stage">
         <canvas id="canvas-main"></canvas>
       </div>
       <div class="hint" id="autofit-hint">Auto-fit is running&hellip;</div>
-      <div id="manual-sliders" style="display:none">
-        <label class="tinylabel">Iris size</label>
-        <input class="slider" id="r-iris" type="range" min="40" max="500" value="180">
-        <label class="tinylabel">Pupil exclusion size</label>
-        <input class="slider" id="r-pupil" type="range" min="10" max="400" value="60">
+      <div id="circle-tabs" style="display:flex;gap:8px;margin:10px 0">
+        <button type="button" class="circ-tab iris active" id="tab-iris"  onclick="selectFitCircle('iris')">Iris</button>
+        <button type="button" class="circ-tab pupil"       id="tab-pupil" onclick="selectFitCircle('pupil')">Pupil</button>
+      </div>
+      <div style="margin-bottom:6px">
         <label class="tinylabel">Glare / reflection sensitivity</label>
         <input class="slider" id="r-thresh" type="range" min="180" max="255" value="230">
       </div>
@@ -330,7 +335,6 @@
         <button type="button" class="secondary" id="btn-reset">Reset</button>
         <button type="button" id="btn-analyze">Analyze Iris</button>
       </div>
-      <button type="button" class="secondary" id="btn-toggle-manual" style="margin-top:6px;font-size:13px;padding:10px">Adjust Manually</button>
       <button type="button" class="secondary" id="btn-fit-back" style="margin-top:4px;font-size:12px;padding:8px;color:var(--ink-dim)">Locate Manually</button>
       <div class="hint" id="autofit-status">&nbsp;</div>
     </div>

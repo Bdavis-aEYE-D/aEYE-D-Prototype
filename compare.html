@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>autoFit vs Ground Truth</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0e0e0e; color: #ddd; font-family: monospace; padding: 20px; }
+h1   { font-size: 16px; color: #fff; margin-bottom: 6px; }
+#summary { display: flex; gap: 20px; margin: 14px 0; flex-wrap: wrap; }
+.stat { background: #1a1a1a; border-radius: 6px; padding: 10px 16px; text-align: center; }
+.stat .n    { font-size: 28px; font-weight: bold; }
+.stat .lbl  { font-size: 11px; color: #888; margin-top: 2px; }
+.good   { color: #4f4; }
+.warn   { color: #fa0; }
+.fail   { color: #f44; }
+.dim    { color: #555; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: #222; color: #888; text-transform: uppercase; font-size: 10px;
+     letter-spacing: .5px; padding: 6px 8px; text-align: left; position: sticky; top: 0; }
+td { padding: 5px 8px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
+tr:hover td { background: #161616; }
+
+.thumb-wrap { position: relative; display: inline-block; }
+canvas.thumb { display: block; }
+
+.badge { display: inline-block; padding: 2px 7px; border-radius: 3px;
+         font-size: 11px; font-weight: bold; }
+.badge.good { background: #1a3a1a; color: #4f4; }
+.badge.warn { background: #3a2a00; color: #fa0; }
+.badge.fail { background: #3a1a1a; color: #f44; }
+.badge.miss { background: #222; color: #555; }
+
+.err-cell { font-size: 12px; }
+.err-cell .big { font-size: 14px; font-weight: bold; }
+
+#nogt { color: #fa0; padding: 20px; }
+</style>
+</head>
+<body>
+<h1>autoFit Accuracy — vs. Ground Truth</h1>
+<div style="font-size:12px;color:#666;margin-bottom:4px">
+  Ground truth from localStorage (annotate.html session).
+  Dashed = algorithm &nbsp;|&nbsp; Solid = ground truth.<br>
+  Pupil radius uses fallback 35% of iris radius when not detected independently.
+</div>
+
+<div id="summary"></div>
+<div id="nogt" style="display:none">
+  No ground-truth data found. Open <a href="/annotate.html" style="color:#fa0">annotate.html</a>
+  and annotate at least one image first.
+</div>
+<table id="tbl">
+  <thead>
+    <tr>
+      <th>Image</th>
+      <th>Visual</th>
+      <th>Algo ok</th>
+      <th>Iris Ctr err</th>
+      <th>Iris R err</th>
+      <th>Iris Grade</th>
+      <th>Pupil Ctr err</th>
+      <th>Pupil R err</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<script src="/js/iris.js"></script>
+<script>
+var IMG_DIR = '/ubiris-check/';
+
+// ── Thresholds (in image pixels) ─────────────────────────────────────────────
+var CTR_GOOD  = 8;    // center error ≤ 8px  → good
+var CTR_WARN  = 18;   // center error ≤ 18px → warn, else fail
+var R_GOOD    = 0.10; // radius error ≤ 10%  → good
+var R_WARN    = 0.20; // radius error ≤ 20%  → warn, else fail
+
+// ── Load GT from localStorage ─────────────────────────────────────────────────
+var gt = JSON.parse(localStorage.getItem('aeye_gt') || '{}');
+var keys = Object.keys(gt).filter(function(k){ return !gt[k]._skip; });
+
+if (keys.length === 0) {
+  document.getElementById('nogt').style.display = 'block';
+} else {
+  runAll();
+}
+
+// ── Run all ────────────────────────────────────────────────────────────────────
+function runAll() {
+  var results = [];
+  var pending = keys.length;
+
+  keys.forEach(function(name) {
+    var img = new Image();
+    img.onload = function() {
+      var r = autoFit(img, true);
+      var g = gt[name];
+      var iw = img.naturalWidth, ih = img.naturalHeight;
+
+      // Algorithm values in image pixels
+      var aCx  = r.ok ? r.cxFrac        * iw : null;
+      var aCy  = r.ok ? r.cyFrac        * ih : null;
+      var aPCx = r.ok ? (r.cxPupilFrac != null ? r.cxPupilFrac * iw : aCx) : null;
+      var aPCy = r.ok ? (r.cyPupilFrac != null ? r.cyPupilFrac * ih : aCy) : null;
+      var aRi  = r.ok ? r.rIrisFrac     * iw : null;
+      var aRp  = r.ok ? (r.rPupilFrac   ? r.rPupilFrac * iw : aRi * 0.35) : null;
+
+      // Errors
+      var iCtrErr  = r.ok ? dist(aCx,  aCy,  g.irisCx,  g.irisCy)  : null;
+      var pCtrErr  = r.ok ? dist(aPCx, aPCy, g.pupilCx, g.pupilCy) : null;
+      var iRErr    = r.ok ? Math.abs(aRi - g.irisR)  / g.irisR     : null;
+      var pRErr    = r.ok ? Math.abs(aRp - g.pupilR) / g.pupilR    : null;
+
+      results.push({
+        name: name, img: img,
+        ok: r.ok,
+        aCx: aCx, aCy: aCy, aPCx: aPCx, aPCy: aPCy, aRi: aRi, aRp: aRp,
+        iCtrErr: iCtrErr, pCtrErr: pCtrErr,
+        iRErr:   iRErr,   pRErr:   pRErr,
+        gt: g
+      });
+
+      pending--;
+      if (pending === 0) {
+        // Sort: fails first
+        results.sort(function(a, b) { return grade(b) - grade(a); });
+        render(results);
+      }
+    };
+    img.onerror = function() {
+      results.push({ name: name, img: null, ok: false, loadErr: true, gt: gt[name] });
+      pending--;
+      if (pending === 0) render(results);
+    };
+    img.src = IMG_DIR + name + '.jpg';
+  });
+}
+
+function dist(ax, ay, bx, by) {
+  var dx = bx-ax, dy = by-ay; return Math.sqrt(dx*dx+dy*dy);
+}
+
+// irisGrade: 2=good, 1=warn, 0=fail, -1=miss (iris only — pupil excluded until algo has independent pupil center)
+function irisGrade(res) {
+  if (!res.ok || res.loadErr) return -1;
+  if (res.iCtrErr <= CTR_GOOD && res.iRErr <= R_GOOD) return 2;
+  if (res.iCtrErr <= CTR_WARN && res.iRErr <= R_WARN) return 1;
+  return 0;
+}
+
+// grade: combined iris+pupil — currently always 0 because pupil uses 35% fallback
+function grade(res) {
+  if (!res.ok || res.loadErr) return -1;
+  var iC = res.iCtrErr <= CTR_GOOD && res.iRErr <= R_GOOD;
+  var pC = res.pCtrErr <= CTR_GOOD && res.pRErr <= R_GOOD;
+  var iW = res.iCtrErr <= CTR_WARN && res.iRErr <= R_WARN;
+  var pW = res.pCtrErr <= CTR_WARN && res.pRErr <= R_WARN;
+  if (iC && pC) return 2;
+  if (iW && pW) return 1;
+  return 0;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function render(results) {
+  var counts = { good: 0, warn: 0, fail: 0, miss: 0 };
+  var tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+
+  // Sort by iris grade worst-first
+  results.sort(function(a, b) { return irisGrade(b) - irisGrade(a); });
+
+  results.forEach(function(res) {
+    var ig = irisGrade(res);
+    if (ig === 2) counts.good++;
+    else if (ig === 1) counts.warn++;
+    else if (ig === 0) counts.fail++;
+    else counts.miss++;
+
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + res.name + '</td>' +
+      '<td>' + makeThumb(res) + '</td>' +
+      '<td>' + (res.ok ? '<span class="good">YES</span>' : '<span class="fail">NO</span>') + '</td>' +
+      '<td class="err-cell">' + fmtCtr(res.iCtrErr, res.gt.irisR)  + '</td>' +
+      '<td class="err-cell">' + fmtR(res.iRErr, res.iCtrErr)       + '</td>' +
+      '<td>' + gradeBadge(ig) + '</td>' +
+      '<td class="err-cell">' + fmtCtr(res.pCtrErr, res.gt.pupilR) + '</td>' +
+      '<td class="err-cell">' + fmtR(res.pRErr, res.pCtrErr)       + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  // Summary reflects iris-only grades
+  var total = results.length;
+  document.getElementById('summary').innerHTML =
+    '<div style="font-size:11px;color:#666;align-self:center;padding:4px 8px">IRIS ONLY ▼</div>' +
+    statBox(counts.good,  total, 'GOOD',     'good') +
+    statBox(counts.warn,  total, 'MARGINAL', 'warn') +
+    statBox(counts.fail,  total, 'FAIL',     'fail') +
+    statBox(counts.miss,  total, 'NO DETECT','dim')  +
+    statBox(total,        total, 'ANNOTATED','');
+}
+
+function fmtCtr(err, refR) {
+  if (err === null) return '<span class="dim">—</span>';
+  var cls = err <= CTR_GOOD ? 'good' : err <= CTR_WARN ? 'warn' : 'fail';
+  return '<span class="' + cls + ' big">' + err.toFixed(1) + '</span>'
+       + ' <span class="dim">px</span>';
+}
+function fmtR(err, ctrErr) {
+  if (err === null) return '<span class="dim">—</span>';
+  var cls = err <= R_GOOD ? 'good' : err <= R_WARN ? 'warn' : 'fail';
+  return '<span class="' + cls + ' big">' + (err * 100).toFixed(0) + '</span>'
+       + '<span class="dim">%</span>';
+}
+function gradeBadge(gr) {
+  if (gr === 2)  return '<span class="badge good">GOOD</span>';
+  if (gr === 1)  return '<span class="badge warn">MARGINAL</span>';
+  if (gr === 0)  return '<span class="badge fail">FAIL</span>';
+                 return '<span class="badge miss">NO DETECT</span>';
+}
+function statBox(n, total, label, cls) {
+  var pct = total > 0 ? Math.round(n / total * 100) : 0;
+  return '<div class="stat"><div class="n ' + cls + '">' + n + '</div>'
+       + '<div class="lbl">' + label + '<br>' + pct + '%</div></div>';
+}
+
+// ── Thumbnail canvas with overlaid circles ────────────────────────────────────
+function makeThumb(res) {
+  var THUMB = 120;
+  var g = res.gt;
+  var iw = g.imgW, ih = g.imgH;
+  var scale = THUMB / Math.max(iw, ih);
+  var tw = Math.round(iw * scale), th = Math.round(ih * scale);
+
+  var c = document.createElement('canvas');
+  c.width = tw; c.height = th;
+  c.style.width = tw + 'px'; c.style.height = th + 'px';
+  var ctx = c.getContext('2d');
+
+  if (res.img) ctx.drawImage(res.img, 0, 0, tw, th);
+  else { ctx.fillStyle = '#222'; ctx.fillRect(0,0,tw,th); }
+
+  // Ground truth: solid lines
+  circle(ctx, g.irisCx  * scale, g.irisCy  * scale, g.irisR  * scale, '#3cf', 1.5);
+  circle(ctx, g.pupilCx * scale, g.pupilCy * scale, g.pupilR * scale, '#fc4', 1.5);
+
+  // Algorithm: dashed lines
+  if (res.ok) {
+    circleDash(ctx, res.aCx  * scale, res.aCy  * scale, res.aRi * scale, 'rgba(80,80,255,0.9)', 1);
+    circleDash(ctx, res.aPCx * scale, res.aPCy * scale, res.aRp * scale, 'rgba(255,130,30,0.9)', 1);
+  }
+
+  return '<img src="' + c.toDataURL() + '" width="' + tw + '" height="' + th + '" style="display:block">';
+}
+
+function circle(ctx, cx, cy, r, color, lw) {
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke(); ctx.restore();
+}
+function circleDash(ctx, cx, cy, r, color, lw) {
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash([3,3]); ctx.stroke(); ctx.restore();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>UBIRIS autoFit Test</title>
+<script src="/js/iris.js"></script>
+<style>
+body { font-family: monospace; padding: 20px; background: #111; color: #ccc; }
+.ok  { color: #4f4; }
+.bad { color: #f44; }
+td   { padding: 2px 12px; }
+</style>
+</head>
+<body>
+<h2>UBIRIS autoFit Test</h2>
+<div id="status">Running…</div>
+<table id="out"><tr><th>Image</th><th>ok</th><th>cy</th><th>ri</th><th>lh</th><th>rh</th><th>note</th></tr></table>
+<div id="debug" style="color:#fa0;margin-top:12px;white-space:pre-wrap"></div>
+<script>
+var dbg = document.getElementById('debug');
+function log(msg) { dbg.textContent += msg + '\n'; }
+
+var imgs = [
+  'C112_S1_I8','C11_S1_I13','C122_S1_I7','C155_S1_I9','C204_S1_I13',
+  'C307_S2_I11','C326_S2_I7','C329_S1_I13','C379_S1_I13','C465_S1_I5'
+];
+var done = 0;
+var ts = Date.now();
+var tbl = document.getElementById('out');
+
+function runOne(name) {
+  var img = new Image();
+  img.onload = function() {
+    log(name + ' onload: ' + img.naturalWidth + 'x' + img.naturalHeight);
+    try {
+      var r = autoFit(img, true);
+      addRow(name, r.ok,
+        r.cyFrac    ? r.cyFrac.toFixed(3)    : '?',
+        r.rIrisFrac ? r.rIrisFrac.toFixed(3) : '?',
+        r.leftHit, r.rightHit, '');
+    } catch(e) {
+      log(name + ' ERROR: ' + e);
+      addRow(name, false, '-', '-', '-', '-', e.toString().substring(0,50));
+    }
+    done++;
+    if (done === imgs.length)
+      document.getElementById('status').textContent = 'Done (' + done + ')';
+  };
+  img.onerror = function() {
+    log(name + ' onerror');
+    addRow(name, false, '-', '-', '-', '-', 'img load failed');
+    done++;
+    if (done === imgs.length)
+      document.getElementById('status').textContent = 'Done';
+  };
+  img.src = '/ubiris-check/' + name + '.jpg?t=' + ts;
+  log(name + ' src set');
+}
+
+function addRow(name, ok, cy, ri, lh, rh, note) {
+  var tr = document.createElement('tr');
+  tr.className = ok ? 'ok' : 'bad';
+  tr.innerHTML =
+    '<td>' + name + '</td><td>' + (ok ? 'YES' : 'NO') + '</td>' +
+    '<td>' + cy + '</td><td>' + ri + '</td>' +
+    '<td>' + lh + '</td><td>' + rh + '</td><td>' + note + '</td>';
+  tbl.appendChild(tr);
+}
+
+imgs.forEach(runOne);
+</script>
+</body>
+</html>

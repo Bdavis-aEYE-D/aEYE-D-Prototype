@@ -150,6 +150,7 @@ var currentSide = null;       // 'Left' or 'Right'
 var cropRegion = null;        // {x,y,w,h} of crop in originalImgEl pixels
 var mpEyes = null;            // {Right:{ci,cx,cy}, Left:{ci,cx,cy}} in natural pixels, from MP detection
 var isCloseupMode = false;    // true when no face was detected and we used close-up detection directly
+var preZoomState  = null;     // {imgEl, cropRegion} saved before zoomToEye so Auto-Fit Again can reset
 
 // ======================= MEDIAPIPE =======================
 var mpLandmarker = null;
@@ -448,6 +449,13 @@ $('btn-zoom-in').addEventListener('click', function(){
 
 function applyAutoFit(){
   if (!imgEl) return false;
+  // Restore pre-zoom state so we always fit on the original (un-zoomed) image
+  if (preZoomState) {
+    imgEl       = preZoomState.imgEl;
+    cropRegion  = preZoomState.cropRegion;
+    preZoomState = null;
+    layoutStage();
+  }
   var hint = $('autofit-hint');
   var st   = $('autofit-status');
   if (hint) hint.textContent = 'Detecting iris…';
@@ -530,12 +538,10 @@ function applyAutoFit(){
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
-      var ri = $('r-iris'), rp = $('r-pupil');
-      if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
-      if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
-      if (hint) hint.textContent = 'Auto-fit complete. Tap "Analyze Iris" or adjust manually.';
+      if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
       if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
       draw();
+      zoomToEye();
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
       if (hint) hint.textContent = 'Detection error — using fallback';
@@ -554,20 +560,22 @@ function _applyFitClassical(closeup){
     var scaleY = drawInfo.dh / imgEl.height;
     donut.cx     = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
     donut.cy     = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
-    donut.cxPupil = donut.cx;
-    donut.cyPupil = donut.cy;
+    donut.cxPupil = fit.cxPupilFrac != null
+      ? drawInfo.dx + fit.cxPupilFrac * imgEl.width  * scaleX
+      : donut.cx;
+    donut.cyPupil = fit.cyPupilFrac != null
+      ? drawInfo.dy + fit.cyPupilFrac * imgEl.height * scaleY
+      : donut.cy;
     var rpx  = fit.rPupilFrac * imgEl.width * scaleX;
     var ripx = fit.rIrisFrac  * imgEl.width * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
     rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
     donut.rIris  = ripx;
     donut.rPupil = rpx;
-    var ri = $('r-iris'), rp = $('r-pupil');
-    if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
-    if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
-    if (hint) hint.textContent = 'Auto-fit complete. Tap "Analyze Iris" or adjust manually.';
+    if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
     if (st)   st.textContent   = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
     draw();
+    zoomToEye();
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
@@ -636,22 +644,76 @@ function layoutStage(){
   drawInfo.dh = dh;
   donut.cx = stageW / 2;
   donut.cy = stageH / 2;
-  donut.rIris = Math.min(dw, dh) * 0.42;
+  donut.rIris  = Math.min(dw, dh) * 0.42;
   donut.rPupil = donut.rIris * 0.30;
-  var ri = $('r-iris'), rp = $('r-pupil');
-  ri.max = Math.round(Math.max(stageW, stageH));
-  ri.value = Math.round(donut.rIris);
-  rp.max = Math.round(donut.rIris);
-  rp.value = Math.round(donut.rPupil);
   draw();
+}
+
+// After auto-fit: crop imgEl to just outside the eye corners so the stage is
+// filled with the eye and adjustment is easy. Accumulates into cropRegion.
+function zoomToEye() {
+  if (!imgEl || !donut.rIris) return;
+  // Save pre-zoom imgEl so Auto-Fit Again can start fresh from the un-zoomed image
+  preZoomState = { imgEl: imgEl, cropRegion: cropRegion ? Object.assign({}, cropRegion) : null };
+  var sx = drawInfo.dw / imgEl.width;
+  var sy = drawInfo.dh / imgEl.height;
+
+  // Current donut positions in imgEl pixel space
+  var iCx  = (donut.cx     - drawInfo.dx) / sx;
+  var iCy  = (donut.cy     - drawInfo.dy) / sy;
+  var iPCx = ((donut.cxPupil != null ? donut.cxPupil : donut.cx) - drawInfo.dx) / sx;
+  var iPCy = ((donut.cyPupil != null ? donut.cyPupil : donut.cy) - drawInfo.dy) / sy;
+  var iR   = donut.rIris  / sx;
+  var iPR  = donut.rPupil / sx;
+
+  // Pad 2.2× irisR in each direction — captures eye corners
+  var pad = Math.round(iR * 2.2);
+  var x0  = Math.max(0, Math.round(iCx - pad));
+  var y0  = Math.max(0, Math.round(iCy - pad));
+  var x1  = Math.min(imgEl.width,  Math.round(iCx + pad));
+  var y1  = Math.min(imgEl.height, Math.round(iCy + pad));
+  if (x1 - x0 < 40 || y1 - y0 < 40) return;
+
+  var cw = x1 - x0, ch = y1 - y0;
+  var off = document.createElement('canvas');
+  off.width = cw; off.height = ch;
+  off.getContext('2d').drawImage(imgEl, x0, y0, cw, ch, 0, 0, cw, ch);
+
+  var newImg = new Image();
+  newImg.onload = function() {
+    if (cropRegion) {
+      cropRegion = { x: cropRegion.x + x0, y: cropRegion.y + y0, w: cw, h: ch };
+    }
+    imgEl = newImg;
+
+    // Positions in new imgEl space (subtract the crop origin)
+    var niCx  = iCx  - x0, niCy  = iCy  - y0;
+    var niPCx = iPCx - x0, niPCy = iPCy - y0;
+
+    layoutStage();  // resets donut defaults, updates drawInfo for new imgEl
+
+    var nsx = drawInfo.dw / imgEl.width;
+    var nsy = drawInfo.dh / imgEl.height;
+    donut.cx      = drawInfo.dx + niCx  * nsx;
+    donut.cy      = drawInfo.dy + niCy  * nsy;
+    donut.cxPupil = drawInfo.dx + niPCx * nsx;
+    donut.cyPupil = drawInfo.dy + niPCy * nsy;
+    donut.rIris   = iR  * nsx;
+    donut.rPupil  = iPR * nsx;
+    draw();
+  };
+  newImg.src = off.toDataURL();
 }
 
 function draw(){
   if (!imgEl) return;
   var cxP = donut.cxPupil != null ? donut.cxPupil : donut.cx;
   var cyP = donut.cyPupil != null ? donut.cyPupil : donut.cy;
+
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, stageW, stageH);
   ctx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
+
+  // Dark overlay cut out by iris
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath();
@@ -659,48 +721,164 @@ function draw(){
   ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2, true);
   ctx.fill('evenodd');
   ctx.restore();
+
+  // Pupil fill
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.fill();
   ctx.restore();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#6cc4ff';
+
+  var irisActive  = fitActiveCircle === 'iris';
+  var irisColor   = irisActive  ? '#6cc4ff' : 'rgba(108,196,255,0.35)';
+  var pupilColor  = !irisActive ? '#ffd66c' : 'rgba(255,214,108,0.35)';
+  var irisLW      = irisActive  ? 2 : 1;
+  var pupilLW     = !irisActive ? 2 : 1;
+
+  // Iris ring
+  ctx.lineWidth = irisLW; ctx.strokeStyle = irisColor;
   ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2); ctx.stroke();
-  ctx.strokeStyle = '#ffd66c';
+
+  // Pupil ring
+  ctx.lineWidth = pupilLW; ctx.strokeStyle = pupilColor;
   ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.stroke();
-  ctx.strokeStyle = '#ffffffaa';
+
+  // Active circle: crosshair at center + 4 edge handles
+  var acx = irisActive ? donut.cx    : cxP;
+  var acy = irisActive ? donut.cy    : cyP;
+  var ar  = irisActive ? donut.rIris : donut.rPupil;
+  var ac  = irisActive ? '#6cc4ff'   : '#ffd66c';
+  ctx.strokeStyle = ac; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(donut.cx-6, donut.cy); ctx.lineTo(donut.cx+6, donut.cy);
-  ctx.moveTo(donut.cx, donut.cy-6); ctx.lineTo(donut.cx, donut.cy+6);
+  ctx.moveTo(acx - 7, acy); ctx.lineTo(acx + 7, acy);
+  ctx.moveTo(acx, acy - 7); ctx.lineTo(acx, acy + 7);
   ctx.stroke();
+  [[acx+ar,acy],[acx-ar,acy],[acx,acy-ar],[acx,acy+ar]].forEach(function(h){
+    ctx.beginPath(); ctx.arc(h[0], h[1], 5, 0, Math.PI*2);
+    ctx.fillStyle = ac; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+  });
 }
 
-canvas.addEventListener('click', function(ev){
-  if (!imgLoaded) return;
-  var rect = canvas.getBoundingClientRect();
-  donut.cx = donut.cxPupil = ev.clientX - rect.left;
-  donut.cy = donut.cyPupil = ev.clientY - rect.top;
-  draw();
-});
-canvas.addEventListener('touchstart', function(ev){
-  if (!imgLoaded) return;
-  if (!ev.touches || !ev.touches[0]) return;
-  var rect = canvas.getBoundingClientRect();
-  donut.cx = donut.cxPupil = ev.touches[0].clientX - rect.left;
-  donut.cy = donut.cyPupil = ev.touches[0].clientY - rect.top;
-  draw();
-  ev.preventDefault();
-}, {passive: false});
+// ── Direct-drag circle editing (annotate-style) ───────────────────────────────
+// Inside circle  → move   |   On edge (±EDGE_TOL px) → resize   |   Outside → draw fresh
+var fitActiveCircle = 'iris';
+var fitDrag = null;
+var EDGE_TOL = 18;   // display pixels
 
-$('r-iris').addEventListener('input', function(e){
-  donut.rIris = +e.target.value;
-  if (donut.rPupil >= donut.rIris) { donut.rPupil = donut.rIris * 0.5; $('r-pupil').value = donut.rPupil; }
-  $('r-pupil').max = donut.rIris;
+function selectFitCircle(which) {
+  fitActiveCircle = which;
+  var ti = $('tab-iris'), tp = $('tab-pupil');
+  if (ti) { ti.className = 'circ-tab iris'  + (which === 'iris'  ? ' active' : ''); }
+  if (tp) { tp.className = 'circ-tab pupil' + (which === 'pupil' ? ' active' : ''); }
   draw();
+}
+
+function fitCanvasPt(clientX, clientY) {
+  var rect = canvas.getBoundingClientRect();
+  var sx = canvas.width  / rect.width;
+  var sy = canvas.height / rect.height;
+  return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
+}
+
+function fitActiveCx()  { return fitActiveCircle === 'iris' ? donut.cx     : (donut.cxPupil != null ? donut.cxPupil : donut.cx); }
+function fitActiveCy()  { return fitActiveCircle === 'iris' ? donut.cy     : (donut.cyPupil != null ? donut.cyPupil : donut.cy); }
+function fitActiveR()   { return fitActiveCircle === 'iris' ? donut.rIris  : donut.rPupil; }
+function fitSetCenter(x, y) {
+  if (fitActiveCircle === 'iris') { donut.cx = x; donut.cy = y; }
+  else { donut.cxPupil = x; donut.cyPupil = y; }
+}
+function fitSetRadius(r) {
+  if (fitActiveCircle === 'iris') {
+    donut.rIris = Math.max(10, r);
+    if (donut.rPupil >= donut.rIris) donut.rPupil = Math.round(donut.rIris * 0.4);
+  } else {
+    donut.rPupil = Math.max(4, Math.min(r, donut.rIris * 0.9));
+  }
+}
+
+function fitOnDown(clientX, clientY) {
+  if (!imgLoaded) return false;
+  var p   = fitCanvasPt(clientX, clientY);
+  var cx  = fitActiveCx(), cy = fitActiveCy(), r = fitActiveR();
+  var et  = EDGE_TOL * (canvas.width / canvas.getBoundingClientRect().width);
+  var d   = Math.hypot(p.x - cx, p.y - cy);
+  if (r > 0 && Math.abs(d - r) <= et) {
+    fitDrag = { type: 'resize', startCx: cx, startCy: cy };
+  } else if (r > 0 && d < r - et) {
+    fitDrag = { type: 'move', startMx: p.x, startMy: p.y, startCx: cx, startCy: cy };
+  } else {
+    fitSetCenter(p.x, p.y); fitSetRadius(2);
+    fitDrag = { type: 'draw', startCx: p.x, startCy: p.y };
+  }
+  draw();
+  return true;
+}
+
+function fitOnMove(clientX, clientY) {
+  if (!fitDrag) return;
+  var p = fitCanvasPt(clientX, clientY);
+  if (fitDrag.type === 'move') {
+    fitSetCenter(fitDrag.startCx + (p.x - fitDrag.startMx),
+                 fitDrag.startCy + (p.y - fitDrag.startMy));
+  } else {
+    fitSetRadius(Math.max(2, Math.hypot(p.x - fitDrag.startCx, p.y - fitDrag.startCy)));
+  }
+  draw();
+}
+
+canvas.addEventListener('mousedown', function(ev) {
+  if (ev.button !== 0) return;
+  if (fitOnDown(ev.clientX, ev.clientY)) ev.preventDefault();
 });
-$('r-pupil').addEventListener('input', function(e){ donut.rPupil = +e.target.value; draw(); });
+canvas.addEventListener('mousemove', function(ev) {
+  if (!imgLoaded) return;
+  fitOnMove(ev.clientX, ev.clientY);
+  // cursor feedback
+  var p  = fitCanvasPt(ev.clientX, ev.clientY);
+  var cx = fitActiveCx(), cy = fitActiveCy(), r = fitActiveR();
+  var et = EDGE_TOL * (canvas.width / canvas.getBoundingClientRect().width);
+  var d  = Math.hypot(p.x - cx, p.y - cy);
+  canvas.style.cursor = fitDrag ? '' :
+    (r > 0 && Math.abs(d - r) <= et) ? 'ew-resize' :
+    (r > 0 && d < r - et)            ? 'move'       : 'crosshair';
+});
+canvas.addEventListener('mouseup',    function() { fitDrag = null; });
+canvas.addEventListener('mouseleave', function() { fitDrag = null; });
+
+var pinchStart = null;  // {dist, r} — two-finger pinch to resize
+
+canvas.addEventListener('touchstart', function(ev) {
+  if (!imgLoaded) return;
+  ev.preventDefault();
+  if (ev.touches.length === 2) {
+    fitDrag = null;
+    var dx = ev.touches[1].clientX - ev.touches[0].clientX;
+    var dy = ev.touches[1].clientY - ev.touches[0].clientY;
+    pinchStart = { dist: Math.hypot(dx, dy), r: fitActiveR() };
+  } else if (ev.touches.length === 1) {
+    pinchStart = null;
+    fitOnDown(ev.touches[0].clientX, ev.touches[0].clientY);
+  }
+}, {passive: false});
+canvas.addEventListener('touchmove', function(ev) {
+  if (!imgLoaded) return;
+  ev.preventDefault();
+  if (ev.touches.length === 2 && pinchStart) {
+    var dx = ev.touches[1].clientX - ev.touches[0].clientX;
+    var dy = ev.touches[1].clientY - ev.touches[0].clientY;
+    fitSetRadius(pinchStart.r * (Math.hypot(dx, dy) / pinchStart.dist));
+    draw();
+  } else if (ev.touches.length === 1 && !pinchStart) {
+    fitOnMove(ev.touches[0].clientX, ev.touches[0].clientY);
+  }
+}, {passive: false});
+canvas.addEventListener('touchend', function(ev) {
+  if (ev.touches.length < 2) pinchStart = null;
+  if (ev.touches.length === 0) fitDrag = null;
+});
+
 $('r-thresh').addEventListener('input', function(e){ donut.threshHi = +e.target.value; });
-$('btn-reset').addEventListener('click', function(){ layoutStage(); var st=$('autofit-status'); if (st) st.textContent=' '; });
+$('btn-reset').addEventListener('click', function(){ if (preZoomState) { imgEl = preZoomState.imgEl; cropRegion = preZoomState.cropRegion; preZoomState = null; } layoutStage(); var st=$('autofit-status'); if (st) st.textContent=' '; });
 $('btn-autofit').addEventListener('click', function(){ applyAutoFit(); });
 $('btn-fit-back').addEventListener('click', function(){
   $('card-fit').style.display = 'none';
@@ -841,16 +1019,6 @@ $('btn-again').addEventListener('click', function(){
   $('card-locate').style.display = 'none';
   window.scrollTo({top: 0, behavior: 'smooth'});
 });
-// Manual slider toggle
-var btnToggleManual = $('btn-toggle-manual');
-if (btnToggleManual) {
-  btnToggleManual.addEventListener('click', function(){
-    var sliders = $('manual-sliders');
-    var showing = sliders.style.display !== 'none';
-    sliders.style.display = showing ? 'none' : 'block';
-    btnToggleManual.textContent = showing ? 'Adjust Manually' : 'Hide Sliders';
-  });
-}
 
 $('btn-toggle-reveal').addEventListener('click', function(){ revealed = !revealed; drawPostStage(); });
 $('btn-export-post').addEventListener('click', function(){
