@@ -149,6 +149,7 @@ var imgLoaded = false;
 var currentSide = null;       // 'Left' or 'Right'
 var cropRegion = null;        // {x,y,w,h} of crop in originalImgEl pixels
 var mpEyes = null;            // {Right:{ci,cx,cy}, Left:{ci,cx,cy}} in natural pixels, from MP detection
+var isCloseupMode = false;    // true when no face was detected and we used close-up detection directly
 
 // ======================= MEDIAPIPE =======================
 var mpLandmarker = null;
@@ -217,11 +218,11 @@ function autoDetectAndJumpToFit() {
   }, 40);
 
   initMediaPipe().then(function(lm) {
-    if (!lm || !originalImgEl) { $('card-fit').style.display='none'; showLocate(); return; }
+    if (!lm || !originalImgEl) { $('card-fit').style.display='none'; _tryCloseupFit(); return; }
     try {
       var result = lm.detect(originalImgEl);
       if (!result || !result.faceLandmarks || !result.faceLandmarks.length) {
-        $('card-fit').style.display='none'; showLocate(); return;
+        $('card-fit').style.display='none'; _tryCloseupFit(); return;
       }
       var L   = result.faceLandmarks[0];
       var imgW = originalImgEl.naturalWidth  || originalImgEl.width;
@@ -238,7 +239,7 @@ function autoDetectAndJumpToFit() {
     } catch(e) {
       console.warn('Eye auto-detect failed:', e);
       $('card-fit').style.display='none';
-      showLocate();
+      _tryCloseupFit();
     }
   });
 }
@@ -458,7 +459,7 @@ function applyAutoFit(){
       var result = lm.detect(originalImgEl);
       if (!result || !result.faceLandmarks || !result.faceLandmarks.length) {
         if (hint) hint.textContent = 'Face not detected — using fallback';
-        _applyFitClassical(); return;
+        _applyFitClassical(isCloseupMode); return;
       }
       var L = result.faceLandmarks[0];
       var imgW = originalImgEl.naturalWidth || originalImgEl.width;
@@ -482,7 +483,7 @@ function applyAutoFit(){
         ir += Math.sqrt(dx*dx + dy*dy);
       }
       ir /= 4;
-      if (ir < 4) { if (hint) hint.textContent = 'Iris too small — using fallback'; _applyFitClassical(); return; }
+      if (ir < 4) { if (hint) hint.textContent = 'Iris too small — using fallback'; _applyFitClassical(isCloseupMode); return; }
 
       // Transform from originalImgEl space → cropped imgEl space → stage
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
@@ -538,17 +539,17 @@ function applyAutoFit(){
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
       if (hint) hint.textContent = 'Detection error — using fallback';
-      _applyFitClassical();
+      _applyFitClassical(isCloseupMode);
     }
   });
 }
 
-function _applyFitClassical(){
+function _applyFitClassical(closeup){
   if (!imgEl) return false;
   var hint = $('autofit-hint');
   var st   = $('autofit-status');
   try {
-    var fit = autoFit(imgEl);
+    var fit = autoFit(imgEl, !!closeup);
     var scaleX = drawInfo.dw / imgEl.width;
     var scaleY = drawInfo.dh / imgEl.height;
     donut.cx     = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
@@ -565,13 +566,43 @@ function _applyFitClassical(){
     if (ri) { ri.max = Math.round(Math.max(stageW,stageH)); ri.value = Math.round(ripx); }
     if (rp) { rp.max = Math.round(ripx); rp.value = Math.round(rpx); }
     if (hint) hint.textContent = 'Auto-fit complete. Tap "Analyze Iris" or adjust manually.';
-    if (st)   st.textContent   = 'Classical CV: ' + (fit.ok ? 'snapped' : 'estimated');
+    if (st)   st.textContent   = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
     draw();
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
     return false;
   }
+}
+
+// Close-up iris model: used when no face is detected.
+// Runs autoFit with center-bias disabled directly on the original image,
+// then proceeds to the fit stage without requiring a manual locate tap.
+function _tryCloseupFit() {
+  if (!originalImgEl) { showLocate(); return; }
+  try {
+    var probe = autoFit(originalImgEl, true);
+    // Require a real iris: limbus must be detected and span at least 8% of image width.
+    if (!probe.ok || probe.rIrisFrac < 0.08) { showLocate(); return; }
+  } catch(e) { showLocate(); return; }
+
+  isCloseupMode = true;
+  currentSide   = 'Right';
+  cropRegion    = null;
+  imgEl         = originalImgEl;
+  imgLoaded     = true;
+
+  $('card-locate').style.display = 'none';
+  $('card-fit').style.display    = 'block';
+  $('card-result').style.display = 'none';
+  $('fit-side-label').textContent = 'Close-up';
+  _updateSwitchEyeBtn('Right');
+
+  setTimeout(function() {
+    layoutStage();
+    _applyFitClassical(true);
+    $('card-fit').scrollIntoView({behavior:'smooth', block:'start'});
+  }, 50);
 }
 
 // ======================= FIT STAGE / ANALYZER =======================
@@ -787,7 +818,7 @@ $('btn-portrait').addEventListener('click', function(){
   captureMode = 'portrait';
   $('btn-analyze').textContent = 'Save Beauty Shot';
   // Keep eyeResults intact, reset working image so user can upload a new one
-  originalImgEl = null; imgEl = null; imgLoaded = false;
+  originalImgEl = null; imgEl = null; imgLoaded = false; isCloseupMode = false;
   $('card-result').style.display = 'none';
   $('card-fit').style.display = 'none';
   $('card-locate').style.display = 'none';
@@ -801,7 +832,7 @@ $('btn-again').addEventListener('click', function(){
   eyeResults = {};
   currentSide = null;
   captureMode = 'analysis';
-  mpEyes = null;
+  mpEyes = null; isCloseupMode = false;
   $('btn-analyze').textContent = 'Analyze Iris';
   originalImgEl = null; imgEl = null; imgLoaded = false;
   _sessionId = null; _sessionFaceUploaded = false;
