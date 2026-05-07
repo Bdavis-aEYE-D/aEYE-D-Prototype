@@ -18,7 +18,7 @@ function analyze(){
   // an obvious brown/amber inner ring within a blue/gray iris (Δb > 4 in Lab).
   var pupilZoneCut  = rIn + (rOut - rIn) * 0.25;
   var ciliaryZoneCut = rIn + (rOut - rIn) * 0.50;
-  var inner = [], outer = [], edge = [];
+  var inner = [], outer = [], edge = [], bodyIris = [];
   var pupilZone = [], ciliaryZone = [];
   var edgeDarkSum = 0, edgeDarkCount = 0, midLumSum = 0, midLumCount = 0;
   // Sectoral heterochromia: accumulate per-wedge pixel arrays + base-band Lab sums.
@@ -78,10 +78,16 @@ function analyze(){
       // Eyelid wedges: reject top/bottom ~20 degree cones
       if (Math.abs(dy) / dist > 0.34) { maskStats.lid++; continue; }
       maskStats.kept++;
-      // Tight ring band (0.92-1.00) for limbal-ring color isolation
-      if (dist > rOut * 0.92) {
+      // Outer ring band (0.85-1.00) for limbal-ring color isolation.
+      // Widened from 0.92 → 0.85 for more pixels and a more stable dominant.
+      if (dist > rOut * 0.85) {
         edge.push([r,g,b]);
         edgeDarkSum += lum; edgeDarkCount++;
+      }
+      // Clean iris body band (0.35-0.82) — excludes the edge ring so it can
+      // serve as an uncontaminated baseline for the limbal comparison.
+      if (dist >= rOut * 0.35 && dist < rOut * 0.82) {
+        bodyIris.push([r,g,b]);
       }
       // Mid band kept for backwards compatibility (no longer drives limbal label)
       if (dist > rOut * 0.40 && dist < rOut * 0.80) {
@@ -156,7 +162,7 @@ function analyze(){
       arr[wi][2] = Math.min(255, Math.round(arr[wi][2] * wbB));
     }
   }
-  applyWB(inner); applyWB(outer); applyWB(edge);
+  applyWB(inner); applyWB(outer); applyWB(edge); applyWB(bodyIris);
   applyWB(pupilZone); applyWB(ciliaryZone);
   for (var wbi = 0; wbi < SECT_WEDGES; wbi++) applyWB(wedgePix[wbi]);
   // Recompute base-band Lab means from corrected wedge pixels
@@ -205,9 +211,10 @@ function analyze(){
     arr.sort(function(a,b){ return b.n - a.n; });
     return arr.slice(0, k);
   }
-  var innerDom = dominant(inner.length ? inner : outer);
-  var outerDom = dominant(outer);
-  var edgeDom  = dominant(edge.length ? edge : outer);
+  var innerDom    = dominant(inner.length ? inner : outer);
+  var outerDom    = dominant(outer);
+  var edgeDom     = dominant(edge.length ? edge : outer);
+  var bodyIrisDom = dominant(bodyIris.length >= 30 ? bodyIris : outer);
   var innerM = nearestPal(innerDom), outerM = nearestPal(outerDom);
   // ===== Heterochromia: combined detection =====
   // Path 1 (legacy): cross-category color shift between inner/outer halves
@@ -278,21 +285,24 @@ function analyze(){
       heteroCil.displayName = heteroCil.color.name;
     }
   }
-  // Limbal ring detection — Lab-L drop between iris baseline (outerDom) and ring band (edgeDom).
-  // Validated thresholds against UBIRIS sample (see datasets/UBIRIS_README.md).
-  var edgeLab  = rgbLab(edgeDom[0],  edgeDom[1],  edgeDom[2]);
-  var outerLab = rgbLab(outerDom[0], outerDom[1], outerDom[2]);
+  // Limbal ring detection — compare the clean iris body (0.35-0.82 of rOut, no edge
+  // contamination) against the outer ring band (0.85-1.00) in full Lab space.
+  // Using dE as the primary metric catches both luminance-only rings (dark rim) and
+  // hue/chroma-shift rings (warm amber halo). ΔL sign determines ring vs halo type.
+  var edgeLab      = rgbLab(edgeDom[0],      edgeDom[1],      edgeDom[2]);
+  var bodyIrisLab  = rgbLab(bodyIrisDom[0],  bodyIrisDom[1],  bodyIrisDom[2]);
+  var outerLab     = rgbLab(outerDom[0],     outerDom[1],     outerDom[2]);  // kept for brightness/sat below
   // Signed L drop: positive = ring is darker (typical limbal ring),
   // negative = ring is brighter than the iris baseline (a "halo" — bright
   // amber/golden zone just inside the iris edge, like Carlie's iris).
-  var limbalDropL    = outerLab[0] - edgeLab[0];
+  var limbalDropL    = bodyIrisLab[0] - edgeLab[0];
   var limbalAbsDrop  = Math.abs(limbalDropL);
-  var limbalContrast = dE(outerLab, edgeLab);
+  var limbalContrast = dE(bodyIrisLab, edgeLab);
   var limbalLabel = 'None';
-  if      (limbalAbsDrop > 28) limbalLabel = 'Dramatic';
-  else if (limbalAbsDrop > 18) limbalLabel = 'Strong';
-  else if (limbalAbsDrop > 10) limbalLabel = 'Moderate';
-  else if (limbalAbsDrop >  4) limbalLabel = 'Faint';
+  if      (limbalContrast > 28) limbalLabel = 'Dramatic';
+  else if (limbalContrast > 18) limbalLabel = 'Strong';
+  else if (limbalContrast > 10) limbalLabel = 'Moderate';
+  else if (limbalContrast >  5) limbalLabel = 'Faint';
   // Distinguish "ring" from "halo" — both are real iris features.
   var limbalType = (limbalDropL >= 0) ? 'ring' : 'halo';
   // Ring color: only meaningful when the ring is actually distinct from the iris
