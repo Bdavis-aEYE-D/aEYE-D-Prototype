@@ -635,8 +635,8 @@ function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
   cxHint = Math.max(rHint, Math.min(W - rHint, cxHint));
   cyHint = Math.max(rHint, Math.min(H - rHint, cyHint));
 
-  // Crop to 2.5× rHint around hint — avoids processing a multi-megapixel image
-  var margin = Math.round(rHint * 2.5);
+  // Crop to 4× rHint — large enough to contain the iris even when MP underestimates radius
+  var margin = Math.round(rHint * 4.0);
   var rx0 = Math.max(0, Math.round(cxHint - margin));
   var ry0 = Math.max(0, Math.round(cyHint - margin));
   var rx1 = Math.min(W, Math.round(cxHint + margin));
@@ -679,10 +679,11 @@ function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
 
   var SCORE_MIN = 15;
   var best = SCORE_MIN - 1, bCx = -1, bCy = -1, bR = -1;
-  var searchR = rHint * 0.65;
-  var step    = Math.max(2, Math.round(rHint * 0.07));
-  var rMin    = rHint * 0.70, rMax = rHint * 1.30;
-  var rStep   = Math.max(1, Math.round(rHint * 0.05));
+  // Wide search: MP radius hint may be underestimated by up to 3×; widen accordingly
+  var searchR = rHint * 1.5;
+  var step    = Math.max(3, Math.round(rHint * 0.10));
+  var rMin    = rHint * 0.30, rMax = Math.min(rw * 0.45, rHint * 3.5);
+  var rStep   = Math.max(2, Math.round(rHint * 0.10));
 
   for (var cx = lcx - searchR; cx <= lcx + searchR; cx += step) {
     for (var cy = lcy - searchR; cy <= lcy + searchR; cy += step) {
