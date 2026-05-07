@@ -835,8 +835,11 @@ function selectFitCircle(which) {
 
 function fitCanvasPt(clientX, clientY) {
   var rect = canvas.getBoundingClientRect();
-  var sx = canvas.width  / rect.width;
-  var sy = canvas.height / rect.height;
+  // Scale from CSS pixels to logical stage pixels (NOT canvas buffer pixels).
+  // canvas.width = stageW * dpr, so using canvas.width/rect.width would
+  // double-count dpr and shift every touch by ~dpr× away from origin.
+  var sx = stageW / rect.width;
+  var sy = stageH / rect.height;
   return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
 }
 
@@ -860,7 +863,7 @@ function fitOnDown(clientX, clientY) {
   if (!imgLoaded) return false;
   var p   = fitCanvasPt(clientX, clientY);
   var cx  = fitActiveCx(), cy = fitActiveCy(), r = fitActiveR();
-  var et  = EDGE_TOL * (canvas.width / canvas.getBoundingClientRect().width);
+  var et  = EDGE_TOL;
   var d   = Math.hypot(p.x - cx, p.y - cy);
   if (r > 0 && Math.abs(d - r) <= et) {
     fitDrag = { type: 'resize', startCx: cx, startCy: cy };
@@ -896,7 +899,7 @@ canvas.addEventListener('mousemove', function(ev) {
   // cursor feedback
   var p  = fitCanvasPt(ev.clientX, ev.clientY);
   var cx = fitActiveCx(), cy = fitActiveCy(), r = fitActiveR();
-  var et = EDGE_TOL * (canvas.width / canvas.getBoundingClientRect().width);
+  var et = EDGE_TOL;
   var d  = Math.hypot(p.x - cx, p.y - cy);
   canvas.style.cursor = fitDrag ? '' :
     (r > 0 && Math.abs(d - r) <= et) ? 'ew-resize' :
