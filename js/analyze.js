@@ -744,7 +744,7 @@ function renderHighlights(result){
   if (patternHint) {
     items.push({
       title: 'Iris character',
-      desc: patternHint + ' · brightness=' + result.brightness + ' · saturation=' + (result.saturation * 100).toFixed(0) + '%',
+      desc: patternHint + ' · brightness=' + result.brightness + ' · saturation=' + result.saturation,
       swatch: { type: 'solid', c1: rgbCss(result.fingerprint ? result.fingerprint.rgb : result.overall.rgb) },
     });
   }
