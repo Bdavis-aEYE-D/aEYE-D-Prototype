@@ -545,10 +545,16 @@ function applyAutoFit(){
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
-      if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
-      if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
       draw();
-      zoomToEye();
+      if (validateIrisFit()) {
+        if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
+        if (hint) hint.style.color = '';
+        if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
+        zoomToEye();
+      } else {
+        if (hint) { hint.textContent = 'Iris not detected — please adjust the circle manually or retake.'; hint.style.color = '#fa0'; }
+        if (st)   st.textContent = 'low confidence';
+      }
     } catch(e) {
       console.warn('MediaPipe detect error:', e);
       if (hint) hint.textContent = 'Detection error — using fallback';
@@ -579,10 +585,15 @@ function _applyFitClassical(closeup){
     rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
     donut.rIris  = ripx;
     donut.rPupil = rpx;
-    if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
-    if (st)   st.textContent   = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
     draw();
-    zoomToEye();
+    if (validateIrisFit()) {
+      if (hint) { hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".'; hint.style.color = ''; }
+      if (st)   st.textContent = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
+      zoomToEye();
+    } else {
+      if (hint) { hint.textContent = 'Iris not detected — please adjust the circle manually or retake.'; hint.style.color = '#fa0'; }
+      if (st)   st.textContent = 'low confidence';
+    }
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
@@ -654,6 +665,33 @@ function layoutStage(){
   donut.rIris  = Math.min(dw, dh) * 0.42;
   donut.rPupil = donut.rIris * 0.30;
   draw();
+}
+
+// Sanity-check the current iris fit: sample the pupil zone (inner 35% of irisR).
+// A real iris always has a dark pupil (lum < 70). Skin/hair/brow do not.
+// Returns true if the candidate looks like a real iris, false if it looks wrong.
+function validateIrisFit() {
+  if (!imgEl || !donut.rIris) return false;
+  var sx   = drawInfo.dw / imgEl.width;
+  var sy   = drawInfo.dh / imgEl.height;
+  var cx   = (donut.cx - drawInfo.dx) / sx;
+  var cy   = (donut.cy - drawInfo.dy) / sy;
+  var pR   = Math.max(3, Math.round(donut.rIris / sx * 0.35));
+  var x0   = Math.max(0, Math.round(cx - pR));
+  var y0   = Math.max(0, Math.round(cy - pR));
+  var x1   = Math.min(imgEl.width,  Math.round(cx + pR));
+  var y1   = Math.min(imgEl.height, Math.round(cy + pR));
+  if (x1 <= x0 || y1 <= y0) return false;
+  var off  = document.createElement('canvas');
+  off.width = x1-x0; off.height = y1-y0;
+  off.getContext('2d').drawImage(imgEl, x0, y0, x1-x0, y1-y0, 0, 0, x1-x0, y1-y0);
+  var d    = off.getContext('2d').getImageData(0, 0, x1-x0, y1-y0).data;
+  var minL = 255;
+  for (var i = 0; i < d.length; i += 4) {
+    var l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    if (l < minL) minL = l;
+  }
+  return minL < 70;  // pupil is always dark; skin/hair won't pass this
 }
 
 // After auto-fit: crop imgEl to just outside the eye corners so the stage is
