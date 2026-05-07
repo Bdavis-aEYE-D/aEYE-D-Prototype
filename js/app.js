@@ -192,7 +192,7 @@ var locCanvas = $('locate-canvas'), lctx = locCanvas.getContext('2d');
 var locStageW = 600, locStageH = 600;
 var locDraw = { dx:0, dy:0, dw:600, dh:600 };
 var locTap = null;      // {sx, sy} in stage pixels, or null
-var cropPct = 14;       // crop size as % of longer image side
+var cropPct = 25;       // crop size as % of longer image side — wide enough to contain iris even with MP landmark error
 
 var loadOriginalFromUrl = function(url){
   var img = new Image();
@@ -508,20 +508,23 @@ function applyAutoFit(){
         }
       }
 
-      // Step 2: Iris center — horizontal band gives a more direct x-center than MP.
-      //         Iris radius — radial scan with adaptive cap (proven reliable on real photos).
-      var irisOD = findIrisODHorizontal(imgEl, cx_img, cy_img, ir * 0.5);
-      var cxIris_img = (irisOD && irisOD.irisR > 6) ? irisOD.cxIris : cx_img;
-      var cyIris_img = (irisOD && irisOD.irisR > 6) ? irisOD.cyIris : cy_img;
-
-      var irisBright = estimateIrisBrightness(imgEl, cx_img, cy_img, ir * 0.4, ir * 0.95);
-      var isDarkIris = irisBright < 80;
-      var maxRFactor = isDarkIris ? 1.55 : 1.22;
-      var capFactor  = isDarkIris ? 1.40 : 1.17;
-      var scanR = findIrisRadiusByRadialScan(imgEl, cxIris_img, cyIris_img, ir, maxRFactor);
-      var rawR  = (scanR && scanR > 6) ? scanR : ir;
-      var irisR_img = Math.min(rawR, ir * capFactor);
-      var radSrc = (irisOD && irisOD.irisR > 6 ? 'hband+' : '') + ((scanR && scanR > 6) ? 'scan' : 'MP');
+      // Step 2: Find iris by ring contrast — search around MP hint for the position
+      // where sclera (outside) is brightest relative to iris body (inside).
+      var rc = findIrisByRingContrast(imgEl, cx_img, cy_img, ir);
+      var cxIris_img, cyIris_img, irisR_img, radSrc;
+      if (rc) {
+        cxIris_img = rc.cx;
+        cyIris_img = rc.cy;
+        irisR_img  = rc.r;
+        radSrc = 'RC' + Math.round(rc.score);
+      } else {
+        // Ring contrast found nothing — keep MP hint position and try radial scan for radius
+        cxIris_img = cx_img;
+        cyIris_img = cy_img;
+        var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
+        irisR_img  = (scanR && scanR > 6) ? scanR : ir;
+        radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+      }
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
@@ -669,28 +672,41 @@ function layoutStage(){
 // Sanity-check the current iris fit: sample the pupil zone (inner 35% of irisR).
 // A real iris always has a dark pupil (lum < 70). Skin/hair/brow do not.
 // Returns true if the candidate looks like a real iris, false if it looks wrong.
+// Validates the current donut position by checking that the ring just outside
+// the iris circle (sclera) is significantly brighter than the interior (iris body).
+// This rejects dark backgrounds, skin, hair — any uniformly dark or flat region.
+// A real iris always has bright sclera visible around it.
 function validateIrisFit() {
   if (!imgEl || !donut.rIris) return false;
-  var sx   = drawInfo.dw / imgEl.width;
-  var sy   = drawInfo.dh / imgEl.height;
-  var cx   = (donut.cx - drawInfo.dx) / sx;
-  var cy   = (donut.cy - drawInfo.dy) / sy;
-  var pR   = Math.max(3, Math.round(donut.rIris / sx * 0.35));
-  var x0   = Math.max(0, Math.round(cx - pR));
-  var y0   = Math.max(0, Math.round(cy - pR));
-  var x1   = Math.min(imgEl.width,  Math.round(cx + pR));
-  var y1   = Math.min(imgEl.height, Math.round(cy + pR));
-  if (x1 <= x0 || y1 <= y0) return false;
-  var off  = document.createElement('canvas');
-  off.width = x1-x0; off.height = y1-y0;
-  off.getContext('2d').drawImage(imgEl, x0, y0, x1-x0, y1-y0, 0, 0, x1-x0, y1-y0);
-  var d    = off.getContext('2d').getImageData(0, 0, x1-x0, y1-y0).data;
-  var minL = 255;
-  for (var i = 0; i < d.length; i += 4) {
-    var l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-    if (l < minL) minL = l;
+  var sx = drawInfo.dw / imgEl.width;
+  var sy = drawInfo.dh / imgEl.height;
+  var cx = (donut.cx - drawInfo.dx) / sx;
+  var cy = (donut.cy - drawInfo.dy) / sy;
+  var iR = donut.rIris / sx;
+  var W  = imgEl.naturalWidth || imgEl.width;
+  var H  = imgEl.naturalHeight || imgEl.height;
+
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  off.getContext('2d').drawImage(imgEl, 0, 0, W, H);
+  var d = off.getContext('2d').getImageData(0, 0, W, H).data;
+  function lp(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var i = (py * W + px) * 4;
+    return 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
   }
-  return minL < 70;  // pupil is always dark; skin/hair won't pass this
+
+  var N = 16, inS = 0, outS = 0, outN = 0;
+  for (var a = 0; a < N; a++) {
+    var ang = (a / N) * 2 * Math.PI;
+    var cosA = Math.cos(ang), sinA = Math.sin(ang);
+    inS += lp(cx + iR * 0.5 * cosA, cy + iR * 0.5 * sinA);
+    var ox = cx + iR * 1.2 * cosA, oy = cy + iR * 1.2 * sinA;
+    if (ox >= 0 && ox < W && oy >= 0 && oy < H) { outS += lp(ox, oy); outN++; }
+  }
+  if (outN < N / 2) return false;
+  return (outS / outN) - (inS / N) > 15;  // sclera must be noticeably brighter
 }
 
 // After auto-fit: crop imgEl to just outside the eye corners so the stage is
