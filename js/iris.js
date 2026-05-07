@@ -678,28 +678,50 @@ function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
   var lcx = cxHint - rx0, lcy = cyHint - ry0;
 
   var SCORE_MIN = 15;
-  var best = SCORE_MIN - 1, bCx = -1, bCy = -1, bR = -1;
-  // Wide search: MP radius hint may be underestimated by up to 3×; widen accordingly
-  var searchR = rHint * 1.5;
-  var step    = Math.max(3, Math.round(rHint * 0.10));
-  var rMin    = rHint * 0.30, rMax = Math.min(rw * 0.45, rHint * 3.5);
-  var rStep   = Math.max(2, Math.round(rHint * 0.10));
-
-  for (var cx = lcx - searchR; cx <= lcx + searchR; cx += step) {
-    for (var cy = lcy - searchR; cy <= lcy + searchR; cy += step) {
-      for (var r = rMin; r <= rMax; r += rStep) {
-        var s = ringScore(cx, cy, r);
-        if (s > best) { best = s; bCx = cx; bCy = cy; bR = r; }
+  // Two-tier search strategy:
+  // Tier 1 — tight range near MP hint (±30% radius, ±65% center offset).
+  //   Handles well-detected cases (close-up shots where MP is accurate).
+  //   If a confident result (score > 22) is found here, use it directly.
+  // Tier 2 — wide range (0.3–3× radius, ±150% center offset).
+  //   Handles poorly-detected cases (angled selfies where MP underestimates
+  //   the iris radius by 2–3×). Only runs when Tier 1 finds nothing good.
+  function coarseSearch(sR, rLo, rHi, rStp, stp) {
+    var b = SCORE_MIN - 1, bx = -1, by = -1, br = -1;
+    for (var cx = lcx - sR; cx <= lcx + sR; cx += stp) {
+      for (var cy = lcy - sR; cy <= lcy + sR; cy += stp) {
+        for (var r = rLo; r <= rHi; r += rStp) {
+          var s = ringScore(cx, cy, r);
+          if (s > b) { b = s; bx = cx; by = cy; br = r; }
+        }
       }
     }
+    return { score: b, cx: bx, cy: by, r: br };
   }
-  if (bCx < 0) return null;
+
+  var step  = Math.max(3, Math.round(rHint * 0.08));
+  var rStep = Math.max(2, Math.round(rHint * 0.08));
+
+  // Tier 1: tight
+  var t1 = coarseSearch(rHint * 0.65, rHint * 0.70, rHint * 1.30, rStep, step);
+  var res = (t1.score >= 22) ? t1 : null;
+
+  // Tier 2: wide fallback — only if Tier 1 didn't find a confident result
+  if (!res) {
+    var stepW  = Math.max(4, Math.round(rHint * 0.12));
+    var rStepW = Math.max(3, Math.round(rHint * 0.12));
+    var t2 = coarseSearch(rHint * 1.5,
+                          rHint * 0.30, Math.min(rw * 0.45, rHint * 3.0),
+                          rStepW, stepW);
+    res = (t2.score >= SCORE_MIN) ? t2 : null;
+  }
+
+  if (!res || res.cx < 0) return null;
 
   // Fine-tune ±step around coarse best
-  var fBest = best, fCx = bCx, fCy = bCy, fR = bR;
-  for (var cx2 = bCx - step; cx2 <= bCx + step; cx2++) {
-    for (var cy2 = bCy - step; cy2 <= bCy + step; cy2++) {
-      for (var r2 = Math.max(4, bR - rStep); r2 <= bR + rStep; r2++) {
+  var fBest = res.score, fCx = res.cx, fCy = res.cy, fR = res.r;
+  for (var cx2 = res.cx - step; cx2 <= res.cx + step; cx2++) {
+    for (var cy2 = res.cy - step; cy2 <= res.cy + step; cy2++) {
+      for (var r2 = Math.max(4, res.r - rStep); r2 <= res.r + rStep; r2++) {
         var s2 = ringScore(cx2, cy2, r2);
         if (s2 > fBest) { fBest = s2; fCx = cx2; fCy = cy2; fR = r2; }
       }
