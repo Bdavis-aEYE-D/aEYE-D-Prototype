@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rayid Classification — UBIRIS v2 Sample</title>
+<style>
+  body { background:#0b0f1a; color:#e0e0e0; font-family:system-ui,sans-serif; margin:0; padding:16px; }
+  h1   { font-size:15px; color:#7dd3fc; margin:0 0 4px; }
+  .sub { font-size:11px; color:#6b7280; margin:0 0 20px; }
+
+  .type-section { margin-bottom:28px; }
+  .type-header  { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .type-name    { font-size:14px; font-weight:600; }
+  .type-count   { font-size:11px; color:#6b7280; }
+  .type-desc    { font-size:11px; color:#94a3b8; margin-bottom:8px; line-height:1.5; }
+
+  .jewel-name  { color:#f59e0b; }
+  .flower-name { color:#34d399; }
+  .stream-name { color:#60a5fa; }
+  .shaker-name { color:#e879f9; }
+
+  .strip-grid  { display:flex; flex-direction:column; gap:5px; }
+  .strip-row   { display:flex; align-items:center; gap:8px; }
+  .strip-row img  { width:720px; height:128px; border-radius:3px; image-rendering:pixelated; object-fit:fill; display:block; }
+  .strip-label { font-size:9px; color:#475569; min-width:160px; }
+  .strip-scores { font-size:9px; color:#334155; }
+  .score-j { color:#ca8a04; }
+  .score-f { color:#059669; }
+  .score-s { color:#3b82f6; }
+
+  .legend { font-size:11px; color:#6b7280; margin-bottom:20px; padding:10px 14px; background:#111827; border-radius:6px; display:inline-block; }
+  .legend span { display:inline-block; margin-right:16px; }
+</style>
+</head>
+<body>
+<h1>Rayid Iris Classification — UBIRIS v2</h1>
+<p class="sub">60 sample strips classified by texture. Strip = 360° angular sweep × pupil-to-limbus radial slice.</p>
+
+<div class="legend">
+  <span><b class="jewel-name">Jewel</b> — pigment spots / concentrated dots</span>
+  <span><b class="flower-name">Flower</b> — open crypts / lacunae</span>
+  <span><b class="stream-name">Stream</b> — radial fiber lines</span>
+  <span><b class="shaker-name">Shaker</b> — dots + rounded openings combined</span>
+</div>
+
+<div id="sections"></div>
+
+<script>
+var DATA = {
+  "Jewel": [
+    ["C317_S1_I7",  {j:0.110, f:0.00, s:0.680}],
+    ["C86_S1_I7",   {j:0.092, f:0.50, s:0.730}],
+    ["C262_S1_I7",  {j:0.078, f:0.50, s:0.660}],
+    ["C466_S2_I9",  {j:0.066, f:0.10, s:0.680}],
+    ["C3_S1_I6 2",  {j:0.066, f:0.60, s:0.670}],
+    ["C279_S1_I6",  {j:0.064, f:0.40, s:0.740}],
+    ["C178_S2_I4",  {j:0.060, f:0.60, s:0.670}],
+    ["C250_S1_I5",  {j:0.059, f:0.40, s:0.650}],
+    ["C444_S2_I4",  {j:0.052, f:0.60, s:0.880}],
+    ["C170_S1_I7",  {j:0.046, f:0.30, s:0.680}]
+  ],
+  "Flower": [
+    ["C331_S1_I6",  {j:0.035, f:1.00, s:0.700}],
+    ["C475_S1_I11", {j:0.037, f:1.00, s:0.670}],
+    ["C46_S1_I11",  {j:0.000, f:1.00, s:0.660}],
+    ["C180_S1_I12", {j:0.011, f:1.00, s:0.640}],
+    ["C254_S1_I14", {j:0.034, f:1.00, s:0.660}],
+    ["C27_S1_I12",  {j:0.024, f:1.00, s:0.640}],
+    ["C509_S1_I14", {j:0.024, f:1.00, s:0.660}],
+    ["C372_S2_I13", {j:0.031, f:1.00, s:0.690}],
+    ["C180_S1_I10", {j:0.008, f:1.00, s:0.680}],
+    ["C69_S1_I12",  {j:0.000, f:1.00, s:0.640}],
+    ["C199_S2_I3",  {j:0.020, f:0.90, s:0.760}],
+    ["C171_S2_I14", {j:0.000, f:0.90, s:0.660}],
+    ["C305_S1_I11", {j:0.001, f:0.90, s:0.680}],
+    ["C267_S2_I8",  {j:0.005, f:0.80, s:0.760}],
+    ["C400_S1_I8",  {j:0.013, f:0.80, s:0.670}],
+    ["C73_S2_I6",   {j:0.035, f:0.80, s:0.700}],
+    ["C317_S1_I9",  {j:0.010, f:0.80, s:0.690}],
+    ["C160_S1_I3",  {j:0.006, f:0.80, s:0.700}],
+    ["C7_S1_I13",   {j:0.027, f:0.80, s:0.700}],
+    ["C104_S1_I4",  {j:0.001, f:0.80, s:0.720}],
+    ["C166_S1_I3",  {j:0.003, f:0.80, s:0.680}]
+  ],
+  "Shaker": [
+    ["C94_S2_I10",  {j:0.053, f:1.00, s:0.700}]
+  ],
+  "Stream": [
+    ["C384_S1_I10", {j:0.000, f:0.70, s:0.640}],
+    ["C387_S1_I13", {j:0.000, f:0.70, s:0.660}],
+    ["C400_S1_I5",  {j:0.003, f:0.60, s:0.680}],
+    ["C317_S1_I4",  {j:0.017, f:0.60, s:0.670}],
+    ["C270_S1_I6",  {j:0.019, f:0.60, s:0.700}],
+    ["C226_S1_I13", {j:0.004, f:0.60, s:0.690}],
+    ["C445_S1_I10", {j:0.026, f:0.60, s:0.680}],
+    ["C122_S2_I12", {j:0.006, f:0.50, s:0.660}],
+    ["C266_S1_I6",  {j:0.027, f:0.50, s:0.700}],
+    ["C370_S1_I5",  {j:0.013, f:0.50, s:0.700}],
+    ["C369_S1_I13", {j:0.000, f:0.50, s:0.700}],
+    ["C291_S1_I11", {j:0.000, f:0.50, s:0.710}],
+    ["C74_S1_I10",  {j:0.003, f:0.50, s:0.730}],
+    ["C133_S1_I12", {j:0.035, f:0.50, s:0.650}],
+    ["C205_S2_I4",  {j:0.026, f:0.50, s:0.700}],
+    ["C118_S1_I12", {j:0.004, f:0.40, s:0.710}],
+    ["C222_S1_I6",  {j:0.015, f:0.40, s:0.700}],
+    ["C131_S2_I8",  {j:0.019, f:0.40, s:0.690}],
+    ["C443_S2_I15", {j:0.000, f:0.40, s:0.700}],
+    ["C315_S1_I13", {j:0.030, f:0.40, s:0.700}],
+    ["C328_S1_I2",  {j:0.008, f:0.40, s:0.690}],
+    ["C265_S1_I6",  {j:0.009, f:0.30, s:0.740}],
+    ["C124_S1_I3",  {j:0.000, f:0.30, s:0.710}],
+    ["C174_S1_I10", {j:0.004, f:0.30, s:0.720}],
+    ["C15_S1_I5",   {j:0.019, f:0.20, s:0.710}],
+    ["C189_S2_I7",  {j:0.007, f:0.20, s:0.720}],
+    ["C150_S2_I2",  {j:0.000, f:0.20, s:0.670}],
+    ["C116_S1_I15", {j:0.014, f:0.10, s:0.680}]
+  ]
+};
+
+var TYPES = [
+  { label: "Jewel",  cls: "jewel-name",  desc: "Pigment spots: small concentrated dots of contrasting colour, scattered across the iris surface." },
+  { label: "Flower", cls: "flower-name", desc: "Open crypts (lacunae): dark, petal-shaped openings in the mid-iris band. Well-defined edges, wider than tall." },
+  { label: "Shaker", cls: "shaker-name", desc: "Mixed: both pigment spots and rounded openings present. Dot density and crypt count both elevated." },
+  { label: "Stream", cls: "stream-name", desc: "Radial fibers: smooth, continuous lines running from pupil outward. Gradient energy dominated by radial direction." }
+];
+
+var sections = document.getElementById('sections');
+
+TYPES.forEach(function(t) {
+  var rows = DATA[t.label] || [];
+  var sec  = document.createElement('div');
+  sec.className = 'type-section';
+
+  var hdr = document.createElement('div');
+  hdr.className = 'type-header';
+  hdr.innerHTML = '<span class="type-name ' + t.cls + '">' + t.label + '</span>' +
+                  '<span class="type-count">' + rows.length + ' of 60 samples</span>';
+  sec.appendChild(hdr);
+
+  var desc = document.createElement('div');
+  desc.className = 'type-desc';
+  desc.textContent = t.desc;
+  sec.appendChild(desc);
+
+  var grid = document.createElement('div');
+  grid.className = 'strip-grid';
+
+  rows.forEach(function(entry) {
+    var name = entry[0];
+    var v    = entry[1];
+    var fname = name + '_strip.jpg';
+
+    var row = document.createElement('div');
+    row.className = 'strip-row';
+
+    var lbl = document.createElement('div');
+    lbl.className = 'strip-label';
+    lbl.innerHTML = name + '<br><span class="strip-scores">' +
+      '<span class="score-j">j=' + v.j.toFixed(3) + '</span>  ' +
+      '<span class="score-f">f=' + v.f.toFixed(2) + '</span>  ' +
+      '<span class="score-s">s=' + v.s.toFixed(2) + '</span>' +
+      '</span>';
+
+    var img = document.createElement('img');
+    img.src = '/ubiris-strips/' + fname;
+    img.loading = 'lazy';
+    img.title = name;
+
+    row.appendChild(lbl);
+    row.appendChild(img);
+    grid.appendChild(row);
+  });
+
+  sec.appendChild(grid);
+  sections.appendChild(sec);
+});
+</script>
+</body>
+</html>

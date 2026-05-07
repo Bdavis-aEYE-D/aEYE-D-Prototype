@@ -3,7 +3,12 @@
 // ======================= AUTO-FIT =======================
 // Classical CV pupil+iris detection. Returns fractions (0..1) so we can apply
 // to the stage regardless of how the image is scaled in.
-function autoFit(src){
+//
+// closeup: true  → close-up eye image (UBIRIS-style). Disables center-bias
+//                  penalty so off-center pupils are found correctly.
+//          false → full-face crop (MediaPipe already centered on iris).
+//                  Center bias guides the search toward the known iris position.
+function autoFit(src, closeup){
   var sampleSide = 200;  // balanced: better than 160 but coarseR stays calibrated
   var shorter = Math.min(src.width, src.height);
   var scale = sampleSide / shorter;
@@ -74,6 +79,7 @@ function autoFit(src){
     var medSurr = (surr[3]+surr[4])/2;  // median of 8 — robust to partial occlusion
     if (medSurr - inner < 10) return -1e9;
     var cd = Math.hypot(cx - W/2, cy - H/2);
+    if (closeup) return (medSurr - inner);
     var centerBonus = Math.max(0, 1 - cd/(W*0.25));
     return (medSurr - inner) * (1 + centerBonus*0.4) - cd*0.3;
   }

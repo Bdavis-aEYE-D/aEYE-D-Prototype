@@ -496,6 +496,15 @@ function analyze(){
     freckles = kept;
   }
 
+  // ---- Rayid iris type classification ----
+  var rayid = null;
+  try {
+    var stripGray = unwrapIris(d, stageW, stageH, cx, cy, cxP, cyP, rOut, rIn);
+    rayid = classifyRayid(stripGray, 360, 64);
+  } catch(e) {
+    console.warn('Rayid classify failed:', e);
+  }
+
   // Build result
   // Read optional birthdate for age-adjusted scoring
   var birthdateEl = document.getElementById('birthdate-input');
@@ -549,7 +558,8 @@ function analyze(){
                     dw: drawInfo.dw, dh: drawInfo.dh }
       }
     },
-    portraitImage: null   // populated by btn-portrait flow
+    portraitImage: null,   // populated by btn-portrait flow
+    rayid: rayid           // {label, streamScore, jewelScore, flowerScore} or null
   };
   // Compute composite rarity score now that all fields are in result
   result.rarityScore = computeRarityScore(result);
@@ -637,6 +647,14 @@ function renderResult(result){
     : 'None';
   $('r-brightness').textContent = result.brightness;
   $('r-saturation').textContent = result.saturation;
+  if (result.rayid && RAYID_META[result.rayid.label]) {
+    var rm = RAYID_META[result.rayid.label];
+    var rv = $('r-rayid');
+    if (rv) {
+      rv.textContent = result.rayid.label + ' · ' + rm.short;
+      rv.style.color = rm.color;
+    }
+  }
 
   // If both eyes have been analyzed, show the two-eye summary
   var hasBoth = eyeResults['Left'] && eyeResults['Right'];
@@ -792,6 +810,15 @@ function renderHighlights(result){
       swatch: { type: 'solid', c1: rgbCss(result.freckles[0].rgb || [60,40,20]) },
     });
   }
+  // ===== Rayid iris type =====
+  if (result.rayid && RAYID_META[result.rayid.label]) {
+    var rm2 = RAYID_META[result.rayid.label];
+    items.push({
+      title: result.rayid.label + ' iris · ' + rm2.short,
+      desc:  rm2.story.replace(/<[^>]+>/g, ''),
+      swatch: { type: 'solid', c1: rm2.color }
+    });
+  }
   // ===== Color fingerprint (always shown last, smaller) =====
   if (result.fingerprint) {
     items.push({
@@ -901,6 +928,10 @@ function renderStory(result){
   // If nothing detected beyond the base color
   if (paras.length === 1) {
     paras.push('No heterochromia, limbal ring, sectoral patches, or iris freckles were detected at the current resolution. That does not mean none exist — subtle features may need a closer crop or better lighting to surface.');
+  }
+  // Rayid type
+  if (result.rayid && RAYID_META[result.rayid.label]) {
+    paras.push(RAYID_META[result.rayid.label].story);
   }
   // Closing
   paras.push('<em style="color: var(--ink-dim); font-size:12px">Measurements are computed in CIE Lab space using a curated palette of ' + (typeof PALETTE !== 'undefined' ? PALETTE.length : 38) + ' eye-color anchors. Rarity figures are global approximations from published prevalence research. No two irises produce identical fingerprints — your eye is mathematically unique.</em>');

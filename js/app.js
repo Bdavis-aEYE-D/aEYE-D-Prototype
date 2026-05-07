@@ -886,6 +886,7 @@ function uploadToSupabase(result) {
       hex_color: result.fingerprint ? result.fingerprint.hex : null,
       sectoral_color: result.sectoral ? result.sectoral.color : null,
       freckle_count: safeInt(result.freckles ? result.freckles.length : 0),
+      rayid_type: result.rayid ? result.rayid.label : null,
       iris_position: irisPos,
       photo_path: irisFileName,
       face_photo_path: faceFileName
