@@ -226,6 +226,23 @@
   .cam-status { font-size: 13px; color: var(--accent); margin: 8px 0 4px;
     min-height: 20px; font-weight: 600; text-align: center; }
 
+  /* ---- Manual Options disclosure (fit step) ---- */
+  details.manual-opts { margin-top: 10px; }
+  details.manual-opts summary {
+    font-size: 13px; font-weight: 600; color: var(--ink-dim);
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px;
+    padding: 8px 0; user-select: none; -webkit-user-select: none;
+  }
+  details.manual-opts summary::-webkit-details-marker { display: none; }
+  details.manual-opts summary::after { content: '▾'; font-size: 11px; transition: transform 0.2s; }
+  details.manual-opts[open] summary::after { transform: rotate(-180deg); }
+  details.manual-opts .opts-body {
+    background: var(--bg2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 14px 10px; margin-top: 4px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  details.manual-opts .opt-desc { font-size: 12px; color: var(--ink-dim); margin: 0 0 4px; line-height: 1.45; }
+
   /* Flash → black capture overlay */
   #cam-overlay {
     position: fixed; inset: 0; background: #fff;
@@ -251,7 +268,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.95 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.96 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -336,19 +353,30 @@
         <button type="button" class="circ-tab iris active" id="tab-iris"  onclick="selectFitCircle('iris')">Iris</button>
         <button type="button" class="circ-tab pupil"       id="tab-pupil" onclick="selectFitCircle('pupil')">Pupil</button>
       </div>
-      <div style="margin-bottom:6px">
-        <label class="tinylabel">Glare / reflection sensitivity</label>
-        <input class="slider" id="r-thresh" type="range" min="180" max="255" value="230">
-      </div>
-      <div class="controls">
+
+      <!-- Primary action — most important, appears first -->
+      <button type="button" id="btn-analyze" style="margin-top:4px">Analyze Iris</button>
+
+      <!-- Secondary action -->
+      <div class="controls" style="margin-top:8px">
         <button type="button" class="secondary" id="btn-switch-eye" style="display:none">Switch Eye</button>
-        <button type="button" class="secondary" id="btn-autofit">Auto-Fit Again</button>
+        <button type="button" class="secondary full" id="btn-autofit">Auto-Fit Again</button>
       </div>
-      <div class="controls">
-        <button type="button" class="secondary" id="btn-reset">Reset</button>
-        <button type="button" id="btn-analyze">Analyze Iris</button>
-      </div>
-      <button type="button" class="secondary" id="btn-fit-back" style="margin-top:4px;font-size:12px;padding:8px;color:var(--ink-dim)">Locate Manually</button>
+
+      <!-- Manual options — collapsed by default, for edge cases only -->
+      <details class="manual-opts">
+        <summary>⚙&thinsp; Manual Options</summary>
+        <div class="opts-body">
+          <div>
+            <label class="tinylabel">Reflection masking</label>
+            <p class="opt-desc">If bright glare or catch-light spots are affecting your color result, slide left to exclude more of them.</p>
+            <input class="slider" id="r-thresh" type="range" min="180" max="255" value="230">
+          </div>
+          <button type="button" class="secondary" id="btn-reset">Reset Fit</button>
+          <button type="button" class="secondary" id="btn-fit-back" style="font-size:12px;padding:8px;color:var(--ink-dim)">Locate Eye Manually</button>
+        </div>
+      </details>
+
       <div class="hint" id="autofit-status">&nbsp;</div>
     </div>
 
