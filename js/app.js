@@ -828,6 +828,11 @@ function zoomToEye() {
 
       // Pupil radius (guard for limbus scan)
       var zPR0 = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, iR);
+      // Guard: if the pupil-radius scan returns the floor value (≤5px), a corneal
+      // catch-light or off-centre placement caused all rays to exit immediately.
+      // Fall back to 15 % of iR so the OD scan's maxSearchR is wide enough to
+      // reach the true limbus zone instead of a false skin/sclera edge far outside.
+      if (zPR0 <= 5) zPR0 = iR * 0.15;
 
       // Horizontal limbus: iris→sclera edge at 3 and 9 o'clock — primary radius finder.
       // findIrisODHorizontal now uses 33rd-percentile of hits (not median) so that
