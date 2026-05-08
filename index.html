@@ -208,6 +208,15 @@
     display: block; width: 100%; height: 100%;
     object-fit: cover; transform: scaleX(-1); /* mirror for selfie */
   }
+  #eyeid-viewfinder.rear { transform: none; } /* rear camera — no mirror */
+  .cam-flip-btn {
+    position: absolute; top: 12px; right: 12px; z-index: 10;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0,0,0,0.45); border: 1.5px solid rgba(255,255,255,0.35);
+    color: #fff; font-size: 20px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; line-height: 1;
+    -webkit-tap-highlight-color: transparent;
+  }
   .face-guide {
     position: absolute; inset: 0; pointer-events: none;
     display: flex; align-items: center; justify-content: center;
@@ -268,7 +277,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.99 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v1.00 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -317,6 +326,7 @@
           <div class="face-oval"></div>
           <div class="guide-text" id="cam-guide-text">Look at camera &mdash; eyes wide open</div>
         </div>
+        <button type="button" class="cam-flip-btn" id="btn-cam-flip" title="Flip camera">&#x1F504;</button>
       </div>
       <div class="cam-status" id="cam-status">Starting camera&hellip;</div>
       <button type="button" id="btn-cam-capture" disabled style="margin-top:8px">Capture</button>

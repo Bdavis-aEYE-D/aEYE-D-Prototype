@@ -57,6 +57,7 @@ $('btn-upload').addEventListener('click', function(){
 });
 $('btn-cam-capture').addEventListener('click', function(){ cameraCaptureSequence(); });
 $('btn-cam-stop').addEventListener('click', function(){ cameraStop(); });
+$('btn-cam-flip').addEventListener('click', function(){ cameraFlip(); });
 
 $('btn-sample').addEventListener('click', function(){
   drawSyntheticFace();
@@ -969,7 +970,21 @@ function zoomToEye() {
       var preW = preZoomState && preZoomState.imgEl ? preZoomState.imgEl.width : imgEl.width;
       var glassesSmall  = (imgEl.width / preW) < 0.15;
       if (glassesSmall) {
-        // Tiny zoom crop almost always means glasses frames confused detection
+        // Tiny zoom crop = glasses confused detection.
+        // Undo the zoom, restore the full-face image, and drop to manual placement
+        // so the user sees the full photo with a usable circle to drag — not a blurry
+        // blown-up nose bridge.
+        if (preZoomState && preZoomState.imgEl) {
+          imgEl      = preZoomState.imgEl;
+          cropRegion = preZoomState.cropRegion
+                         ? Object.assign({}, preZoomState.cropRegion) : null;
+          layoutStage();
+        }
+        donut.cx = stageW / 2; donut.cy = stageH / 2;
+        donut.cxPupil = stageW / 2; donut.cyPupil = stageH / 2;
+        donut.rIris  = Math.round(Math.min(stageW, stageH) * 0.22);
+        donut.rPupil = Math.round(donut.rIris * 0.22);
+        draw();
         hint.textContent = 'Wearing glasses? Remove them for best results, or drag the ring onto your iris.';
         hint.style.color = '#f5a623';
       } else if (needsAdvisory) {

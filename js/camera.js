@@ -4,14 +4,32 @@
 // getUserMedia viewfinder + flash→black→capture sequence.
 // On success calls loadOriginalFromUrl(dataUrl) — same path as file upload.
 
-var camStream = null;
+var camStream     = null;
+var camFacingMode = 'user';   // 'user' = front (selfie) | 'environment' = rear
 
 function cameraAvailable() {
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
 
-function cameraStart() {
+function _applyViewfinderMode() {
+  var vid  = $('eyeid-viewfinder');
+  var oval = document.querySelector('.face-oval');
+  var guide = $('cam-guide-text');
+  if (!vid) return;
+  if (camFacingMode === 'environment') {
+    vid.classList.add('rear');
+    if (guide) guide.textContent = 'Hand to someone — frame their eyes in the oval';
+    if (oval)  oval.style.borderColor = 'rgba(255,200,80,0.65)';  // amber tint for rear
+  } else {
+    vid.classList.remove('rear');
+    if (guide) guide.textContent = 'Look at camera — eyes wide open';
+    if (oval)  oval.style.borderColor = '';
+  }
+}
+
+function cameraStart(facing) {
   if (!cameraAvailable()) { return false; }
+  if (facing) camFacingMode = facing;
 
   $('card-capture').style.display = 'none';
   $('card-viewfinder').style.display = 'block';
@@ -19,22 +37,41 @@ function cameraStart() {
   $('cam-status').textContent = 'Starting camera…';
   $('btn-cam-capture').disabled = true;
 
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
+  // Stop any existing stream before requesting a new one
+  if (camStream) {
+    camStream.getTracks().forEach(function(t) { t.stop(); });
+    camStream = null;
+  }
+
+  var constraints = {
+    video: {
+      facingMode: camFacingMode,
+      width:  { ideal: camFacingMode === 'environment' ? 3024 : 1280 },
+      height: { ideal: camFacingMode === 'environment' ? 4032 : 960  }
+    },
     audio: false
-  }).then(function(s) {
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints).then(function(s) {
     camStream = s;
     var vid = $('eyeid-viewfinder');
     vid.srcObject = s;
     vid.play();
-    $('cam-status').textContent = 'Camera ready — tap Capture when set';
+    _applyViewfinderMode();
+    var label = camFacingMode === 'environment' ? 'Rear camera ready' : 'Camera ready — tap Capture when set';
+    $('cam-status').textContent = label;
     $('btn-cam-capture').disabled = false;
   }).catch(function(e) {
     $('cam-status').textContent = 'Camera error: ' + e.message;
-    // Fall back to file input after a moment
     setTimeout(function() { cameraStop(); }, 2000);
   });
   return true;
+}
+
+function cameraFlip() {
+  // Toggle facing mode and restart the stream
+  camFacingMode = (camFacingMode === 'user') ? 'environment' : 'user';
+  cameraStart();  // restarts with new facingMode
 }
 
 function cameraStop() {
@@ -51,8 +88,8 @@ function cameraStop() {
 // Flash → black → capture sequence
 function cameraCaptureSequence() {
   if (!camStream) return;
-  var btn    = $('btn-cam-capture');
-  var status = $('cam-status');
+  var btn     = $('btn-cam-capture');
+  var status  = $('cam-status');
   var overlay = $('cam-overlay');
   var themeMeta = $('theme-color-meta');
 
@@ -73,15 +110,18 @@ function cameraCaptureSequence() {
     status.textContent = 'Capturing…';
 
     setTimeout(function() {
-      // Step 3: Grab frame from video — pupil still constricted, no phone glare
+      // Step 3: Grab frame from video
       var vid = $('eyeid-viewfinder');
       var cvs = document.createElement('canvas');
       cvs.width  = vid.videoWidth;
       cvs.height = vid.videoHeight;
       var ctx = cvs.getContext('2d');
-      // Un-mirror (viewfinder is CSS-mirrored for selfie feel)
-      ctx.translate(cvs.width, 0);
-      ctx.scale(-1, 1);
+
+      // Only un-mirror for front (selfie) camera; rear image is already correct
+      if (camFacingMode === 'user') {
+        ctx.translate(cvs.width, 0);
+        ctx.scale(-1, 1);
+      }
       ctx.drawImage(vid, 0, 0);
 
       // Restore UI
@@ -89,11 +129,9 @@ function cameraCaptureSequence() {
       setTheme('#0b1020');
 
       var dataUrl = cvs.toDataURL('image/jpeg', 0.92);
-
-      // Stop camera then hand off to main analysis flow
       cameraStop();
       loadOriginalFromUrl(dataUrl);
 
-    }, 400); // settle: screen dark, camera exposure adjusts
-  }, 1500);  // hold flash 1.5 s — pupil constricts in ~200–400 ms
+    }, 400);
+  }, 1500);
 }
