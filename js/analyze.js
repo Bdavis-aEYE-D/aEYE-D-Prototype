@@ -1055,7 +1055,7 @@ function renderStory(result){
     var rarityLine = result.rarity.line;
     if (result.rarityScore !== undefined) {
       var scoreLabel = rarityScoreLabel(result.rarityScore).toLowerCase();
-      rarityLine += ' But color is just the beginning — every additional feature multiplies how rare your exact combination is. Your composite score across all measured traits comes to <strong>'
+      rarityLine += ' The full picture — color, structure, and every personal marking — puts your composite rarity score at <strong>'
         + result.rarityScore + '/100</strong> — <strong>' + scoreLabel + '</strong>.';
     }
     paras.push(rarityLine);
@@ -1158,7 +1158,7 @@ function renderStory(result){
   }
 
   // ── Closing note ──────────────────────────────────────────────────────────
-  paras.push('<em style="color: var(--ink-dim); font-size:12px">The more traits we measure, the rarer every eye becomes — because the probability of any two people sharing the same color, inner ring, limbal border, sectoral marking, and freckle pattern is vanishingly small. We\'re just getting started. Your eye is already one of a kind.</em>');
+  paras.push('<em style="color: var(--ink-dim); font-size:12px">The unique combination of your color, inner ring, limbal border, and personal markings has never appeared in exactly this way before — and never will again. Your eyes are one of a kind.</em>');
 
   paras.forEach(function(p){
     var el = document.createElement('p');
