@@ -520,6 +520,8 @@ function applyAutoFit(){
   var st   = $('autofit-status');
   if (hint) hint.textContent = 'Detecting iris…';
   if (st)   st.textContent   = ' ';
+  var retakeBtn = $('btn-quality-retake');
+  if (retakeBtn) retakeBtn.style.display = 'none';
 
   initMediaPipe().then(function(lm) {
     if (!lm || !originalImgEl) { _applyFitClassical(); return; }
@@ -698,8 +700,10 @@ function _applyFitClassical(closeup){
       donut.rIris  = Math.round(Math.min(stageW, stageH) * 0.28);
       donut.rPupil = Math.round(donut.rIris * 0.22);
       draw();
-      if (hint) { hint.textContent = 'Iris not detected — tap the iris center, then pinch to size the circle.'; hint.style.color = '#fa0'; }
+      if (hint) { hint.textContent = 'Iris not detected — a clearer photo will give better results. Retake or drag the circle manually.'; hint.style.color = '#fa0'; }
       if (st)   st.textContent = 'low confidence';
+      var rb = $('btn-quality-retake');
+      if (rb) rb.style.display = '';
     }
     return fit.ok;
   } catch(e) {
@@ -963,6 +967,7 @@ function zoomToEye() {
     var cy_chk    = (donut.cy     - drawInfo.dy) / nsy;
     var rIris_chk = donut.rIris / nsx;
     var placement = checkIrisPlacement(imgEl, cx_chk, cy_chk, rIris_chk);
+    var retakeBtn2 = $('btn-quality-retake');
     if (hint) {
       var needsAdvisory = !placement.ok || _zFellBack || _zRipConf < 0.35;
       // Glasses detection: if the zoom crop covered less than 15% of the pre-zoom image
@@ -987,12 +992,19 @@ function zoomToEye() {
         draw();
         hint.textContent = 'Wearing glasses? Remove them for best results, or drag the ring onto your iris.';
         hint.style.color = '#f5a623';
+        if (retakeBtn2) retakeBtn2.style.display = '';
       } else if (needsAdvisory) {
-        hint.textContent = 'Tricky eye to measure — drag the ring to adjust if needed';
-        hint.style.color = '#f5a623';  // amber advisory
+        // Differentiate: total fallback (low) vs uncertain fit (medium)
+        var isLowConf = _zFellBack && _zRipConf < 0.15;
+        hint.textContent = isLowConf
+          ? 'Low confidence — a clearer photo will give better results. Retake or drag the circle to fit manually.'
+          : 'Uncertain fit — drag the ring to adjust if needed, then tap Analyze.';
+        hint.style.color = '#f5a623';
+        if (retakeBtn2) retakeBtn2.style.display = '';
       } else {
         hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
         hint.style.color = '';
+        if (retakeBtn2) retakeBtn2.style.display = 'none';
       }
     }
   };
@@ -1370,6 +1382,17 @@ $('btn-portrait').addEventListener('click', function(){
   // (saves a tap vs. scrolling back up to the upload card)
   $('card-capture').scrollIntoView({behavior: 'smooth', block: 'start'});
   setTimeout(function(){ $('btn-upload').click(); }, 200);
+});
+
+// Quality-gate retake — soft reset: return to capture card without clearing existing eye results
+$('btn-quality-retake').addEventListener('click', function(){
+  originalImgEl = null; imgEl = null; imgLoaded = false; isCloseupMode = false;
+  preZoomState  = null;
+  $('btn-quality-retake').style.display = 'none';
+  $('card-fit').style.display    = 'none';
+  $('card-locate').style.display = 'none';
+  $('card-capture').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 $('btn-again').addEventListener('click', function(){
