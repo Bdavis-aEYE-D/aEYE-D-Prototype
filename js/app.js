@@ -869,8 +869,11 @@ function zoomToEye() {
       // findIrisODHorizontal now uses 33rd-percentile of hits (not median) so that
       // angular rays hitting eyelid corners don't inflate the result.
       var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
-      if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 2.2) {
-        donut.rIris = Math.min(zODH.irisR * nsx, Math.min(stageW, stageH) * 0.45);
+      if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4) {
+        // Also hard-cap at 1.25× the MediaPipe estimate — low-contrast irises (blue, gray)
+        // can produce a false gradient at the lower eyelid just outside the true limbus,
+        // causing slight overshoot. The 1.25× cap trims that without losing real limbus range.
+        donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
         // If horizontal scan also refined the x-center, adopt it
         if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
           donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
@@ -886,7 +889,7 @@ function zoomToEye() {
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
       // Guard: if the pupil-ray scan returns its floor (≤5px), catch-light has wiped it out.
       // Estimate pupil as 22% of iris radius (typical human ratio) rather than showing a dot.
-      if (zPR <= 5) zPR = (donut.rIris / nsx) * 0.22;
+      if (zPR <= 5) zPR = (donut.rIris / nsx) * 0.18;
       // Cap pupil at 35% of iris radius — dilated pupils rarely exceed this in a selfie context
       donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.35));
     }

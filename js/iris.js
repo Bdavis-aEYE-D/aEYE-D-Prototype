@@ -450,8 +450,11 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
   // Scanning all the way to the image edge picks up face/skin boundaries far outside
   // the iris (e.g. when the eye is near the crop edge) and produces r > 1.5× iris.
   // Cap at 5.5× pupil radius (iris is ~3–4× pupil, so this allows generous margin).
+  // Floor at W*0.38: when the pupil hint is tiny (catch-light fallback = iR*0.15),
+  // pupilHint*5.5 = iR*0.825 which stops SHORT of the true limbus. The floor ensures
+  // the scan always reaches past the iris regardless of how small the pupil hint is.
   var maxSearchR = pupilRHint > 0
-    ? Math.min(Math.min(W, H) * 0.47, Math.round(pupilRHint * 5.5))
+    ? Math.min(Math.min(W, H) * 0.47, Math.max(Math.round(pupilRHint * 5.5), Math.round(Math.min(W, H) * 0.38)))
     : Math.min(W, H) * 0.47;
 
   // Left limbus: scan rightward from the capped start, find steepest brightness DROP entering iris
@@ -473,9 +476,11 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
   if (rightHit >= 0) hits.push(rightHit - cx);
 
   // Near-horizontal rays at ±20° and ±30°, firing both left and right
+  // Use the same maxSearchR cap as the horizontal scan — these rays were previously
+  // uncapped (W*0.5) and could reach eyelid/skin, inflating the median.
   var rayAngles = [20, -20, 30, -30];
   var rayThresh = 12;
-  var maxR = Math.min(W, H) * 0.5;
+  var maxR = maxSearchR;
 
   for (var ai = 0; ai < rayAngles.length; ai++) {
     var angle = rayAngles[ai] * Math.PI / 180;
