@@ -795,8 +795,32 @@ function zoomToEye() {
     // Step A: pupil blob anchors the center (most reliable — darkest region within iris).
     // Step B: horizontal limbus scan finds the iris OD at 3 and 9 o'clock (highest contrast,
     //         no eyelid occlusion). Ring contrast is kept as fallback only.
-    var zPupil = findPupilCenter(imgEl, niCx, niCy, iR * 0.65);
-    if (zPupil && Math.hypot(zPupil.cx - niCx, zPupil.cy - niCy) < iR * 0.55) {
+    //
+    // Adaptive pupil-search seed: if the crop center (niCy) is in a dark region (lum < 40),
+    // MediaPipe has placed the iris centre in the upper-lash / eyelid zone. Shift the seed
+    // 35% of iR downward and tighten the search radius so the upper-lash zone falls outside
+    // the search circle, forcing the centroid onto the true pupil. For well-centred eyes
+    // (lum >= 40) a small 15% nudge keeps lash weight low without disturbing the result.
+    // Sample 0.5·iR ABOVE niCy (upper eyelid zone) to detect lash territory.
+    // Sampling at niCy itself always hits the dark pupil, so it can't distinguish
+    // lash from iris. Above niCy: lashes → lum < 25; sclera/lid skin → lum > 50.
+    // When that upper zone is nearly black, MediaPipe landed in the lash region and
+    // we need a larger downward bias to find the true pupil.
+    var niAboveLum  = estimateIrisBrightness(imgEl, niCx, niCy - iR * 0.5, 0, iR * 0.15);
+    var zLashBias   = (niAboveLum < 25) ? (iR * 0.35) : (iR * 0.15);
+    var zSearchR    = (niAboveLum < 25) ? (iR * 0.55) : (iR * 0.65);
+    var zPupil = findPupilCenter(imgEl, niCx, niCy + zLashBias, zSearchR);
+    // Lash-rejection retry: if FPC centroid landed more than 12% of iR above the
+    // MediaPipe iris centre, lash pixels dominated the search. Retry with a deeper
+    // seed (35% below MP centre) and a tighter radius (32%) so the upper-lash
+    // cluster falls outside the circle and the true pupil dominates.
+    if (zPupil && zPupil.cy < niCy - iR * 0.12) {
+      var zRetry = findPupilCenter(imgEl, niCx, niCy + iR * 0.35, iR * 0.32);
+      if (zRetry && zRetry.cy > zPupil.cy && Math.abs(zRetry.cx - niCx) < iR * 0.5) {
+        zPupil = zRetry;
+      }
+    }
+    if (zPupil && Math.hypot(zPupil.cx - niCx, zPupil.cy - niCy) < iR * 0.75) {
       donut.cx      = drawInfo.dx + zPupil.cx * nsx;
       donut.cy      = drawInfo.dy + zPupil.cy * nsy;
       donut.cxPupil = donut.cx;
