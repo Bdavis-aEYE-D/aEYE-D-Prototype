@@ -978,8 +978,7 @@ function renderHighlights(result){
   if (result.sectoral) {
     items.push({
       title: 'Sectoral patch · ' + result.sectoral.color.name,
-      desc: 'A rare marking — about 1 in 1,000 people have one. Permanently fixed near '
-        + result.sectoral.clock + " o'clock, and unlike anything in anyone else's iris.",
+      desc: 'About 1 in 1,000 people have one — and no two are ever in the same spot.',
       swatch: { type: 'solid', c1: rgbCss(result.sectoral.rgb) },
     });
   }
@@ -1056,8 +1055,8 @@ function renderStory(result){
     var rarityLine = result.rarity.line;
     if (result.rarityScore !== undefined) {
       var scoreLabel = rarityScoreLabel(result.rarityScore).toLowerCase();
-      rarityLine += ' Stack in the heterochromia, limbal ring, and any other features, and your composite rarity score lands at <strong>'
-        + result.rarityScore + '/100</strong> — putting this iris in the <strong>' + scoreLabel + '</strong> tier.';
+      rarityLine += ' Add in the heterochromia, limbal ring, and everything else this iris has going on, and your composite rarity score comes to <strong>'
+        + result.rarityScore + '/100</strong> — <strong>' + scoreLabel + '</strong>.';
     }
     paras.push(rarityLine);
   }
@@ -1129,10 +1128,9 @@ function renderStory(result){
   // ── Sectoral heterochromia ────────────────────────────────────────────────
   if (result.sectoral) {
     var sc = result.sectoral;
-    paras.push('A <strong>sectoral patch of ' + sc.color.name.toLowerCase() + '</strong> marks near '
-      + sc.clock + " o'clock — a bold splash of a different color that belongs to no one else on Earth. "
-      + 'Sectoral heterochromia shows up in about 1 in 1,000 people, and no two patches are ever in the same position. '
-      + 'This one is a permanent, one-of-a-kind signature.');
+    paras.push('A <strong>sectoral patch of ' + sc.color.name.toLowerCase() + '</strong> near '
+      + sc.clock + " o'clock — a rare splash of a completely different color. "
+      + 'Only about 1 in 1,000 people have one, and no two are ever in the same spot.');
   }
 
   // ── Iris freckles ─────────────────────────────────────────────────────────
