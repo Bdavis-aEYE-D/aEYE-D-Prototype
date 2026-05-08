@@ -268,7 +268,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.96 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.97 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -344,15 +344,15 @@
     <div class="card" id="card-fit" style="display:none">
       <div class="step">Step 2 &middot; <span id="fit-side-label">&mdash;</span></div>
       <h2>Fit the donut to the iris</h2>
-      <p>Auto-detected and zoomed in. Tap to set center, pinch to resize. Switch between Iris and Pupil below.</p>
+      <p>Tap to set center &middot; Pinch to resize &middot; Switch ring below</p>
+      <div id="circle-tabs" style="display:flex;gap:8px;margin:0 0 10px">
+        <button type="button" class="circ-tab iris active" id="tab-iris"  onclick="selectFitCircle('iris')">Iris</button>
+        <button type="button" class="circ-tab pupil"       id="tab-pupil" onclick="selectFitCircle('pupil')">Pupil</button>
+      </div>
       <div class="stage" id="stage">
         <canvas id="canvas-main"></canvas>
       </div>
       <div class="hint" id="autofit-hint">Auto-fit is running&hellip;</div>
-      <div id="circle-tabs" style="display:flex;gap:8px;margin:10px 0">
-        <button type="button" class="circ-tab iris active" id="tab-iris"  onclick="selectFitCircle('iris')">Iris</button>
-        <button type="button" class="circ-tab pupil"       id="tab-pupil" onclick="selectFitCircle('pupil')">Pupil</button>
-      </div>
 
       <!-- Primary action — most important, appears first -->
       <button type="button" id="btn-analyze" style="margin-top:4px">Analyze Iris</button>

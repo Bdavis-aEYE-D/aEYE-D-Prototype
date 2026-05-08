@@ -1118,51 +1118,92 @@ canvas.addEventListener('mousemove', function(ev) {
 canvas.addEventListener('mouseup',    function() { fitDrag = null; });
 canvas.addEventListener('mouseleave', function() { fitDrag = null; });
 
-var pinchStart = null;  // {dist, r, midX, midY} — two-finger pinch to resize
+var pinchStart    = null;  // two-finger pinch state
+var fitDragPending = null;  // {clientX0, clientY0, canvasX, canvasY, committed}
+var FIT_COMMIT_PX = 8;      // pixels of movement before locking into drag mode
 
-// Touch model: 1 finger always moves center | 2 fingers always resize (+ track midpoint as center)
+// Touch model:
+//   1 finger  — tap: snap center on touchend | drag: follow after FIT_COMMIT_PX threshold
+//   2 fingers — pinch to resize + track midpoint; claims gesture immediately
+//
+// Scroll safety: single-finger touchstart does NOT call preventDefault.
+// We only claim the gesture (and call preventDefault) in touchmove once the
+// finger has moved enough AND is not moving primarily vertically (which would
+// indicate a page scroll intent).  iOS fires touchcancel when it claims a
+// scroll — we clean up without snapping.
+
 canvas.addEventListener('touchstart', function(ev) {
   if (!imgLoaded) return;
-  ev.preventDefault();
   if (ev.touches.length === 2) {
-    fitDrag = null;
-    var dx = ev.touches[1].clientX - ev.touches[0].clientX;
-    var dy = ev.touches[1].clientY - ev.touches[0].clientY;
-    var mx = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
-    var my = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+    // Two-finger pinch — claim immediately so pinch never scrolls
+    ev.preventDefault();
+    fitDragPending = null; fitDrag = null;
+    var dx2 = ev.touches[1].clientX - ev.touches[0].clientX;
+    var dy2 = ev.touches[1].clientY - ev.touches[0].clientY;
+    var mx  = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+    var my  = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
     var mid = fitCanvasPt(mx, my);
     fitSetCenter(mid.x, mid.y);
-    pinchStart = { dist: Math.hypot(dx, dy), r: fitActiveR() };
+    pinchStart = { dist: Math.hypot(dx2, dy2), r: fitActiveR() };
     draw();
   } else if (ev.touches.length === 1) {
-    pinchStart = null;
+    // Single finger — record start position but do NOT move circle yet.
+    // We wait for touchmove threshold to confirm this isn't a scroll.
+    pinchStart = null; fitDrag = null;
     var p = fitCanvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
-    fitSetCenter(p.x, p.y);
-    fitDrag = { type: 'move' };
-    draw();
+    fitDragPending = {
+      clientX0: ev.touches[0].clientX, clientY0: ev.touches[0].clientY,
+      canvasX: p.x, canvasY: p.y, committed: false
+    };
   }
 }, {passive: false});
+
 canvas.addEventListener('touchmove', function(ev) {
   if (!imgLoaded) return;
-  ev.preventDefault();
   if (ev.touches.length === 2 && pinchStart) {
-    var dx = ev.touches[1].clientX - ev.touches[0].clientX;
-    var dy = ev.touches[1].clientY - ev.touches[0].clientY;
-    var mx = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
-    var my = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+    ev.preventDefault();
+    var dx2 = ev.touches[1].clientX - ev.touches[0].clientX;
+    var dy2 = ev.touches[1].clientY - ev.touches[0].clientY;
+    var mx  = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+    var my  = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
     var mid = fitCanvasPt(mx, my);
     fitSetCenter(mid.x, mid.y);
-    fitSetRadius(pinchStart.r * (Math.hypot(dx, dy) / pinchStart.dist));
+    fitSetRadius(pinchStart.r * (Math.hypot(dx2, dy2) / pinchStart.dist));
     draw();
-  } else if (ev.touches.length === 1 && fitDrag) {
+  } else if (ev.touches.length === 1 && fitDragPending) {
+    var mdx = ev.touches[0].clientX - fitDragPending.clientX0;
+    var mdy = ev.touches[0].clientY - fitDragPending.clientY0;
+    var dist = Math.sqrt(mdx * mdx + mdy * mdy);
+    if (!fitDragPending.committed) {
+      if (dist < FIT_COMMIT_PX) return;             // not enough movement yet
+      // Primarily vertical movement → likely a page scroll; bail out cleanly
+      if (Math.abs(mdy) > Math.abs(mdx) * 1.8) { fitDragPending = null; return; }
+      // Commit to canvas drag
+      fitDragPending.committed = true;
+      fitDrag = { type: 'move' };
+    }
+    ev.preventDefault();  // prevent scroll now that we've confirmed a canvas drag
     var p = fitCanvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
     fitSetCenter(p.x, p.y);
     draw();
   }
 }, {passive: false});
+
 canvas.addEventListener('touchend', function(ev) {
   if (ev.touches.length < 2) pinchStart = null;
-  if (ev.touches.length === 0) fitDrag = null;
+  if (ev.touches.length === 0) {
+    // Quick tap (never committed to drag) → snap center to tap position
+    if (fitDragPending && !fitDragPending.committed) {
+      fitSetCenter(fitDragPending.canvasX, fitDragPending.canvasY);
+      draw();
+    }
+    fitDrag = null; fitDragPending = null;
+  }
+});
+
+// iOS fires touchcancel when it claims a scroll gesture — discard without snapping
+canvas.addEventListener('touchcancel', function() {
+  pinchStart = null; fitDrag = null; fitDragPending = null;
 });
 
 $('r-thresh').addEventListener('input', function(e){ donut.threshHi = +e.target.value; });
