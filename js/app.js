@@ -964,7 +964,15 @@ function zoomToEye() {
     var placement = checkIrisPlacement(imgEl, cx_chk, cy_chk, rIris_chk);
     if (hint) {
       var needsAdvisory = !placement.ok || _zFellBack || _zRipConf < 0.35;
-      if (needsAdvisory) {
+      // Glasses detection: if the zoom crop covered less than 15% of the pre-zoom image
+      // width, detection was confused by glasses frames (tiny circle got upscaled).
+      var preW = preZoomState && preZoomState.imgEl ? preZoomState.imgEl.width : imgEl.width;
+      var glassesSmall  = (imgEl.width / preW) < 0.15;
+      if (glassesSmall) {
+        // Tiny zoom crop almost always means glasses frames confused detection
+        hint.textContent = 'Wearing glasses? Remove them for best results, or drag the ring onto your iris.';
+        hint.style.color = '#f5a623';
+      } else if (needsAdvisory) {
         hint.textContent = 'Tricky eye to measure — drag the ring to adjust if needed';
         hint.style.color = '#f5a623';  // amber advisory
       } else {

@@ -182,7 +182,7 @@ function analyze(){
   }
 
   if (outer.length < 50){
-    showError('Not enough iris pixels. Try enlarging the iris ring or reducing the pupil circle.');
+    showError('Not enough iris pixels. If wearing glasses, try removing them. Otherwise drag the circle onto your iris and make it larger.');
     return;
   }
   function dominant(pixels){
