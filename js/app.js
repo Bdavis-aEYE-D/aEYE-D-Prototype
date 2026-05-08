@@ -526,9 +526,12 @@ function applyAutoFit(){
       if (ir < 4) { if (hint) hint.textContent = 'Iris too small — using fallback'; _applyFitClassical(isCloseupMode); return; }
 
       // For tilted faces MediaPipe's iris boundary landmarks project to an artificially
-      // small radius. Floor ir against an IPD-based estimate: human iris ≈ 17% of IPD.
+      // small radius. Floor ir against an IPD-based estimate.
+      // The human iris diameter is ~17% of IPD, so iris RADIUS ≈ 8.5% of IPD.
+      // (0.17 was the original constant but it measures diameter, not radius — using it
+      // as a radius floor doubles the estimate and inflates the zoom crop 2×.)
       var ipdPx = Math.hypot((L[468].x - L[473].x) * imgW, (L[468].y - L[473].y) * imgH);
-      if (ipdPx > 20) ir = Math.max(ir, ipdPx * 0.17);
+      if (ipdPx > 20) ir = Math.max(ir, ipdPx * 0.085);
 
       // Transform from originalImgEl space → cropped imgEl space → stage
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
@@ -579,8 +582,9 @@ function applyAutoFit(){
       }
       // IPD-based radius floor: horizontal scan / RC / scan can return too-small a radius
       // for dark irises or tilted faces where limbus contrast is low. The IPD estimate
-      // gives a reliable minimum — human iris ≈ 17% of inter-pupillary distance.
-      if (ipdPx > 20) irisR_img = Math.max(irisR_img, ipdPx * 0.17);
+      // gives a reliable minimum — human iris radius ≈ 8.5% of inter-pupillary distance
+      // (iris diameter ≈ 17% of IPD; divide by 2 to get the radius floor).
+      if (ipdPx > 20) irisR_img = Math.max(irisR_img, ipdPx * 0.085);
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
@@ -880,6 +884,9 @@ function zoomToEye() {
         }
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
+      // Guard: if the pupil-ray scan returns its floor (≤5px), catch-light has wiped it out.
+      // Estimate pupil as 22% of iris radius (typical human ratio) rather than showing a dot.
+      if (zPR <= 5) zPR = (donut.rIris / nsx) * 0.22;
       // Cap pupil at 35% of iris radius — dilated pupils rarely exceed this in a selfie context
       donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.35));
     }
