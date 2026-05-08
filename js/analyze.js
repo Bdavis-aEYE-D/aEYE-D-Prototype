@@ -826,17 +826,19 @@ function renderResult(result){
     var verdict, detail, cls;
     if (!sameCat){
       verdict = 'Complete bilateral heterochromia';
-      detail  = L.overall.cat + ' (left) vs ' + R.overall.cat + ' (right) — ΔE ' + biDe.toFixed(1)
-              + ' between palette anchors. About 1 in 200,000 people have eyes this distinct.';
+      detail  = L.overall.cat + ' on the left, ' + R.overall.cat + ' on the right — two genuinely different eye colors. '
+              + 'About 1 in 200,000 people have eyes this distinct. David Bowie made it iconic; you\'re in rare company.';
       cls = 'bilateral';
     } else if (biDe > 18){
       verdict = 'Subtle bilateral heterochromia';
-      detail  = 'Both eyes are ' + L.overall.cat.toLowerCase() + ', but they differ by ΔE ' + biDe.toFixed(1)
-              + ' (' + L.overall.name + ' vs ' + R.overall.name + ').';
+      detail  = 'Both eyes are ' + L.overall.cat.toLowerCase() + ', but they\'re measurably different — '
+              + L.overall.name + ' on the left versus ' + R.overall.name + ' on the right. '
+              + 'Most people won\'t notice at a glance, but in good light it\'s unmistakable.';
       cls = 'bilateral';
     } else {
       verdict = 'Matched eyes';
-      detail  = 'Left and right eyes read as the same color (ΔE ' + biDe.toFixed(1) + ' between palette anchors).';
+      detail  = L.overall.name + ' left, ' + R.overall.name + ' right — a well-matched pair. '
+              + 'The color reads consistently across both eyes.';
       cls = 'bilateral match';
     }
     $('bilateral-verdict').textContent = verdict;
@@ -853,11 +855,11 @@ function renderResult(result){
       : 'Add Beauty Shot';
   }
   if (hasBoth) {
-    $('next-text').textContent = 'Both eyes analyzed. Pop over to Post Maker for the cover-and-uncover reveal, or start over.';
+    $('next-text').textContent = 'Both eyes analyzed — head to Post Maker to create your reveal card, or start over with a new photo.';
   } else {
     var other = (result.side === 'Left') ? 'Right' : 'Left';
     $('btn-other-eye').textContent = 'Analyze ' + other + ' Eye';
-    $('next-text').textContent = 'One eye down. Analyze the ' + other.toLowerCase() + ' eye for a complete pair, make a share card, or start over.';
+    $('next-text').textContent = 'One eye in. Analyze the ' + other.toLowerCase() + ' to see if they match — or go straight to Post Maker.';
   }
   setTimeout(function(){ $('card-result').scrollIntoView({behavior:'smooth', block:'start'}); }, 60);
 }
@@ -1041,79 +1043,126 @@ function renderStory(result){
   var box = $('view-story-content');
   box.innerHTML = '';
   var paras = [];
-  // Opening
   var side = result.side.toLowerCase();
-  // Opening — specific palette name + vibe
+
+  // ── Opening — name + vibe ────────────────────────────────────────────────
   var openLine = 'Your <strong>' + side + ' eye</strong> is <strong>' + result.overall.name + '</strong>';
   if (result.vibe) openLine += ' — ' + result.vibe;
   openLine += '.';
   paras.push(openLine);
-  // Rarity + score
+
+  // ── Rarity + composite score ─────────────────────────────────────────────
   if (result.rarity) {
     var rarityLine = result.rarity.line;
     if (result.rarityScore !== undefined) {
-      rarityLine += ' Your composite rarity score is <strong>' + result.rarityScore + '/100</strong> — ' + rarityScoreLabel(result.rarityScore).toLowerCase() + '.';
+      var scoreLabel = rarityScoreLabel(result.rarityScore).toLowerCase();
+      rarityLine += ' Stack in the heterochromia, limbal ring, and any other features, and your composite rarity score lands at <strong>'
+        + result.rarityScore + '/100</strong> — putting this iris in the <strong>' + scoreLabel + '</strong> tier.';
     }
     paras.push(rarityLine);
   }
-  // Iris character — plain language only
+
+  // ── Iris character ────────────────────────────────────────────────────────
   var ph = getPatternHint(result.brightness, result.saturation);
   if (ph) {
-    var patDesc = ph.toLowerCase();
-    paras.push('The iris itself is <strong>' + patDesc + '</strong>' + (result.fingerprint ? ', with a unique color fingerprint at ' + result.fingerprint.hex.toUpperCase() : '') + '.');
+    var storyPatDescs = {
+      'Vivid stroma — strong color saturation': 'The iris itself has a <strong>vivid, pigment-rich character</strong> — bold, saturated color that catches light and holds it. These are the eyes that read as striking even in a photograph.',
+      'Saturated iris — pigment-rich':          'The iris is <strong>well-saturated and pigment-rich</strong> — color that looks vibrant and alive even in dim or indoor light.',
+      'Soft, muted stroma':                     'The iris has a <strong>soft, understated character</strong> — gentle tones that reward a closer look rather than announcing themselves across the room.',
+      'Deep, light-absorbing iris':             'The iris is <strong>deep and light-absorbing</strong> — a dark, quietly intense color that draws people in without giving everything away.',
+      'Bright, light-reflecting iris':          'The iris is <strong>bright and light-reflective</strong> — open and luminous, almost as if it\'s lit from behind. Photographs beautifully.',
+      'Balanced light and pigment':             'The iris has a <strong>naturally balanced character</strong> — neither too vivid nor too muted. Easy and appealing in any light.'
+    };
+    var storyPat = storyPatDescs[ph]
+      || ('The iris character: <strong>' + ph.toLowerCase() + '</strong>.');
+    if (result.fingerprint) {
+      storyPat += ' Color fingerprint: ' + result.fingerprint.hex.toUpperCase() + ' — no two people share the same reading.';
+    }
+    paras.push(storyPat);
   }
-  // Heterochromia
+
+  // ── Heterochromia ─────────────────────────────────────────────────────────
   if (result.hetero !== 'None') {
     var pupName = result.heteroPup ? (result.heteroPup.displayName || result.heteroPup.color.name) : null;
     var cilName = result.heteroCil ? (result.heteroCil.displayName || result.heteroCil.color.name) : null;
     if (result.hetero.indexOf('warmth') >= 0) {
-      paras.push('The most distinctive feature: <strong>central heterochromia</strong>. A ' + (pupName ? '<strong>' + pupName + '</strong>' : 'warmer') + ' ring sits immediately around the pupil, transitioning into a ' + (cilName ? cilName.toLowerCase() : 'cooler') + ' outer iris. The Lab b-channel shifts by ' + result.heteroDb.toFixed(1) + ' between the pupillary zone and the ciliary zone — that is a clear, measurable warmth gradient. Central heterochromia of this kind appears in roughly 10-15% of the population and is most often inherited as a recessive trait.');
+      paras.push('The standout feature here is <strong>central heterochromia</strong> — a '
+        + (pupName ? '<strong>' + pupName + '</strong>' : 'warm')
+        + ' inner ring sits immediately around the pupil, then melts into a '
+        + ((cilName || 'cooler') + ' outer iris').toLowerCase()
+        + '. Sometimes called "sunflower eyes," this warm inner corona appears in roughly 10–15% of people. It\'s subtle enough that many people who have it have never noticed — yet unmistakable once you see it.');
     } else if (result.hetero.indexOf('lightness') >= 0) {
-      paras.push('The eye shows <strong>central heterochromia of the lightness-gradient type</strong>: a ' + (pupName ? '<strong>' + pupName + '</strong>' : 'lighter') + ' pupillary zone within a ' + (cilName ? cilName.toLowerCase() : 'darker') + ' outer iris (ΔL=' + result.heteroDL.toFixed(1) + ').');
+      paras.push('This eye has a <strong>lightness-gradient heterochromia</strong> — a '
+        + (pupName ? '<strong>' + pupName + '</strong>' : 'brighter')
+        + ' zone glows around the pupil, gradually deepening into a '
+        + ((cilName || 'darker') + ' outer iris').toLowerCase()
+        + '. It\'s a two-tone depth effect that gives the eye real dimension — the kind of detail that makes people lean in for a closer look.');
     } else if (result.hetero === 'Central') {
-      paras.push('The eye shows <strong>central heterochromia</strong>: a clearly different color in the inner pupillary zone (' + result.inner.name + ') compared to the outer ciliary zone (' + result.outer.name + '). ΔE between zones is ' + result.heteroDist.toFixed(1) + ' — large enough to cross palette categories.');
+      paras.push('This is a <strong>true central heterochromia</strong> — two genuinely different colors in the same iris. '
+        + (result.inner ? result.inner.name : 'One color') + ' in the inner ring, '
+        + (result.outer ? result.outer.name.toLowerCase() : 'another') + ' beyond it, with a clear visible boundary between them. '
+        + 'Most people who meet you will sense something striking about your eyes without being able to name exactly what it is.');
     } else {
-      paras.push('A <strong>subtle heterochromia</strong> shows up: inner ring reads as ' + result.inner.name + ', outer as ' + result.outer.name + '. ΔE=' + result.heteroDist.toFixed(1) + '.');
+      paras.push('A <strong>subtle heterochromia</strong> gives this iris a quiet two-tone quality — '
+        + (result.inner ? result.inner.name.toLowerCase() : 'warmer') + ' in the inner iris, '
+        + (result.outer ? result.outer.name.toLowerCase() : 'cooler') + ' toward the edge. '
+        + 'Understated, but it adds real depth.');
     }
   }
-  // Limbal ring or halo
+
+  // ── Limbal ring or halo ───────────────────────────────────────────────────
   if (result.limbal !== 'None' && result.limbalColor) {
-    var strength = result.limbal.toLowerCase();
-    var lftype = result.limbalType || 'ring';
-    var lifAbs = Math.abs(result.limbalDropL).toFixed(1);
-    if (lftype === 'halo') {
-      paras.push('A <strong>' + strength + ' ' + result.limbalColor.name.toLowerCase() + ' halo</strong> glows just inside the iris edge — a bright amber/golden zone instead of the typical dark rim. The Lab L channel rises by ' + lifAbs + ' from the iris baseline to the outermost 8% band. Halos are less talked about than limbal rings but are equally distinctive — they give the iris a luminous, inset quality.');
-    } else if (result.limbal === 'Strong' || result.limbal === 'Dramatic') {
-      paras.push('A <strong>' + strength + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring</strong> traces the iris edge — the dark rim that makes the iris pop. The Lab L channel drops by ' + lifAbs + ' between the iris baseline and the outermost 8% ring band. Strong limbal rings tend to be most visible in younger people and gradually fade with age.');
+    var lstrength = result.limbal.toLowerCase();
+    var lftype2   = result.limbalType || 'ring';
+    var lc2       = result.limbalColor.name.toLowerCase();
+    if (lftype2 === 'halo') {
+      paras.push('There\'s a <strong>' + lstrength + ' ' + lc2 + ' halo</strong> glowing just inside the iris edge — a luminous inner border that makes the color feel lit from within. Halos are less talked about than limbal rings but are just as striking: they give the iris an inset, almost backlit quality that\'s impossible to fake.');
+    } else if (result.limbal === 'Dramatic') {
+      paras.push('A <strong>dramatic ' + lc2 + ' limbal ring</strong> frames the entire iris — bold, high-contrast natural eyeliner that never comes off. This is the feature that makes eyes look deep and unforgettable. Strong limbal rings are most striking in younger people and tend to soften gradually with age, which makes this one worth appreciating right now.');
+    } else if (result.limbal === 'Strong') {
+      paras.push('A <strong>strong ' + lc2 + ' limbal ring</strong> circles the iris — a sharp, high-contrast border that makes the eye color pop and gives the iris a crisp, defined look. This is the feature people are describing when they say someone has "intense eyes."');
     } else {
-      paras.push('A <strong>' + strength + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring</strong> sits at the iris edge (L drop of ' + lifAbs + ') — present, but on the subtler side.');
+      paras.push('A <strong>' + lstrength + ' ' + lc2 + ' limbal ring</strong> traces the iris edge — present and polished, adding quiet definition without dominating the color itself.');
     }
   }
-  // Sectoral
+
+  // ── Sectoral heterochromia ────────────────────────────────────────────────
   if (result.sectoral) {
-    var s = result.sectoral;
-    paras.push('A <strong>sectoral patch of ' + s.color.name.toLowerCase() + '</strong> appears near ' + s.clock + " o'clock, spanning roughly " + Math.round(s.spanDeg) + '° of the iris. Sectoral heterochromia is rare — about 1 in 1,000 people — and gives each affected iris a one-of-a-kind signature.');
+    var sc = result.sectoral;
+    paras.push('A <strong>sectoral patch of ' + sc.color.name.toLowerCase() + '</strong> marks near '
+      + sc.clock + " o'clock — a bold splash of a different color that belongs to no one else on Earth. "
+      + 'Sectoral heterochromia shows up in about 1 in 1,000 people, and no two patches are ever in the same position. '
+      + 'This one is a permanent, one-of-a-kind signature.');
   }
-  // Freckles
+
+  // ── Iris freckles ─────────────────────────────────────────────────────────
   if (result.freckles && result.freckles.length) {
-    var nf = result.freckles.length;
-    if (nf === 1) {
-      paras.push('A single <strong>iris freckle</strong> sits at clock ' + result.freckles[0].clock + ' — a small pigmented spot that is essentially a permanent fingerprint inside the iris.');
+    var nf2 = result.freckles.length;
+    if (nf2 === 1) {
+      paras.push('A single <strong>iris freckle</strong> near ' + result.freckles[0].clock
+        + " o'clock adds a detail that is entirely yours — a concentrated spot of melanin that's as permanent as a fingerprint and as individual as a name.");
     } else {
-      var clocks = result.freckles.map(function(f){ return f.clock; }).join(', ');
-      paras.push('<strong>' + nf + ' iris freckles</strong> dot the iris at clock positions ' + clocks + '. These small pigmented spots act as a permanent visual fingerprint — no two irises share the same freckle pattern.');
+      var fclocks = result.freckles.slice(0, 3).map(function(f){ return f.clock + " o'clock"; }).join(', ');
+      paras.push('<strong>' + nf2 + ' iris freckles</strong> dot the iris near ' + fclocks
+        + (nf2 > 3 ? ' and ' + (nf2 - 3) + ' more' : '')
+        + ' — concentrated melanin deposits that form a pattern completely unique to this eye. No two people share the same freckle map.');
     }
   }
-  // If nothing detected beyond the base color
-  if (paras.length === 1) {
-    paras.push('No heterochromia, limbal ring, sectoral patches, or iris freckles were detected at the current resolution. That does not mean none exist — subtle features may need a closer crop or better lighting to surface.');
+
+  // ── Nothing beyond color detected ────────────────────────────────────────
+  if (paras.length <= 2) {
+    paras.push('No heterochromia, limbal ring, sectoral patches, or iris freckles were detected at this resolution. That doesn\'t mean none exist — subtle features sometimes need a closer crop or better lighting to surface. The color itself is still one-of-a-kind.');
   }
-  // Rayid type
+
+  // ── Rayid iris type ───────────────────────────────────────────────────────
   if (result.rayid && RAYID_META[result.rayid.label]) {
     paras.push(RAYID_META[result.rayid.label].story);
   }
-  // Closing
-  paras.push('<em style="color: var(--ink-dim); font-size:12px">Measurements are computed in CIE Lab space using a curated palette of ' + (typeof PALETTE !== 'undefined' ? PALETTE.length : 38) + ' eye-color anchors. Rarity figures are global approximations from published prevalence research. No two irises produce identical fingerprints — your eye is mathematically unique.</em>');
+
+  // ── Closing note ──────────────────────────────────────────────────────────
+  paras.push('<em style="color: var(--ink-dim); font-size:12px">Color measurements use CIE Lab space against a curated palette of '
+    + (typeof PALETTE !== 'undefined' ? PALETTE.length : 38)
+    + ' eye-color anchors. Rarity figures are global approximations from published prevalence research. No two irises produce identical readings — your eye is mathematically unique.</em>');
 
   paras.forEach(function(p){
     var el = document.createElement('p');
