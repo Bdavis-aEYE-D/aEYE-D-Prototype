@@ -232,6 +232,26 @@ function autoDetectAndJumpToFit() {
       // Landmark with smaller x = subject's right eye (left side of photo)
       var rightCI = L[468].x < L[473].x ? 468 : 473;
       var leftCI  = rightCI === 468 ? 473 : 468;
+
+      // ── Sanity-check iris landmark positions ────────────────────────────────
+      // MediaPipe can misplace iris landmarks on angled/unusual photos.
+      // Guard 1: Neither iris should be in the lower 40 % of the image
+      //          (that's cheek/mouth territory for any normal face photo).
+      // Guard 2: The two irises must be horizontally separated by at least
+      //          6 % of image width — if they coincide something is very wrong.
+      var ry = L[rightCI].y, ly = L[leftCI].y;
+      var ipdFrac = Math.abs(L[468].x - L[473].x);
+      var badPlacement = (ry > 0.60 || ly > 0.60);
+      var badIPD       = (ipdFrac < 0.06);
+      if (badPlacement || badIPD) {
+        console.warn('MP iris landmark sanity fail — ry=' + ry.toFixed(3) +
+                     ' ly=' + ly.toFixed(3) + ' ipdFrac=' + ipdFrac.toFixed(3) +
+                     ' — falling back to manual locate');
+        $('card-fit').style.display = 'none';
+        showLocate();
+        return;
+      }
+
       mpEyes = {
         Right: { ci: rightCI, cx: L[rightCI].x * imgW, cy: L[rightCI].y * imgH },
         Left:  { ci: leftCI,  cx: L[leftCI].x  * imgW, cy: L[leftCI].y  * imgH }
@@ -255,6 +275,13 @@ function jumpToEye(side) {
   var eye  = mpEyes[side];
   var imgW = originalImgEl.naturalWidth  || originalImgEl.width;
   var imgH = originalImgEl.naturalHeight || originalImgEl.height;
+  // Per-eye guard: if this eye's landmark Y sits below 62 % of the image
+  // it is almost certainly on the cheek — show manual locate instead.
+  if (imgH > 0 && eye.cy / imgH > 0.62) {
+    console.warn('jumpToEye(' + side + ') landmark Y=' + (eye.cy/imgH).toFixed(3) +
+                 ' > 0.62 — landmark in cheek zone, falling back to manual locate');
+    showLocate(); return;
+  }
   var longer = Math.max(imgW, imgH);
   var cropR = longer * (cropPct / 100) / 2;
   var cx0 = Math.max(0, Math.round(eye.cx - cropR));
