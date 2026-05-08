@@ -248,6 +248,10 @@ function autoDetectAndJumpToFit() {
 
 function jumpToEye(side) {
   if (!mpEyes || !mpEyes[side]) { showLocate(); return; }
+  // Clear any pre-zoom state from the previous eye — applyAutoFit restores it
+  // on "Auto-Fit Again", but when switching eyes it would wrongly restore the
+  // other eye's crop and corrupt cropRegion / imgEl.
+  preZoomState = null;
   var eye  = mpEyes[side];
   var imgW = originalImgEl.naturalWidth  || originalImgEl.width;
   var imgH = originalImgEl.naturalHeight || originalImgEl.height;
@@ -494,6 +498,11 @@ function applyAutoFit(){
       ir /= 4;
       if (ir < 4) { if (hint) hint.textContent = 'Iris too small — using fallback'; _applyFitClassical(isCloseupMode); return; }
 
+      // For tilted faces MediaPipe's iris boundary landmarks project to an artificially
+      // small radius. Floor ir against an IPD-based estimate: human iris ≈ 17% of IPD.
+      var ipdPx = Math.hypot((L[468].x - L[473].x) * imgW, (L[468].y - L[473].y) * imgH);
+      if (ipdPx > 20) ir = Math.max(ir, ipdPx * 0.17);
+
       // Transform from originalImgEl space → cropped imgEl space → stage
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
       var cy_img = c.y * imgH - (cropRegion ? cropRegion.y : 0);
@@ -517,16 +526,19 @@ function applyAutoFit(){
       var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
       var cxIris_img, cyIris_img, irisR_img, radSrc;
       if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 3.5) {
-        cxIris_img = odh.cxIris;
-        cyIris_img = odh.cyIris;
+        // Always use MediaPipe's iris center — the OD midpoint can be skewed by
+        // asymmetric landmarks (inner canthus, eyelid corner, tear duct). MP gives
+        // a stable geometric center; the OD only contributes the RADIUS.
+        cxIris_img = cx_img;
+        cyIris_img = cy_img;
         irisR_img  = odh.irisR;
         radSrc = 'OD';
       } else {
         // Fallback 1: ring contrast (global search)
         var rc = findIrisByRingContrast(imgEl, cx_img, cy_img, ir);
         if (rc) {
-          cxIris_img = rc.cx;
-          cyIris_img = rc.cy;
+          cxIris_img = cx_img;  // keep MediaPipe center; RC cx/cy can drift
+          cyIris_img = cy_img;
           irisR_img  = rc.r;
           radSrc = 'RC' + Math.round(rc.score);
         } else {
@@ -538,6 +550,10 @@ function applyAutoFit(){
           radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
         }
       }
+      // IPD-based radius floor: horizontal scan / RC / scan can return too-small a radius
+      // for dark irises or tilted faces where limbus contrast is low. The IPD estimate
+      // gives a reliable minimum — human iris ≈ 17% of inter-pupillary distance.
+      if (ipdPx > 20) irisR_img = Math.max(irisR_img, ipdPx * 0.17);
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
