@@ -200,6 +200,33 @@ var loadOriginalFromUrl = function(url){
     originalImgEl = img;
     mpEyes = null;
     preZoomState = null;  // clear any leftover zoom state from previous image
+
+    // ── Early face upload ──────────────────────────────────────────────────
+    // Assign a session ID and push the face photo to Supabase storage NOW,
+    // before analysis even starts.  This way the face record exists even if
+    // the user closes the tab after seeing the fit but before saving results.
+    if (!_sessionId) _sessionId = String(Date.now());
+    if (!_sessionFaceUploaded && typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+      _sessionFaceUploaded = true;
+      var _faceUrl = url;
+      var _facePath = SUPABASE_URL + '/storage/v1/object/iris-photos/' + _sessionId + '-face.jpg';
+      fetch(_faceUrl)
+        .then(function(r){ return r.blob(); })
+        .then(function(blob){
+          return fetch(_facePath, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': 'Bearer ' + SUPABASE_KEY,
+              'Content-Type': 'image/jpeg'
+            },
+            body: blob
+          });
+        })
+        .catch(function(){});  // silent — don't block the UI if upload fails
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     $('card-capture').scrollIntoView({behavior:'smooth', block:'start'});
     autoDetectAndJumpToFit();
   };

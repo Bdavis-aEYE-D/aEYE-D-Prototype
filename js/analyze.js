@@ -7,7 +7,11 @@ function analyze(){
   octx.fillStyle = '#000'; octx.fillRect(0, 0, stageW, stageH);
   octx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
   var d = octx.getImageData(0, 0, stageW, stageH).data;
-  var cx = donut.cx, cy = donut.cy, rIn = donut.rPupil, rOut = donut.rIris;
+  var cx = donut.cx, cy = donut.cy, rOut = donut.rIris;
+  // Always enforce a minimum inner exclusion zone even if pupil detection failed
+  // (e.g. catch-light kills the scan and rPupil=6). Luminance filters below then
+  // exclude any remaining dark pupil tissue that leaks outside this ring.
+  var rIn = Math.max(donut.rPupil || 0, rOut * 0.08);
   var cxP = donut.cxPupil != null ? donut.cxPupil : cx;
   var cyP = donut.cyPupil != null ? donut.cyPupil : cy;
   var innerBand = rIn + (rOut - rIn) * 0.45;
@@ -71,10 +75,12 @@ function analyze(){
       if (lum > donut.threshHi) { maskStats.glare++; continue; }
       // Sclera: bright + desaturated (keeps pale blue irises since they're less bright)
       if (lum > 190 && satP < 0.12) { maskStats.sclera++; continue; }
-      // Deep shadow
-      if (lum < 18) { maskStats.shadow++; continue; }
+      // Deep shadow / pupil tissue — raised from 18→32 so any pupil pixels
+      // that leak outside the rIn exclusion ring are still rejected without
+      // affecting dark-brown irises (which are warm-toned, lum typically >40).
+      if (lum < 32) { maskStats.shadow++; continue; }
       // Eyelash: dark + desaturated (keeps dark brown iris because it's warm)
-      if (lum < 45 && satP < 0.15) { maskStats.lash++; continue; }
+      if (lum < 55 && satP < 0.15) { maskStats.lash++; continue; }
       // Eyelid wedges: reject top/bottom ~20 degree cones
       if (Math.abs(dy) / dist > 0.34) { maskStats.lid++; continue; }
       maskStats.kept++;
