@@ -641,7 +641,7 @@ function applyAutoFit(){
       donut.cyPupil = drawInfo.dy + cyPupil_img * scaleY;
 
       var ripx = Math.min(irisR_img  * scaleX, Math.min(stageW,stageH) * 0.45);
-      var rpx  = Math.max(6, Math.min(pupilR_img * scaleX, ripx * 0.32));
+      var rpx  = Math.max(6, Math.min(pupilR_img * scaleX, ripx * 0.26));  // cap reduced from 0.32
 
       donut.rIris  = ripx;
       donut.rPupil = rpx;
@@ -695,7 +695,7 @@ function _applyFitClassical(closeup){
       donut.cx = stageW / 2; donut.cy = stageH / 2;
       donut.cxPupil = stageW / 2; donut.cyPupil = stageH / 2;
       donut.rIris  = Math.round(Math.min(stageW, stageH) * 0.28);
-      donut.rPupil = Math.round(donut.rIris * 0.38);
+      donut.rPupil = Math.round(donut.rIris * 0.22);
       draw();
       if (hint) { hint.textContent = 'Iris not detected — tap the iris center, then pinch to size the circle.'; hint.style.color = '#fa0'; }
       if (st)   st.textContent = 'low confidence';
@@ -948,8 +948,9 @@ function zoomToEye() {
       // Guard: if the pupil-ray scan returns its floor (≤5px), catch-light has wiped it out.
       // Estimate pupil as 22% of iris radius (typical human ratio) rather than showing a dot.
       if (zPR <= 5) zPR = (donut.rIris / nsx) * 0.18;
-      // Cap pupil at 35% of iris radius — dilated pupils rarely exceed this in a selfie context
-      donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.35));
+      // Cap pupil at 26% of iris radius — constricted selfie pupils rarely exceed this,
+      // and dark irises inflate the scan result without this tighter ceiling.
+      donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.26));
     }
     draw();
 

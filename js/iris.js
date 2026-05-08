@@ -738,25 +738,47 @@ function findPupilRadiusByRays(imgEl, cxPupil, cyPupil, irisR) {
       if (v < darkest) darkest = v;
     }
   }
-  var exitThresh = Math.max(darkest + 25, 45);
-  var maxR = irisR * 0.28;
+  // Sample ambient iris luminance at ~70% of irisR to calibrate the exit threshold.
+  // For dark irises (pupil ≈ iris in luminance) the fixed +25 delta overshoots into
+  // the iris stroma, so we use a contrast-proportional threshold instead.
+  var ambientSum = 0, ambientN = 0;
+  var sampleR = Math.round(irisR * 0.70);
+  for (var sa = 0; sa < 8; sa++) {
+    var sang = (sa / 8) * 2 * Math.PI;
+    ambientSum += lumG(cx + sampleR * Math.cos(sang), cy + sampleR * Math.sin(sang));
+    ambientN++;
+  }
+  var ambientLum = ambientSum / ambientN;
+  // Exit threshold sits 35% of the way from pupil-dark to iris-ambient.
+  // Clamp: never lower than darkest+18, never higher than darkest+50.
+  var contrast   = Math.max(0, ambientLum - darkest);
+  var exitThresh = Math.max(darkest + 18, Math.min(darkest + 50, darkest + contrast * 0.35));
+
+  var maxR  = irisR * 0.25;   // search ceiling (was 0.28 — tightened for dark irises)
   var radii = [];
+  var hitMax = 0;              // count rays that reached maxR without a clean exit
 
   for (var a = 0; a < 8; a++) {
     var angle = (a / 8) * 2 * Math.PI;
     var cosA = Math.cos(angle), sinA = Math.sin(angle);
+    var found = false;
     for (var r = 2; r <= maxR; r++) {
       if (lumG(cx + r*cosA, cy + r*sinA) > exitThresh) {
         radii.push(r);
+        found = true;
         break;
       }
     }
+    if (!found) hitMax++;
   }
 
-  if (radii.length < 4) return irisR * 0.25; // fallback
+  // If most rays hit the ceiling without a clean exit the pupil/iris contrast is too
+  // low to trust the scan (common for graphite/dark-brown irises).
+  // Fall back to a conservative 20% of iris radius rather than inflating to the cap.
+  if (radii.length < 4 || hitMax >= 5) return irisR * 0.20;
   radii.sort(function(a, b) { return a - b; });
   var pupilR = radii[Math.floor(radii.length / 2)];
-  return Math.max(4, Math.min(pupilR, irisR * 0.32));
+  return Math.max(4, Math.min(pupilR, irisR * 0.26));  // hard cap reduced from 0.32
 }
 
 // Radial brightness scan: find iris outer radius anchored on a known center point.
