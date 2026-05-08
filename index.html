@@ -172,12 +172,25 @@
   .hint { font-size: 12px; color: var(--ink-dim); margin-top: 6px; text-align: center; }
   .hidden { display: none !important; }
 
-  .post-stage { aspect-ratio: 9/16; background: #000; position: relative; border-radius: 14px; overflow: hidden; }
+  .post-stage { aspect-ratio: 9/16; background: #060a14; position: relative; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.65); }
   .post-stage canvas { width: 100%; height: 100%; display: block; }
-  .post-overlay-text { position: absolute; left: 0; right: 0; top: 50%;
-    transform: translateY(-50%); text-align: center; color: #fff;
-    font-size: 24px; font-weight: 800; text-shadow: 0 2px 8px #000; padding: 0 14px; pointer-events: none; }
   .footer-note { font-size: 10px; color: var(--ink-dim); text-align: center; padding: 18px 0 8px; }
+
+  /* ---- Post Maker template picker ---- */
+  .pm-tmpl-row { display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 12px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .pm-tmpl-row::-webkit-scrollbar { display: none; }
+  .pm-tmpl-btn { flex-shrink: 0; width: 110px; background: var(--bg2);
+    border: 1.5px solid var(--line); border-radius: 14px;
+    padding: 12px 10px 10px; cursor: pointer; text-align: center;
+    color: var(--ink-dim); transition: border-color 0.15s, background 0.15s; }
+  .pm-tmpl-btn.active { background: var(--card); border-color: var(--accent); color: var(--ink); }
+  .pm-tmpl-btn.soon { opacity: 0.42; cursor: default; }
+  .pm-tmpl-icon  { display: block; font-size: 26px; margin-bottom: 5px; }
+  .pm-tmpl-label { display: block; font-size: 12px; font-weight: 700; color: inherit; }
+  .pm-tmpl-desc  { display: block; font-size: 10px; color: var(--ink-dim); margin-top: 3px; line-height: 1.3; }
+  .pm-save-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 
   .err { background: #3a0012; color: #ffdbe4; border-left: 4px solid #ff5577;
     padding: 10px 14px; border-radius: 8px; font-size: 12px; margin: 10px 0; display: none; white-space: pre-wrap; }
@@ -238,7 +251,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v0.94 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v0.95 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -459,20 +472,24 @@
 
   <!-- ======================== POST MAKER ======================== -->
   <section id="tab-post" class="hidden">
+
     <div class="card">
-      <div class="step">Cover &middot; Uncover Reveal</div>
-      <h2>What color are my eyes?</h2>
-      <p>In the production app this is a video: hand covers the eye, uncover to reveal the Davis Card. For now, tap to toggle the reveal.</p>
+      <div class="step">Post Maker</div>
+      <h2>Create your eye post</h2>
+      <p>A 9:16 story card built from your analysis &mdash; color, rarity, and traits. Save it to share anywhere.</p>
+      <div id="pm-template-picker" class="pm-tmpl-row"></div>
     </div>
+
     <div class="post-stage">
       <canvas id="post-canvas"></canvas>
-      <div class="post-overlay-text" id="post-text">What color are my eyes?</div>
     </div>
-    <div class="controls">
-      <button type="button" id="btn-toggle-reveal">Toggle Reveal</button>
-      <button type="button" class="secondary" id="btn-export-post">Save Image</button>
+
+    <div class="pm-save-row">
+      <button type="button" id="btn-export-post">Save Image</button>
+      <button type="button" class="secondary" id="btn-copy-post">Copy to Clipboard</button>
     </div>
-    <p class="hint">v1 native app replaces this with real MP4 export.</p>
+    <p class="hint">Tap Save Image &rarr; long-press in your camera roll to share.</p>
+
   </section>
 
   <!-- ======================== ABOUT ======================== -->

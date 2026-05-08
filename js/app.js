@@ -1321,27 +1321,40 @@ $('btn-again').addEventListener('click', function(){
   window.scrollTo({top: 0, behavior: 'smooth'});
 });
 
-$('btn-toggle-reveal').addEventListener('click', function(){ revealed = !revealed; drawPostStage(); });
+// Post export — save canvas directly (all text/graphics are baked in)
 $('btn-export-post').addEventListener('click', function(){
   var c = $('post-canvas');
-  var out = document.createElement('canvas'); out.width = c.width; out.height = c.height;
-  var octx = out.getContext('2d');
-  octx.drawImage(c, 0, 0);
-  octx.fillStyle = 'rgba(0,0,0,0.4)';
-  octx.fillRect(0, c.height*0.4, c.width, c.height*0.2);
-  octx.fillStyle = '#fff'; octx.textAlign = 'center';
-  octx.font = '800 44px -apple-system, system-ui, sans-serif';
-  octx.fillText($('post-text').textContent, c.width/2, c.height*0.52);
+  if (!c) return;
   try {
     var a = document.createElement('a');
-    a.href = out.toDataURL('image/png');
-    a.download = 'eyeD-post.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = c.toDataURL('image/png');
+    a.download = 'eyeD-iris-post.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   } catch (e) {
-    var w = window.open(); if (w) w.document.write('<img src="' + out.toDataURL('image/png') + '" style="max-width:100%">');
-    else showError('Save blocked. Long-press the image and choose Save.');
+    var w = window.open();
+    if (w) w.document.write('<img src="' + c.toDataURL('image/png') + '" style="max-width:100%;background:#000">');
+    else showError('Save blocked — long-press the card image to save to your photos.');
+  }
+});
+
+// Copy to clipboard (Web Share API on mobile, clipboard image on desktop)
+$('btn-copy-post').addEventListener('click', function(){
+  var c = $('post-canvas');
+  if (!c) return;
+  if (navigator.share && c.toBlob) {
+    c.toBlob(function(blob){
+      var file = new File([blob], 'eyeD-post.png', { type: 'image/png' });
+      navigator.share({ files: [file], title: 'My Eye Color', text: 'What color are YOUR eyes? #eyeD' })
+        .catch(function(){});
+    }, 'image/png');
+  } else if (navigator.clipboard && navigator.clipboard.write && c.toBlob) {
+    c.toBlob(function(blob){
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        .then(function(){ showSaveToast('Copied to clipboard!', true); })
+        .catch(function(){ showSaveToast('Copy failed — use Save Image instead.', false); });
+    }, 'image/png');
+  } else {
+    showSaveToast('Use Save Image on this device.', false);
   }
 });
 
