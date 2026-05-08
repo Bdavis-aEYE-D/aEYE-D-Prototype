@@ -883,18 +883,37 @@ function renderHighlights(result){
   }
   // Vibe descriptor
   if (result.vibe) {
+    // Generate a one-line mood sentence from brightness + saturation combo
+    var bri2 = result.brightness, sat2 = result.saturation;
+    var vibeMood = (bri2 === 'Bright' && sat2 === 'Vivid')  ? 'Luminous and high-impact — a bold iris that catches the eye in any light.' :
+                   (bri2 === 'Bright' && sat2 === 'Soft')   ? 'Light and airy — a gentle glow that looks backlit in natural light.' :
+                   (bri2 === 'Bright')                       ? 'Light-reflecting and open — warmth you can see from across the room.' :
+                   (bri2 === 'Dark'  && sat2 === 'Vivid')   ? 'Rich and deep — saturated color that drinks in the light.' :
+                   (bri2 === 'Dark'  && sat2 === 'Muted')   ? 'Understated and quietly magnetic — depth without drama.' :
+                   (bri2 === 'Dark')                         ? 'Dark and absorbing — all quiet intensity.' :
+                   (sat2 === 'Vivid')                        ? 'Well-saturated with real pop — stands out in a crowd.' :
+                   (sat2 === 'Muted')                        ? 'Soft and understated — a subtle beauty that rewards a closer look.' :
+                                                               'A naturally balanced iris — appealing in any light.';
     items.push({
       title: '"' + result.vibe + '"',
-      desc: "A descriptive nickname capturing your eye's overall character — based on category and lightness.",
+      desc: vibeMood,
       swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
     });
   }
   // Pattern hint
   var patternHint = getPatternHint(result.brightness, result.saturation);
   if (patternHint) {
+    var patternDescs = {
+      'Vivid stroma — strong color saturation': 'High-saturation pigment that catches and holds light — a bold, high-impact iris.',
+      'Saturated iris — pigment-rich':          'Well-saturated stroma — rich color that reads as vibrant even in low light.',
+      'Soft, muted stroma':                     'Gentle, understated tones — subtle and beautiful, entirely your own.',
+      'Deep, light-absorbing iris':             'A dark, absorbing iris — all depth and quiet intensity.',
+      'Bright, light-reflecting iris':          'Light-reflective and luminous — looks almost backlit in natural light.',
+      'Balanced light and pigment':             'A well-balanced iris — natural and easy on the eye, with its own quiet character.'
+    };
     items.push({
       title: 'Iris character',
-      desc: patternHint + ' · brightness=' + result.brightness + ' · saturation=' + result.saturation,
+      desc: patternDescs[patternHint] || patternHint,
       swatch: { type: 'solid', c1: rgbCss(result.fingerprint ? result.fingerprint.rgb : result.overall.rgb) },
     });
   }
@@ -909,36 +928,47 @@ function renderHighlights(result){
       pupRgb = result.outer.rgb || [128,128,128];
       cilRgb = result.outer.rgb || [128,128,128];
     }
+    var heteroDesc;
     if (result.hetero.indexOf('warmth') >= 0) {
       label = 'Central heterochromia';
-      descParts.push((pupName||'Warmer') + ' pupillary ring within ' + (cilName||'cooler') + ' outer iris');
-      descParts.push('Δb=' + result.heteroDb.toFixed(1) + ' (warmth)');
+      heteroDesc = (pupName || 'A warm') + ' inner ring wraps the pupil, melting into '
+        + ((cilName || 'cooler outer iris')).toLowerCase()
+        + ' — called "sunflower eyes." Only about 1 in 10 people have this.';
     } else if (result.hetero.indexOf('lightness') >= 0) {
       label = 'Central heterochromia';
-      descParts.push((pupName||'Lighter') + ' pupillary ring within ' + (cilName||'darker') + ' outer iris');
-      descParts.push('ΔL=' + result.heteroDL.toFixed(1) + ' (lightness)');
+      heteroDesc = (pupName || 'A brighter') + ' zone around the pupil softens into '
+        + ((cilName || 'a deeper outer iris')).toLowerCase()
+        + ' — a beautiful two-tone depth effect.';
     } else if (result.hetero === 'Central') {
       label = 'Central heterochromia';
-      descParts.push((pupName||result.inner.name) + ' inside ' + (cilName||result.outer.name));
-      descParts.push('ΔE=' + result.heteroDist.toFixed(1));
+      heteroDesc = (pupName || result.inner.name) + ' inside, '
+        + ((cilName || result.outer.name)).toLowerCase()
+        + ' outside — two distinct colors with a clear visible boundary.';
     } else {
       label = 'Subtle heterochromia';
-      descParts.push('Inner ' + result.inner.name + ' vs outer ' + result.outer.name);
-      descParts.push('ΔE=' + result.heteroDist.toFixed(1));
+      heteroDesc = 'A gentle two-tone gradient — ' + result.inner.name.toLowerCase()
+        + ' in the inner iris, ' + result.outer.name.toLowerCase() + ' toward the edge.';
     }
     items.push({
-      title: label, desc: descParts.join(' · '),
+      title: label, desc: heteroDesc,
       swatch: { type: 'split', c1: rgbCss(pupRgb), c2: rgbCss(cilRgb) },
     });
   }
   // Limbal ring or halo
   if (result.limbal !== 'None' && result.limbalColor) {
     var ftype = result.limbalType || 'ring';
+    var limbalShortDesc = ftype === 'halo'
+      ? result.limbalColor.name + ' inner halo — a luminous zone that makes the color feel lit from within.'
+      : ({
+          'Dramatic': 'Frames the entire iris like bold natural eyeliner — one of the most arresting features an iris can have.',
+          'Strong':   'A sharp, high-contrast rim that makes the iris color pop. These are the eyes that hold a room.',
+          'Moderate': 'A defined ' + result.limbalColor.name.toLowerCase() + ' border that adds crispness and depth.',
+          'Soft':     'A soft ' + result.limbalColor.name.toLowerCase() + ' edge — adds gentle definition to the iris.',
+          'Faint':    'Barely-there definition at the iris edge — subtle, but it\'s there.'
+        }[result.limbal] || result.limbalColor.name + ' rim tracing the iris edge.');
     items.push({
       title: result.limbal + ' limbal ' + ftype,
-      desc: ftype === 'halo'
-        ? result.limbalColor.name + ' halo glowing inside the iris edge · L lift=' + Math.abs(result.limbalDropL).toFixed(1)
-        : result.limbalColor.name + ' rim around the iris · L drop=' + result.limbalDropL.toFixed(1),
+      desc: limbalShortDesc,
       swatch: { type: 'solid', c1: rgbCss(result.limbalRgb || result.limbalColor.rgb) },
     });
   }
@@ -946,17 +976,20 @@ function renderHighlights(result){
   if (result.sectoral) {
     items.push({
       title: 'Sectoral patch · ' + result.sectoral.color.name,
-      desc: 'Localized at ' + result.sectoral.clock + " o'clock · spans " + Math.round(result.sectoral.spanDeg) + '° · ΔE=' + result.sectoral.meanDE.toFixed(1),
+      desc: 'A rare marking — about 1 in 1,000 people have one. Permanently fixed near '
+        + result.sectoral.clock + " o'clock, and unlike anything in anyone else's iris.",
       swatch: { type: 'solid', c1: rgbCss(result.sectoral.rgb) },
     });
   }
   // Freckles
   if (result.freckles && result.freckles.length) {
     var nf = result.freckles.length;
-    var clocks = result.freckles.map(function(f){ return f.clock; }).slice(0, 3).join(", ");
+    var clockStr = result.freckles.slice(0, 3).map(function(f){ return f.clock + " o'clock"; }).join(', ');
     items.push({
       title: nf + ' iris freckle' + (nf === 1 ? '' : 's'),
-      desc: 'Pigmented spot' + (nf === 1 ? '' : 's') + ' at clock ' + clocks + (nf > 3 ? ' (+' + (nf-3) + ' more)' : ''),
+      desc: (nf === 1 ? 'A concentrated melanin deposit near ' : 'Melanin concentrations near ')
+        + clockStr + (nf > 3 ? ' and ' + (nf - 3) + ' more' : '')
+        + ' — no two people share the same freckle pattern.',
       swatch: { type: 'solid', c1: rgbCss(result.freckles[0].rgb || [60,40,20]) },
     });
   }
@@ -972,12 +1005,8 @@ function renderHighlights(result){
   // ===== Color fingerprint (always shown last, smaller) =====
   if (result.fingerprint) {
     items.push({
-      title: 'Color fingerprint',
-      desc: 'Lab(' + result.fingerprint.lab[0].toFixed(0) + ', '
-                   + result.fingerprint.lab[1].toFixed(0) + ', '
-                   + result.fingerprint.lab[2].toFixed(0) + ') · '
-                   + result.fingerprint.hex.toUpperCase()
-                   + ' · No two irises share an identical reading.',
+      title: 'Color fingerprint · ' + result.fingerprint.hex.toUpperCase(),
+      desc: 'The precise color identity of this iris — mathematically unique. No two people on Earth produce the same reading.',
       swatch: { type: 'solid', c1: rgbCss(result.fingerprint.rgb) },
     });
   }
