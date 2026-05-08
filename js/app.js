@@ -606,12 +606,21 @@ function applyAutoFit(){
             irisR_img  = rc.r;
             radSrc = 'RC' + Math.round(rc.score);
           } else {
-            // Last resort: radial scan or raw MP hint
-            cxIris_img = cx_img;
-            cyIris_img = cy_img;
-            var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
-            irisR_img  = (scanR && scanR > 6) ? scanR : ir;
-            radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+            // Tier 3.5: saturation ring profile — for dark irises where luminance fails
+            var sat = findIrisODBySaturation(imgEl, cx_img, cy_img, ir);
+            if (sat && sat.confidence >= 0.25 && sat.irisR > ir * 0.4 && sat.irisR < ir * 1.5) {
+              cxIris_img = cx_img;
+              cyIris_img = cy_img;
+              irisR_img  = sat.irisR;
+              radSrc = 'SAT' + Math.round(sat.confidence * 100);
+            } else {
+              // Last resort: radial scan or raw MP hint
+              cxIris_img = cx_img;
+              cyIris_img = cy_img;
+              var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
+              irisR_img  = (scanR && scanR > 6) ? scanR : ir;
+              radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+            }
           }
         }
       }
@@ -925,8 +934,14 @@ function zoomToEye() {
           var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
           if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
             donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+          } else {
+            // Tier 3.5: saturation ring — dark irises where all luminance methods fail
+            var zSAT = findIrisODBySaturation(imgEl, zPupil.cx, zPupil.cy, iR);
+            if (zSAT && zSAT.confidence >= 0.25 && zSAT.irisR > iR * 0.4 && zSAT.irisR < iR * 1.5) {
+              donut.rIris = Math.min(zSAT.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
+            }
+            // else: keep the MP estimate that was set before the refinement pass
           }
-          // else: keep the MP estimate that was set before the refinement pass
         }
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);

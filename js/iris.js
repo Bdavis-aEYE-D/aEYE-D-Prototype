@@ -609,6 +609,95 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
   return { irisR: rMin + bestIdx, confidence: confidence };
 }
 
+// ---- Iris OD: Saturation Ring Profile (dark-iris fallback) ----
+// Tier-3.5 cascade: used when all luminance-based methods fail (e.g. very dark
+// irises where iris and sclera have similar brightness but different chroma).
+//
+// The iris is almost always MORE saturated than the sclera — even near-black
+// brown irises carry amber/brown chroma that the white sclera lacks.
+// This method looks for the sharpest DROP in saturation as radius increases
+// (iris→sclera = saturation falls off), rather than a luminance rise.
+//
+// Returns { irisR, confidence } — same contract as findIrisODByRIP.
+// confidence ≥ 0.25 is good enough to trust (lower bar than RIP since chroma
+// signal is weaker but still meaningfully different from noise).
+function findIrisODBySaturation(imgEl, cx, cy, hintR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || !hintR || hintR < 4) return null;
+
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  function sat(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    var r = data[idx], g = data[idx+1], b = data[idx+2];
+    var mx = Math.max(r, g, b);
+    if (mx < 8) return 0; // near-black — saturation undefined, treat as 0
+    return (mx - Math.min(r, g, b)) / mx; // HSV saturation 0–1
+  }
+
+  var cxR = Math.round(cx), cyR = Math.round(cy);
+  var rMin = Math.max(4, Math.round(hintR * 0.70));
+  var rMax = Math.min(Math.round(Math.min(W, H) * 0.48), Math.round(hintR * 1.45));
+  if (rMax <= rMin + 4) return null;
+
+  var SAMPLES = 48;
+  var profLen = rMax - rMin + 1;
+  var profile = new Float32Array(profLen);
+  var profOk  = new Uint8Array(profLen);
+
+  for (var r = rMin; r <= rMax; r++) {
+    var sum = 0, count = 0;
+    for (var si = 0; si < SAMPLES; si++) {
+      var angle = (2 * Math.PI * si) / SAMPLES;
+      var cosA = Math.cos(angle), sinA = Math.sin(angle);
+      if (sinA < -0.45) continue; // skip upper-eyelid zone (same as RIP)
+      var sx = cxR + r * cosA, sy = cyR + r * sinA;
+      if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+      sum += sat(sx, sy);
+      count++;
+    }
+    var pi = r - rMin;
+    if (count > 3) { profile[pi] = sum / count; profOk[pi] = 1; }
+  }
+
+  // 3-point smoothing
+  var smooth = new Float32Array(profLen);
+  for (var i = 0; i < profLen; i++) {
+    if (!profOk[i]) { smooth[i] = -1; continue; }
+    var cnt = 1, s = profile[i];
+    if (i > 0 && profOk[i-1]) { s += profile[i-1]; cnt++; }
+    if (i < profLen-1 && profOk[i+1]) { s += profile[i+1]; cnt++; }
+    smooth[i] = s / cnt;
+  }
+
+  // Find the radius with the sharpest NEGATIVE derivative (saturation drop = iris→sclera)
+  var maxDrop = 0.03, bestIdx = -1; // require at least 3% saturation drop
+  for (var i = 2; i < profLen - 2; i++) {
+    if (smooth[i+2] < 0 || smooth[i-2] < 0) continue;
+    var drop = smooth[i-2] - smooth[i+2]; // positive = saturation falling off
+    if (drop > maxDrop) { maxDrop = drop; bestIdx = i; }
+  }
+  if (bestIdx < 0) return null;
+
+  // Confidence = peak drop / total saturation range in profile
+  var vMin = 1, vMax = 0;
+  for (var i = 0; i < profLen; i++) {
+    if (smooth[i] < 0) continue;
+    if (smooth[i] < vMin) vMin = smooth[i];
+    if (smooth[i] > vMax) vMax = smooth[i];
+  }
+  var satRange  = vMax - vMin;
+  var confidence = satRange > 0.02 ? Math.min(1, maxDrop / satRange) : 0;
+
+  return { irisR: rMin + bestIdx, confidence: confidence };
+}
+
 // ---- Pupil radius: 8-ray inward scan ----
 // Fires 8 rays outward from pupil center and finds where each exits the dark pupil.
 // Returns pupil radius in imgEl pixels (capped to irisR × 0.32).
