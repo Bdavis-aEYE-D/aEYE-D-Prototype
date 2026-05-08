@@ -1007,7 +1007,7 @@ function renderHighlights(result){
   if (result.fingerprint) {
     items.push({
       title: 'Color fingerprint · ' + result.fingerprint.hex.toUpperCase(),
-      desc: 'The precise color identity of this iris — mathematically unique. No two people on Earth produce the same reading.',
+      desc: 'Color, structure, markings — the more traits we measure, the rarer every eye becomes. This exact combination is yours alone.',
       swatch: { type: 'solid', c1: rgbCss(result.fingerprint.rgb) },
     });
   }
@@ -1055,7 +1055,7 @@ function renderStory(result){
     var rarityLine = result.rarity.line;
     if (result.rarityScore !== undefined) {
       var scoreLabel = rarityScoreLabel(result.rarityScore).toLowerCase();
-      rarityLine += ' Add in the heterochromia, limbal ring, and everything else this iris has going on, and your composite rarity score comes to <strong>'
+      rarityLine += ' But color is just the beginning — every additional feature multiplies how rare your exact combination is. Your composite score across all measured traits comes to <strong>'
         + result.rarityScore + '/100</strong> — <strong>' + scoreLabel + '</strong>.';
     }
     paras.push(rarityLine);
@@ -1158,9 +1158,7 @@ function renderStory(result){
   }
 
   // ── Closing note ──────────────────────────────────────────────────────────
-  paras.push('<em style="color: var(--ink-dim); font-size:12px">Color measurements use CIE Lab space against a curated palette of '
-    + (typeof PALETTE !== 'undefined' ? PALETTE.length : 38)
-    + ' eye-color anchors. Rarity figures are global approximations from published prevalence research. No two irises produce identical readings — your eye is mathematically unique.</em>');
+  paras.push('<em style="color: var(--ink-dim); font-size:12px">The more traits we measure, the rarer every eye becomes — because the probability of any two people sharing the same color, inner ring, limbal border, sectoral marking, and freckle pattern is vanishingly small. We\'re just getting started. Your eye is already one of a kind.</em>');
 
   paras.forEach(function(p){
     var el = document.createElement('p');
