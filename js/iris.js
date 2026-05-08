@@ -519,6 +519,96 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
   return { irisR: irisR, cxIris: cxIris, cyIris: cy };
 }
 
+// ---- Iris OD: Radial Intensity Profile (full-circle mean, confidence-scored) ----
+// PRIMARY iris OD algorithm. For each candidate radius r, samples 64 evenly-spaced
+// points around the full circle and computes a weighted mean luminance. The limbus
+// (iris→sclera boundary) appears as the sharpest brightness rise in the profile.
+//
+// Returns { irisR, confidence } where confidence is 0–1:
+//   ≥ 0.35 → use this result; < 0.35 → fall back to secondary, show advisory.
+//
+// Why this beats horizontal-gradient scan: the full-circle mean dilutes eyelid
+// corners and lash shadows to ~2/64 of the signal instead of dominating when
+// they happen to fall at 3 or 9 o'clock.
+function findIrisODByRIP(imgEl, cx, cy, hintR) {
+  var W = imgEl.naturalWidth  || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || !hintR || hintR < 4) return null;
+
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+
+  function lum(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var idx = (py * W + px) * 4;
+    return 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+
+  var cxR = Math.round(cx), cyR = Math.round(cy);
+  var rMin = Math.max(4, Math.round(hintR * 0.75));
+  var rMax = Math.min(Math.round(Math.min(W, H) * 0.48), Math.round(hintR * 1.40));
+  if (rMax <= rMin + 4) return null;
+
+  var SAMPLES = 64;
+  var profLen  = rMax - rMin + 1;
+  var profile  = new Float32Array(profLen);
+  var profOk   = new Uint8Array(profLen);
+
+  for (var r = rMin; r <= rMax; r++) {
+    var wsum = 0, wcount = 0;
+    for (var si = 0; si < SAMPLES; si++) {
+      var angle = (2 * Math.PI * si) / SAMPLES;
+      var cosA = Math.cos(angle), sinA = Math.sin(angle);
+      // Skip upper hemisphere — top eyelid causes false limbus edges
+      // (sinA < -0.50 means the sample point is above cx,cy in screen coords)
+      if (sinA < -0.50) continue;
+      var sx = cxR + r * cosA, sy = cyR + r * sinA;
+      if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+      var l = lum(sx, sy);
+      // Down-weight extreme pixels: bright = eyelid skin/sclera spill; dark = lash shadow
+      var w = (l > 210 || l < 28) ? 0.15 : 1.0;
+      wsum += l * w; wcount += w;
+    }
+    var pi = r - rMin;
+    if (wcount > 2) { profile[pi] = wsum / wcount; profOk[pi] = 1; }
+  }
+
+  // 3-point smoothing pass to reduce single-pixel noise
+  var smooth = new Float32Array(profLen);
+  for (var i = 0; i < profLen; i++) {
+    if (!profOk[i]) { smooth[i] = -1; continue; }
+    var cnt = 1, s = profile[i];
+    if (i > 0 && profOk[i-1]) { s += profile[i-1]; cnt++; }
+    if (i < profLen-1 && profOk[i+1]) { s += profile[i+1]; cnt++; }
+    smooth[i] = s / cnt;
+  }
+
+  // Find the radius with the largest positive derivative (iris→sclera brightness rise)
+  var maxDeriv = 5, bestIdx = -1;   // require at least 5 lum-unit rise
+  for (var i = 2; i < profLen - 2; i++) {
+    if (smooth[i+2] < 0 || smooth[i-2] < 0) continue;
+    var deriv = smooth[i+2] - smooth[i-2];
+    if (deriv > maxDeriv) { maxDeriv = deriv; bestIdx = i; }
+  }
+  if (bestIdx < 0) return null;
+
+  // Confidence = peak derivative / total luminance range in profile (0–1).
+  // 1.0 → perfectly sharp limbus; < 0.35 → gradual / noisy, use fallback.
+  var vMin = 255, vMax = 0;
+  for (var i = 0; i < profLen; i++) {
+    if (smooth[i] < 0) continue;
+    if (smooth[i] < vMin) vMin = smooth[i];
+    if (smooth[i] > vMax) vMax = smooth[i];
+  }
+  var lumRange   = vMax - vMin;
+  var confidence = lumRange > 5 ? Math.min(1, maxDeriv / lumRange) : 0;
+
+  return { irisR: rMin + bestIdx, confidence: confidence };
+}
+
 // ---- Pupil radius: 8-ray inward scan ----
 // Fires 8 rays outward from pupil center and finds where each exits the dark pupil.
 // Returns pupil radius in imgEl pixels (capped to irisR × 0.32).
@@ -808,6 +898,6 @@ function checkIrisPlacement(imgEl, cx, cy, rIris) {
     rightOk:        rightOk,
     leftOuterLum:   Math.round(leftOuterLum),
     rightOuterLum:  Math.round(rightOuterLum),
-    advisory:       ok ? null : 'Circle may be off — tap to reposition or drag to adjust'
+    advisory:       ok ? null : 'Circle may be off — drag the ring to adjust'
   };
 }

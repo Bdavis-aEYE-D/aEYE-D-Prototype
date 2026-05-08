@@ -575,36 +575,44 @@ function applyAutoFit(){
         }
       }
 
-      // Step 2a: Pupil radius (needed as guard for horizontal limbus scan)
+      // Step 2a: Pupil radius (needed as guard for horizontal limbus scan secondary)
       var pupilR_pre = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, ir);
 
-      // Step 2b: Iris OD via horizontal limbus — the iris→sclera boundary at 3 and 9 o'clock
-      // has the highest contrast and no eyelid occlusion. Use this as the primary radius finder.
-      var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
+      // Step 2b: Iris OD — three-tier cascade:
+      //   Primary:   RIP (full-circle mean intensity profile, confidence-scored)
+      //   Secondary: horizontal gradient scan (3/9 o'clock + near-horizontal rays)
+      //   Tertiary:  ring-contrast global search, then raw MediaPipe radius
       var cxIris_img, cyIris_img, irisR_img, radSrc;
-      if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 3.5) {
-        // Always use MediaPipe's iris center — the OD midpoint can be skewed by
-        // asymmetric landmarks (inner canthus, eyelid corner, tear duct). MP gives
-        // a stable geometric center; the OD only contributes the RADIUS.
+      var rip1 = findIrisODByRIP(imgEl, cxPupil_img, cyPupil_img, ir);
+      if (rip1 && rip1.confidence >= 0.35 && rip1.irisR > ir * 0.4 && rip1.irisR < ir * 3.5) {
         cxIris_img = cx_img;
         cyIris_img = cy_img;
-        irisR_img  = odh.irisR;
-        radSrc = 'OD';
+        irisR_img  = rip1.irisR;
+        radSrc = 'RIP' + Math.round(rip1.confidence * 10);
       } else {
-        // Fallback 1: ring contrast (global search)
-        var rc = findIrisByRingContrast(imgEl, cx_img, cy_img, ir);
-        if (rc) {
-          cxIris_img = cx_img;  // keep MediaPipe center; RC cx/cy can drift
-          cyIris_img = cy_img;
-          irisR_img  = rc.r;
-          radSrc = 'RC' + Math.round(rc.score);
-        } else {
-          // Fallback 2: radial scan or raw MP hint
+        // Secondary: horizontal gradient scan
+        var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
+        if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 3.5) {
           cxIris_img = cx_img;
           cyIris_img = cy_img;
-          var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
-          irisR_img  = (scanR && scanR > 6) ? scanR : ir;
-          radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+          irisR_img  = odh.irisR;
+          radSrc = 'OD';
+        } else {
+          // Tertiary: ring contrast (global search)
+          var rc = findIrisByRingContrast(imgEl, cx_img, cy_img, ir);
+          if (rc) {
+            cxIris_img = cx_img;
+            cyIris_img = cy_img;
+            irisR_img  = rc.r;
+            radSrc = 'RC' + Math.round(rc.score);
+          } else {
+            // Last resort: radial scan or raw MP hint
+            cxIris_img = cx_img;
+            cyIris_img = cy_img;
+            var scanR = findIrisRadiusByRadialScan(imgEl, cx_img, cy_img, ir, 1.35);
+            irisR_img  = (scanR && scanR > 6) ? scanR : ir;
+            radSrc = (scanR && scanR > 6) ? 'scan' : 'MP';
+          }
         }
       }
       // IPD-based radius floor: horizontal scan / RC / scan can return too-small a radius
@@ -884,33 +892,41 @@ function zoomToEye() {
       donut.cxPupil = donut.cx;
       donut.cyPupil = donut.cy;
 
-      // Pupil radius (guard for limbus scan)
+      // Pupil radius pre-scan (needed as guard radius for secondary horizontal scan)
       var zPR0 = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, iR);
-      // Guard: if the pupil-radius scan returns the floor value (≤5px), a corneal
-      // catch-light or off-centre placement caused all rays to exit immediately.
-      // Fall back to 15 % of iR so the OD scan's maxSearchR is wide enough to
-      // reach the true limbus zone instead of a false skin/sclera edge far outside.
+      // Guard: if pupil scan hits the floor (≤5px), catch-light wiped it out.
+      // Use 15% of iR so the secondary horizontal scan's maxSearchR reaches the limbus.
       if (zPR0 <= 5) zPR0 = iR * 0.15;
 
-      // Horizontal limbus: iris→sclera edge at 3 and 9 o'clock — primary radius finder.
-      // findIrisODHorizontal now uses 33rd-percentile of hits (not median) so that
-      // angular rays hitting eyelid corners don't inflate the result.
-      var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
-      if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4) {
-        // Also hard-cap at 1.25× the MediaPipe estimate — low-contrast irises (blue, gray)
-        // can produce a false gradient at the lower eyelid just outside the true limbus,
-        // causing slight overshoot. The 1.25× cap trims that without losing real limbus range.
-        donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
-        // If horizontal scan also refined the x-center, adopt it
-        if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
-          donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
-          donut.cxPupil = donut.cx;
-        }
+      // ── Iris OD cascade (three tiers) ──────────────────────────────────────────
+      // Primary:   RIP full-circle mean intensity profile (confidence-scored)
+      // Secondary: horizontal gradient scan (3/9 o'clock + ±20/30° rays)
+      // Tertiary:  ring-contrast global search; then keep MP estimate as-is
+      // ───────────────────────────────────────────────────────────────────────────
+      var _zRipConf = 0, _zFellBack = false;
+      var zRIP = findIrisODByRIP(imgEl, zPupil.cx, zPupil.cy, iR);
+      if (zRIP && zRIP.confidence >= 0.35 && zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * 1.4) {
+        // Primary succeeded — hard-cap at 1.25× MP to block eyelid overshoot
+        donut.rIris = Math.min(zRIP.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
+        _zRipConf = zRIP.confidence;
       } else {
-        // Fallback: ring contrast (global)
-        var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
-        if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
-          donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+        _zFellBack = true;
+        // Secondary: horizontal gradient scan
+        var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
+        if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4) {
+          donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
+          // Adopt horizontal scan's x-center refinement if it didn't drift
+          if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
+            donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
+            donut.cxPupil = donut.cx;
+          }
+        } else {
+          // Tertiary: ring contrast
+          var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
+          if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
+            donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+          }
+          // else: keep the MP estimate that was set before the refinement pass
         }
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
@@ -922,16 +938,18 @@ function zoomToEye() {
     }
     draw();
 
-    // Gross-error check: verify sclera is visible just outside the iris circle at 3 and 9 o'clock.
-    // Advisory-only — never blocks the user; they can always adjust manually.
+    // ── Placement check + confidence-aware advisory ─────────────────────────
+    // Advisory-only: never blocks the user. Low RIP confidence or gross-error
+    // placement check both trigger the amber hint pointing to touch-drag adjust.
     var hint = $('autofit-hint');
-    var cx_chk  = (donut.cx     - drawInfo.dx) / nsx;
-    var cy_chk  = (donut.cy     - drawInfo.dy) / nsy;
+    var cx_chk    = (donut.cx     - drawInfo.dx) / nsx;
+    var cy_chk    = (donut.cy     - drawInfo.dy) / nsy;
     var rIris_chk = donut.rIris / nsx;
     var placement = checkIrisPlacement(imgEl, cx_chk, cy_chk, rIris_chk);
     if (hint) {
-      if (!placement.ok) {
-        hint.textContent = 'Circle may be off — tap to reposition or drag to adjust';
+      var needsAdvisory = !placement.ok || _zFellBack || _zRipConf < 0.35;
+      if (needsAdvisory) {
+        hint.textContent = 'Tricky eye to measure — drag the ring to adjust if needed';
         hint.style.color = '#f5a623';  // amber advisory
       } else {
         hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
