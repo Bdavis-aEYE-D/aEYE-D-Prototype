@@ -649,41 +649,112 @@ function renderResult(result){
   resCard.style.display = 'block';
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = result.overall.name;
-  var n = 'Your ' + result.side.toLowerCase() + ' eye reads as ' + result.overall.cat.toLowerCase()
-        + ' with a closest match to ' + result.overall.name + '. ';
+  // ── Opening line: colour + intensity ──────────────────────────────────────
+  var cat  = result.overall.cat;   // e.g. 'Blue', 'Green', 'Brown', 'Hazel'
+  var name = result.overall.name;  // e.g. 'Sky Blue', 'Emerald', 'Warm Amber'
+  var bri  = result.brightness;    // 'Dark' | 'Medium' | 'Bright'
+  var sat  = result.saturation;    // 'Muted' | 'Soft' | 'Vivid'
+  var side = result.side.toLowerCase();
+
+  // Category-specific opening
+  var catOpeners = {
+    'Blue':  [
+      'Your ' + side + ' eye is a stunning ' + name + ' — a cool, luminous shade that arrests attention the moment people look your way.',
+      'A crystalline ' + name + ' fills your ' + side + ' iris — the kind of blue that photographs like gemstone light.',
+      'Your ' + side + ' eye blazes with ' + name + ' — pure, striking, and impossible to ignore.'
+    ],
+    'Green': [
+      'Your ' + side + ' eye is a rare, jewel-toned ' + name + ' — fewer than 2% of people share this captivating shade.',
+      'A rich ' + name + ' illuminates your ' + side + ' iris — bold, vivid, and genuinely rare.',
+      'Your ' + side + ' eye burns with the kind of ' + name + ' that makes people look twice.'
+    ],
+    'Brown': [
+      'Your ' + side + ' eye is a warm, soulful ' + name + ' — deep, rich, and full of dimension.',
+      'A luminous ' + name + ' fills your ' + side + ' iris — earthy depth wrapped in golden warmth.',
+      'Your ' + side + ' eye radiates ' + name + ' — bold and warm, with a depth that draws people in.'
+    ],
+    'Hazel': [
+      'Your ' + side + ' eye shifts with ' + name + ' — a captivating blend that changes with the light, never quite the same color twice.',
+      'A chameleon ' + name + ' dances through your ' + side + ' iris — warm one moment, cool the next.',
+      'Your ' + side + ' eye reads as ' + name + ' — a rare, multi-tonal beauty that defies a single description.'
+    ],
+    'Gray':  [
+      'Your ' + side + ' eye is a striking ' + name + ' — cool, magnetic, and quietly intense.',
+      'A rare ' + name + ' fills your ' + side + ' iris — silver-cool and effortlessly captivating.',
+      'Your ' + side + ' eye carries a beautiful ' + name + ' — the rarest eye category in the world.'
+    ]
+  };
+  var openers = catOpeners[cat] || [
+    'Your ' + side + ' eye is a beautiful ' + name + ' — a distinctive, eye-catching shade.'
+  ];
+  var n = openers[Math.floor(Math.random() * openers.length)] + ' ';
+
+  // Intensity modifier
+  if (sat === 'Vivid' && bri === 'Bright') {
+    n += 'The color is intensely saturated and luminous — these are eyes that hold a room. ';
+  } else if (sat === 'Vivid') {
+    n += 'The color is boldly saturated with real depth and richness. ';
+  } else if (sat === 'Soft' && bri === 'Bright') {
+    n += 'The soft, bright tone gives the iris a dreamy, almost backlit quality. ';
+  } else if (bri === 'Dark' && sat === 'Muted') {
+    n += 'The deep, subdued tones carry a quiet, smouldering intensity. ';
+  }
+
+  // ── Heterochromia ─────────────────────────────────────────────────────────
   if (result.hetero !== 'None') {
     var pupName = result.heteroPup ? (result.heteroPup.displayName || result.heteroPup.color.name).toLowerCase() : 'warm';
     var cilName = result.heteroCil ? (result.heteroCil.displayName || result.heteroCil.color.name).toLowerCase() : 'cooler';
     if (result.hetero.indexOf('warmth') >= 0) {
-      n += 'We detected central heterochromia — a ' + pupName + ' ring around the pupil sits inside a ' + cilName + ' outer iris. About 10-15% of people have this trait. ';
+      n += 'A warm ' + pupName + ' corona glows around your pupil — sometimes called "sunflower eyes" — radiating outward into the ' + cilName + ' outer iris. Only about 10–15% of people have this stunning inner ring. ';
     } else if (result.hetero.indexOf('lightness') >= 0) {
-      n += 'We detected central heterochromia — a ' + pupName + ' ring around the pupil within a ' + cilName + ' outer iris. ';
+      n += 'A luminous ' + pupName + ' inner ring circles the pupil and radiates outward into the ' + cilName + ' iris — a gorgeous two-tone depth effect. ';
     } else if (result.hetero === 'Central') {
-      n += 'We detected central heterochromia — inner ring reads as ' + result.inner.name + ', outer ring as ' + result.outer.name + '. ';
+      n += 'Your iris holds two distinct colors: a bold ' + result.inner.name.toLowerCase() + ' inner ring melting into a ' + result.outer.name.toLowerCase() + ' outer iris — true central heterochromia, and genuinely rare. ';
     } else {
-      n += 'We detected ' + result.hetero.toLowerCase() + ' heterochromia — inner ring reads as ' + result.inner.name + ', outer ring as ' + result.outer.name + '. ';
+      n += 'Central heterochromia layers a ' + result.inner.name.toLowerCase() + ' inner ring against a ' + result.outer.name.toLowerCase() + ' outer iris — a captivating two-toned effect. ';
     }
   }
+
+  // ── Limbal ring ───────────────────────────────────────────────────────────
   if (result.limbal !== 'None' && result.limbalColor) {
     var ftype = result.limbalType || 'ring';
+    var lc = result.limbalColor.name.toLowerCase();
     if (ftype === 'halo') {
-      n += 'A ' + result.limbal.toLowerCase() + ' ' + result.limbalColor.name.toLowerCase() + ' halo glows just inside the iris edge — a bright amber/golden zone instead of the typical dark rim. ';
-    } else if (result.limbal === 'Strong' || result.limbal === 'Dramatic') {
-      n += 'You have a ' + result.limbal.toLowerCase() + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring — it makes your eyes pop. ';
+      n += 'A brilliant ' + lc + ' halo glows just inside the iris edge — a luminous inner border that makes the color feel lit from within. ';
+    } else if (result.limbal === 'Dramatic') {
+      n += 'A Dramatic ' + lc + ' limbal ring frames the entire iris like natural eyeliner — bold, magnetic, and the feature that makes eyes look deep, intense, and unforgettable. ';
+    } else if (result.limbal === 'Strong') {
+      n += 'A strong ' + lc + ' limbal ring circles the iris, creating crisp, high-contrast definition. This is the feature that makes eyes pop across a room — striking, beautiful, and arresting. ';
     } else {
-      n += 'A ' + result.limbal.toLowerCase() + ' ' + result.limbalColor.name.toLowerCase() + ' limbal ring sits at the iris edge. ';
+      n += 'A ' + result.limbal.toLowerCase() + ' ' + lc + ' limbal ring adds definition and polish at the iris edge. ';
     }
   }
+
+  // ── Sectoral heterochromia ────────────────────────────────────────────────
   if (result.sectoral) {
-    n += 'A sectoral patch of ' + result.sectoral.color.name.toLowerCase() + ' sits near ' + result.sectoral.clock + " o'clock — a true one-of-a-kind feature. ";
+    n += 'A bold splash of ' + result.sectoral.color.name.toLowerCase() + ' at ' + result.sectoral.clock + " o'clock gives this iris a completely unique signature — like a one-of-a-kind fingerprint. No two people share the same sectoral marking. ";
   }
+
+  // ── Iris freckles ─────────────────────────────────────────────────────────
   if (result.freckles && result.freckles.length) {
     var nf = result.freckles.length;
     if (nf === 1) {
-      n += 'A single iris freckle sits near ' + result.freckles[0].clock + " o'clock. ";
+      n += 'A single iris freckle near ' + result.freckles[0].clock + " o'clock adds a distinctive personal mark — a tiny detail that makes this eye truly yours. ";
     } else {
-      n += nf + ' iris freckles dot the iris — small pigmented spots unique to you. ';
+      n += nf + ' iris freckles dot the surface — small concentrations of melanin that add character and are completely unique to you. ';
     }
+  }
+
+  // ── Closing punch line (only when features warrant it) ───────────────────
+  var hasStrong = (result.limbal === 'Dramatic' || result.limbal === 'Strong');
+  var hasHetero = (result.hetero !== 'None');
+  var hasSectoral = !!result.sectoral;
+  if (hasStrong && hasHetero) {
+    n += 'Together, the ' + name.toLowerCase() + ' color, inner ring, and strong limbal border create eyes that are genuinely hard to look away from. ';
+  } else if (hasStrong && (sat === 'Vivid' || bri === 'Bright')) {
+    n += 'The combination of bold color and that defined limbal ring makes these eyes truly stand out — bright, beautiful, and captivating. ';
+  } else if (hasSectoral || (hasHetero && hasStrong)) {
+    n += 'This is a rare combination. These are eyes that leave a lasting impression. ';
   }
   $('r-narrative').textContent = n;
   var sr = $('r-swatches'); sr.innerHTML = '';
