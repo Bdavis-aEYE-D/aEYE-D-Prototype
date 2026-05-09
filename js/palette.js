@@ -114,36 +114,119 @@ var RARITY = {
   'Violet': { pct: 0.1,  label: 'Extraordinary',   line: 'Fewer than 1 in 1,000 people have violet eyes — a vanishingly rare optical effect.' },
 };
 
-// ===== Composite rarity score 0-100 =====
-// Stacks: base color prevalence + heterochromia + sectoral + limbal + freckles + age-adjusted limbal bonus
+// ===== Rarity helpers =====
+
+function _addCommas(n) {
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// Format "1 in X" — rounds to sensible sig-figs so it reads naturally
+function formatOneInX(n) {
+  if (n >= 1000000) return '1 in 1,000,000+';
+  if (n >= 100000) return '1 in ' + _addCommas(Math.round(n / 10000) * 10000);
+  if (n >= 10000)  return '1 in ' + _addCommas(Math.round(n / 1000) * 1000);
+  if (n >= 1000)   return '1 in ' + _addCommas(Math.round(n / 100) * 100);
+  return '1 in ' + n;
+}
+
+// ===== Composite rarity — multiplicative "1 in X" model =====
+// Each measurable trait narrows the population that shares this exact profile.
+// Probability = product of independent trait fractions → "1 in X" = 1 / probability.
+// Also returns legacy 0–100 score (used in story view prose).
 function computeRarityScore(result) {
-  var base = {
-    'Brown': 0, 'Blue': 40, 'Hazel': 45, 'Amber': 50,
-    'Gray': 65, 'Green': 75, 'Violet': 95
-  };
-  var score = base[result.overall ? result.overall.cat : 'Brown'] || 0;
-  // Heterochromia bonus
+  var cat = result.overall ? result.overall.cat : 'Brown';
+
+  // ── Multiplicative model ──────────────────────────────────────────────────
+  var prob = 1.0;
+  var factorWeights = [];   // { label, w } — sorted rarest-first for display
+
+  // 1. Eye color category
+  var colorProb = { Brown: 0.750, Blue: 0.090, Hazel: 0.050, Amber: 0.050,
+                    Gray: 0.030, Green: 0.020, Violet: 0.001 };
+  var cp = colorProb[cat] || 0.050;
+  prob *= cp;
+  if (cp <= 0.050) factorWeights.push({ label: cat + ' eye color', w: cp });
+
+  // 2. Brightness sub-category (Dark / Medium / Bright — ~3 equal bands)
+  if (result.brightness) prob *= 0.34;
+
+  // 3. Saturation sub-category (Muted / Soft / Vivid — ~3 equal bands)
+  if (result.saturation) prob *= 0.34;
+
+  // 4. Heterochromia
+  if (result.hetero && result.hetero !== 'None') {
+    var hp = (result.hetero === 'Central') ? 0.06
+           : (result.hetero.indexOf('warmth') >= 0 || result.hetero.indexOf('lightness') >= 0) ? 0.10
+           : 0.08;
+    prob *= hp;
+    factorWeights.push({ label: (result.hetero === 'Central' ? 'Central heterochromia' : 'Color-gradient heterochromia'), w: hp });
+  }
+
+  // 5. Sectoral heterochromia (independent of central/gradient)
+  if (result.sectoral) {
+    prob *= 0.008;
+    factorWeights.push({ label: 'Sectoral heterochromia', w: 0.008 });
+  }
+
+  // 6. Limbal ring strength
+  var limbalProb = { Faint: 0.70, Soft: 0.45, Moderate: 0.25, Strong: 0.10, Dramatic: 0.04 };
+  if (result.limbal && limbalProb[result.limbal]) {
+    var lp = limbalProb[result.limbal];
+    prob *= lp;
+    if (lp <= 0.25) factorWeights.push({ label: result.limbal.toLowerCase() + ' limbal ring', w: lp });
+  }
+
+  // 7. Rayid iris pattern
+  var rayidProb = { Flower: 0.30, Stream: 0.30, Jewel: 0.20, Shaker: 0.20 };
+  if (result.rayid && result.rayid.label && rayidProb[result.rayid.label]) {
+    var rp = rayidProb[result.rayid.label];
+    prob *= rp;
+    factorWeights.push({ label: result.rayid.label + ' iris pattern', w: rp });
+  }
+
+  // 8. Collarette prominence
+  var collProb = { Prominent: 0.25, Faint: 0.40 };
+  if (result.collarette && collProb[result.collarette.label]) {
+    var cpp = collProb[result.collarette.label];
+    prob *= cpp;
+    if (cpp <= 0.30) factorWeights.push({ label: result.collarette.label.toLowerCase() + ' inner ring', w: cpp });
+  }
+
+  // 9. Iris freckles
+  if (result.freckles && result.freckles.length) {
+    var fp = result.freckles.length >= 3 ? 0.05 : 0.20;
+    prob *= fp;
+    factorWeights.push({ label: result.freckles.length + ' iris freckle' + (result.freckles.length > 1 ? 's' : ''), w: fp });
+  }
+
+  // Sort rarest first, show top 3
+  factorWeights.sort(function(a, b) { return a.w - b.w; });
+  var factors = factorWeights.slice(0, 3).map(function(f) { return f.label; });
+
+  // Cap at 1 in 1,000,000
+  var oneInX = Math.min(1000000, Math.max(2, Math.round(1 / Math.max(prob, 0.000001))));
+
+  // ── Legacy 0–100 score (story view prose) ────────────────────────────────
+  var base = { Brown: 0, Blue: 40, Hazel: 45, Amber: 50, Gray: 65, Green: 75, Violet: 95 };
+  var score = base[cat] || 0;
   if (result.hetero && result.hetero !== 'None') {
     if (result.hetero.indexOf('warmth') >= 0 || result.hetero.indexOf('lightness') >= 0) score += 8;
     else if (result.hetero === 'Central') score += 12;
     else score += 6;
   }
-  // Sectoral bonus
   if (result.sectoral) score += 15;
-  // Limbal ring bonus
-  var limbalBonus = { 'Faint': 2, 'Soft': 4, 'Moderate': 7, 'Strong': 12, 'Dramatic': 18 };
+  var limbalBonus = { Faint: 2, Soft: 4, Moderate: 7, Strong: 12, Dramatic: 18 };
   if (result.limbal && limbalBonus[result.limbal]) {
     var lb = limbalBonus[result.limbal];
-    // Age adjustment: strong limbal ring in someone over 40 is rarer
-    var age = result.userAge || 0;
-    if (age > 40) lb = Math.round(lb * 1.3);
+    if ((result.userAge || 0) > 40) lb = Math.round(lb * 1.3);
     score += lb;
   }
-  // Freckle bonus
-  if (result.freckles && result.freckles.length) {
-    score += Math.min(8, result.freckles.length * 2);
-  }
-  return Math.min(100, Math.round(score));
+  if (result.rayid && result.rayid.label) score += (result.rayid.label === 'Jewel' || result.rayid.label === 'Shaker') ? 6 : 3;
+  if (result.collarette && result.collarette.label === 'Prominent') score += 4;
+  if (result.freckles && result.freckles.length) score += Math.min(8, result.freckles.length * 2);
+  score = Math.min(100, Math.round(score));
+
+  return { score: score, oneInX: oneInX, factors: factors };
 }
 
 function rarityScoreLabel(score) {

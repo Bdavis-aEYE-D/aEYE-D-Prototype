@@ -666,8 +666,11 @@ function analyze(){
     eyeShape: window.currentEyeShape || null,  // {label, ar, tiltDeg} or null
     pupilEcc: pupilEcc     // {label, pct} or null
   };
-  // Compute composite rarity score now that all fields are in result
-  result.rarityScore = computeRarityScore(result);
+  // Compute composite rarity — multiplicative "1 in X" model
+  var _rd = computeRarityScore(result);
+  result.rarityScore   = _rd.score;
+  result.rarityOneInX  = _rd.oneInX;
+  result.rarityFactors = _rd.factors;
   eyeResults[result.side] = result;
 
   // Render card
@@ -934,15 +937,17 @@ function renderHighlights(result){
   box.innerHTML = '';
   var items = [];
   // ===== Always-on highlights (color profile) =====
-  // Rarity callout
+  // Rarity hero card — "1 in X" headline
   if (result.rarity) {
-    var rarityTitle = result.rarityScore !== undefined
-      ? (rarityScoreLabel(result.rarityScore) + ' · ' + result.rarityScore + '/100')
-      : (result.rarity.label + ' · ' + result.rarity.pct + '% of people');
+    var oneInStr = formatOneInX(result.rarityOneInX || 1);
+    var factorDesc = (result.rarityFactors && result.rarityFactors.length)
+      ? 'people share this exact combination — ' + result.rarityFactors.join(' · ')
+      : 'people share this exact combination of color and iris structure';
     items.push({
-      title: rarityTitle,
-      desc: result.rarity.line,
+      title: oneInStr,
+      desc:  factorDesc,
       swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
+      hero:  true,
     });
   }
   // ===== Eye Description — vibe name + character, merged into one card =====
@@ -1084,7 +1089,7 @@ function renderHighlights(result){
   box.style.display = 'flex';
   items.forEach(function(it){
     var row = document.createElement('div');
-    row.className = 'highlight';
+    row.className = 'highlight' + (it.hero ? ' rarity-hero' : '');
     var sw = document.createElement('div');
     sw.className = 'swatch-circle' + (it.swatch.type === 'split' ? ' split' : '');
     if (it.swatch.type === 'split') {
@@ -1115,13 +1120,12 @@ function renderStory(result){
   openLine += '.';
   paras.push(openLine);
 
-  // ── Rarity + composite score ─────────────────────────────────────────────
+  // ── Rarity ────────────────────────────────────────────────────────────────
   if (result.rarity) {
     var rarityLine = result.rarity.line;
-    if (result.rarityScore !== undefined) {
-      var scoreLabel = rarityScoreLabel(result.rarityScore).toLowerCase();
-      rarityLine += ' The full picture — color, structure, and every personal marking — puts your composite rarity score at <strong>'
-        + result.rarityScore + '/100</strong> — <strong>' + scoreLabel + '</strong>.';
+    if (result.rarityOneInX) {
+      rarityLine += ' Factor in color tone, limbal ring, iris pattern, and every personal marking, and roughly '
+        + '<strong>' + formatOneInX(result.rarityOneInX) + '</strong> people share this exact combination.';
     }
     paras.push(rarityLine);
   }
