@@ -830,7 +830,7 @@ function renderResult(result){
       rv.innerHTML = '<span style="display:inline-block;width:8px;height:8px;'
         + 'border-radius:50%;background:' + rm.color + ';margin-right:6px;'
         + 'vertical-align:middle;flex-shrink:0"></span>'
-        + result.rayid.label + ' · ' + rm.short;
+        + result.rayid.label;
       rv.style.color = rm.color;
     }
   }
@@ -945,12 +945,12 @@ function renderHighlights(result){
       swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
     });
   }
-  // Vibe descriptor
+  // ===== Eye Description — vibe name + character, merged into one card =====
   if (result.vibe) {
-    // Generate a one-line mood sentence from brightness + saturation combo
     var bri2 = result.brightness, sat2 = result.saturation;
+    // Mood sentence (from brightness + saturation combo)
     var vibeMood = (bri2 === 'Bright' && sat2 === 'Vivid')  ? 'Luminous and high-impact — a bold iris that catches the eye in any light.' :
-                   (bri2 === 'Bright' && sat2 === 'Soft')   ? 'Light and airy — a gentle glow that looks backlit in natural light.' :
+                   (bri2 === 'Bright' && sat2 === 'Soft')   ? 'Light and airy — a gentle glow that looks almost backlit in natural light.' :
                    (bri2 === 'Bright')                       ? 'Light-reflecting and open — warmth you can see from across the room.' :
                    (bri2 === 'Dark'  && sat2 === 'Vivid')   ? 'Rich and deep — saturated color that drinks in the light.' :
                    (bri2 === 'Dark'  && sat2 === 'Muted')   ? 'Understated and quietly magnetic — depth without drama.' :
@@ -958,27 +958,20 @@ function renderHighlights(result){
                    (sat2 === 'Vivid')                        ? 'Well-saturated with real pop — stands out in a crowd.' :
                    (sat2 === 'Muted')                        ? 'Soft and understated — a subtle beauty that rewards a closer look.' :
                                                                'A naturally balanced iris — appealing in any light.';
+    // Character sentence (from pattern hint)
+    var phint = getPatternHint(bri2, sat2);
+    var charSentence = {
+      'Vivid stroma — strong color saturation': 'High-saturation pigment that catches and holds light.',
+      'Saturated iris — pigment-rich':          'Rich color that reads as vibrant even in low light.',
+      'Soft, muted stroma':                     'Gentle, understated tones with their own quiet beauty.',
+      'Deep, light-absorbing iris':             'A dark, absorbing iris — all depth and intensity.',
+      'Bright, light-reflecting iris':          'Light-reflective and luminous.',
+      'Balanced light and pigment':             'Naturally balanced — appealing in any light.'
+    }[phint] || '';
     items.push({
-      title: '"' + result.vibe + '"',
-      desc: vibeMood,
+      title: result.vibe,
+      desc: 'Eye description — ' + vibeMood + (charSentence ? ' ' + charSentence : ''),
       swatch: { type: 'solid', c1: rgbCss(result.overall.rgb) },
-    });
-  }
-  // Pattern hint
-  var patternHint = getPatternHint(result.brightness, result.saturation);
-  if (patternHint) {
-    var patternDescs = {
-      'Vivid stroma — strong color saturation': 'High-saturation pigment that catches and holds light — a bold, high-impact iris.',
-      'Saturated iris — pigment-rich':          'Well-saturated stroma — rich color that reads as vibrant even in low light.',
-      'Soft, muted stroma':                     'Gentle, understated tones — subtle and beautiful, entirely your own.',
-      'Deep, light-absorbing iris':             'A dark, absorbing iris — all depth and quiet intensity.',
-      'Bright, light-reflecting iris':          'Light-reflective and luminous — looks almost backlit in natural light.',
-      'Balanced light and pigment':             'A well-balanced iris — natural and easy on the eye, with its own quiet character.'
-    };
-    items.push({
-      title: 'Iris character',
-      desc: patternDescs[patternHint] || patternHint,
-      swatch: { type: 'solid', c1: rgbCss(result.fingerprint ? result.fingerprint.rgb : result.overall.rgb) },
     });
   }
   // ===== Heterochromia (any kind) =====
@@ -1023,18 +1016,17 @@ function renderHighlights(result){
     var ftype = result.limbalType || 'ring';
     // Plain-English opener: tell people what a limbal ring is before describing theirs.
     var limbalShortDesc = ftype === 'halo'
-      ? 'Some irises have a bright inner glow just outside the pupil — yours does. '
-        + 'The ' + result.limbalColor.name.toLowerCase() + ' zone makes the iris color look lit from within.'
-      : 'The limbal ring is the dark outer border of the iris — not everyone has a visible one. '
+      ? 'The inner halo is a luminous zone just outside the pupil that makes the iris color look lit from within — not everyone has one.'
+      : 'The outer border (called the limbal ring) is the dark rim that frames the iris — not everyone has a clearly visible one. '
         + ({
-            'Dramatic': 'Yours is dramatic: a bold, high-contrast rim that frames the iris like natural eyeliner and holds attention from across the room.',
-            'Strong':   'Yours is strong — a sharp, clearly visible rim that makes the iris color pop and gives the eye a defined edge.',
-            'Moderate': 'Yours is clearly defined — a ' + result.limbalColor.name.toLowerCase() + ' border that adds crisp depth to the color.',
+            'Dramatic': 'Yours is dramatic: a bold, high-contrast rim that acts like natural eyeliner and holds attention from across the room.',
+            'Strong':   'Yours is strong — a sharp, clearly visible edge that makes the iris color pop and gives the eye real definition.',
+            'Moderate': 'Yours is clearly defined — a ' + result.limbalColor.name.toLowerCase() + ' border that adds crispness and depth to the color.',
             'Soft':     'Yours is soft — a gentle ' + result.limbalColor.name.toLowerCase() + ' edge that adds subtle definition.',
-            'Faint':    'Yours is faint — barely there but measurably present, adding just a trace of definition at the edge.'
-          }[result.limbal] || 'A ' + result.limbalColor.name.toLowerCase() + ' rim tracing the outer iris edge.');
+            'Faint':    'Yours is faint — barely there but measurably present, adding a trace of definition at the edge.'
+          }[result.limbal] || 'A ' + result.limbalColor.name.toLowerCase() + ' rim at the outer iris edge.');
     items.push({
-      title: result.limbal + ' limbal ring',
+      title: result.limbal + ' outer border (limbal ring)',
       desc: limbalShortDesc,
       swatch: { type: 'solid', c1: rgbCss(result.limbalRgb || result.limbalColor.rgb) },
     });
@@ -1062,11 +1054,11 @@ function renderHighlights(result){
       swatch: { type: 'solid', c1: rgbCss(result.freckles[0].rgb || [60,40,20]) },
     });
   }
-  // ===== Rayid iris type =====
+  // ===== Iris pattern (Rayid) =====
   if (result.rayid && RAYID_META[result.rayid.label]) {
     var rm2 = RAYID_META[result.rayid.label];
     items.push({
-      title: result.rayid.label + ' iris · ' + rm2.short,
+      title: 'Iris pattern: ' + result.rayid.label,
       desc:  rm2.story.replace(/<[^>]+>/g, ''),
       swatch: { type: 'solid', c1: rm2.color }
     });
@@ -1075,7 +1067,7 @@ function renderHighlights(result){
   if (result.collarette && result.collarette.label !== 'Indistinct') {
     var cProminent = result.collarette.label === 'Prominent';
     items.push({
-      title: 'Inner ring · collarette',
+      title: 'Inner ring (collarette)',
       desc: 'Most people have never noticed their collarette — it\'s a textured, slightly raised ring '
         + 'that runs across the iris roughly a third of the way out from the pupil. '
         + (cProminent
