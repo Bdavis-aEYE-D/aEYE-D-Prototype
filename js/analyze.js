@@ -584,6 +584,14 @@ function analyze(){
     console.warn('Rayid classify failed:', e);
   }
 
+  // ---- Collarette (autonomic nerve wreath) detection ----
+  var collarette = null;
+  try {
+    collarette = detectCollarette(d, stageW, stageH, cx, cy, rOut, rIn);
+  } catch(e) {
+    console.warn('Collarette detect failed:', e);
+  }
+
   // Build result
   // Read optional birthdate for age-adjusted scoring
   var birthdateEl = document.getElementById('birthdate-input');
@@ -638,7 +646,8 @@ function analyze(){
       }
     },
     portraitImage: null,   // populated by btn-portrait flow
-    rayid: rayid           // {label, streamScore, jewelScore, flowerScore} or null
+    rayid: rayid,          // {label, streamScore, jewelScore, flowerScore} or null
+    collarette: collarette // {label, radialPct, score} or null
   };
   // Compute composite rarity score now that all fields are in result
   result.rarityScore = computeRarityScore(result);
@@ -801,9 +810,23 @@ function renderResult(result){
     var rm = RAYID_META[result.rayid.label];
     var rv = $('r-rayid');
     if (rv) {
-      rv.textContent = result.rayid.label + ' · ' + rm.short;
+      rv.innerHTML = '<span style="display:inline-block;width:8px;height:8px;'
+        + 'border-radius:50%;background:' + rm.color + ';margin-right:6px;'
+        + 'vertical-align:middle;flex-shrink:0"></span>'
+        + result.rayid.label + ' · ' + rm.short;
       rv.style.color = rm.color;
     }
+  }
+  // Collarette (autonomic nerve wreath)
+  var collEl = $('r-collarette');
+  if (collEl && result.collarette) {
+    var cl = result.collarette;
+    var cText = cl.label;
+    if (cl.radialPct) cText += ' · ~' + cl.radialPct + '% radius';
+    collEl.textContent = cText;
+    collEl.style.color = cl.label === 'Prominent' ? '#34d399'
+                       : cl.label === 'Faint'     ? '#a3b4c8'
+                       : 'var(--ink-dim)';
   }
 
   // If both eyes have been analyzed, show the two-eye summary
@@ -1003,6 +1026,19 @@ function renderHighlights(result){
       swatch: { type: 'solid', c1: rm2.color }
     });
   }
+  // ===== Collarette (autonomic nerve wreath) =====
+  if (result.collarette && result.collarette.label !== 'Indistinct') {
+    var cProminent = result.collarette.label === 'Prominent';
+    items.push({
+      title: result.collarette.label + ' collarette',
+      desc: 'The autonomic nerve wreath — a jagged ring at ~' + result.collarette.radialPct
+        + '% of iris radius — marks the boundary between the pupillary and ciliary zones. '
+        + (cProminent
+            ? 'Yours is clearly defined and will photograph well at close range.'
+            : 'Yours is subtle but detectable; sharper lighting may reveal it more fully.'),
+      swatch: { type: 'solid', c1: cProminent ? '#34d399' : '#a3b4c8' }
+    });
+  }
   // ===== Color fingerprint (always shown last, smaller) =====
   if (result.fingerprint) {
     items.push({
@@ -1155,6 +1191,17 @@ function renderStory(result){
   // ── Rayid iris type ───────────────────────────────────────────────────────
   if (result.rayid && RAYID_META[result.rayid.label]) {
     paras.push(RAYID_META[result.rayid.label].story);
+  }
+
+  // ── Collarette ────────────────────────────────────────────────────────────
+  if (result.collarette && result.collarette.label !== 'Indistinct') {
+    var cLbl = result.collarette.label.toLowerCase();
+    paras.push('The <strong>collarette</strong> — the autonomic nerve wreath — appears as a '
+      + cLbl + ' jagged ring at roughly ' + result.collarette.radialPct + '% of the iris radius. '
+      + 'This boundary marks the physiological divide between the inner <em>pupillary zone</em>, '
+      + 'governed by the sphincter pupillae muscle, and the outer <em>ciliary zone</em>, governed '
+      + 'by the dilator pupillae. Its irregular, frill-like edge reflects the uneven thickness of '
+      + 'the iris stroma at this junction — a structural feature that is completely unique to each eye.');
   }
 
   // ── Closing note ──────────────────────────────────────────────────────────
