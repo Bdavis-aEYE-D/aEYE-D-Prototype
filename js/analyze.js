@@ -838,12 +838,15 @@ function renderResult(result){
   var collEl = $('r-collarette');
   if (collEl && result.collarette) {
     var cl = result.collarette;
-    var cText = cl.label;
-    if (cl.radialPct) cText += ' · ~' + cl.radialPct + '% radius';
-    collEl.textContent = cText;
-    collEl.style.color = cl.label === 'Prominent' ? '#34d399'
-                       : cl.label === 'Faint'     ? '#a3b4c8'
-                       : 'var(--ink-dim)';
+    if (cl.label === 'Indistinct') {
+      collEl.textContent = '—';
+      collEl.style.color = '';
+    } else {
+      var cText = cl.label;
+      if (cl.radialPct) cText += ' · ~' + cl.radialPct + '% radius';
+      collEl.textContent = cText;
+      collEl.style.color = cl.label === 'Prominent' ? '#34d399' : '#a3b4c8';
+    }
   }
   // Eye shape
   var esEl = $('r-eyeshape');
@@ -991,24 +994,24 @@ function renderHighlights(result){
     }
     var heteroDesc;
     if (result.hetero.indexOf('warmth') >= 0) {
-      label = 'Central heterochromia';
-      heteroDesc = (pupName || 'A warm') + ' inner ring wraps the pupil, melting into '
-        + ((cilName || 'cooler outer iris')).toLowerCase()
-        + ' — called "sunflower eyes." Only about 1 in 10 people have this.';
+      label = 'Two-tone iris';
+      heteroDesc = (pupName || 'A warm-toned') + ' ring around the pupil melts outward into '
+        + ((cilName || 'the cooler outer iris')).toLowerCase()
+        + '. This is sometimes called "sunflower eyes" — the warm inner burst is visible even at normal conversational distance. About 1 in 10 people have it.';
     } else if (result.hetero.indexOf('lightness') >= 0) {
-      label = 'Central heterochromia';
-      heteroDesc = (pupName || 'A brighter') + ' zone around the pupil softens into '
-        + ((cilName || 'a deeper outer iris')).toLowerCase()
-        + ' — a beautiful two-tone depth effect.';
+      label = 'Two-tone iris';
+      heteroDesc = 'A brighter inner zone — ' + (pupName || 'lighter color').toLowerCase()
+        + ' — gradually deepens into ' + ((cilName || 'a richer outer iris')).toLowerCase()
+        + '. The two layers are clearly different even without a magnifier.';
     } else if (result.hetero === 'Central') {
-      label = 'Central heterochromia';
-      heteroDesc = (pupName || result.inner.name) + ' inside, '
+      label = 'Two-tone iris';
+      heteroDesc = (pupName || result.inner.name) + ' close to the pupil, '
         + ((cilName || result.outer.name)).toLowerCase()
-        + ' outside — two distinct colors with a clear visible boundary.';
+        + ' toward the edge — a complete color change within a single iris. This is central heterochromia, affecting roughly 1 in 6 people in some form.';
     } else {
-      label = 'Subtle heterochromia';
-      heteroDesc = 'A gentle two-tone gradient — ' + result.inner.name.toLowerCase()
-        + ' in the inner iris, ' + result.outer.name.toLowerCase() + ' toward the edge.';
+      label = 'Two-tone gradient';
+      heteroDesc = result.inner.name + ' in the inner iris shifting to '
+        + result.outer.name.toLowerCase() + ' toward the edge — a subtle but real two-tone effect that most people would never notice unless they looked closely.';
     }
     items.push({
       title: label, desc: heteroDesc,
@@ -1018,17 +1021,20 @@ function renderHighlights(result){
   // Limbal ring or halo
   if (result.limbal !== 'None' && result.limbalColor) {
     var ftype = result.limbalType || 'ring';
+    // Plain-English opener: tell people what a limbal ring is before describing theirs.
     var limbalShortDesc = ftype === 'halo'
-      ? result.limbalColor.name + ' inner halo — a luminous zone that makes the color feel lit from within.'
-      : ({
-          'Dramatic': 'Frames the entire iris like bold natural eyeliner — one of the most arresting features an iris can have.',
-          'Strong':   'A sharp, high-contrast rim that makes the iris color pop. These are the eyes that hold a room.',
-          'Moderate': 'A defined ' + result.limbalColor.name.toLowerCase() + ' border that adds crispness and depth.',
-          'Soft':     'A soft ' + result.limbalColor.name.toLowerCase() + ' edge — adds gentle definition to the iris.',
-          'Faint':    'Barely-there definition at the iris edge — subtle, but it\'s there.'
-        }[result.limbal] || result.limbalColor.name + ' rim tracing the iris edge.');
+      ? 'Some irises have a bright inner glow just outside the pupil — yours does. '
+        + 'The ' + result.limbalColor.name.toLowerCase() + ' zone makes the iris color look lit from within.'
+      : 'The limbal ring is the dark outer border of the iris — not everyone has a visible one. '
+        + ({
+            'Dramatic': 'Yours is dramatic: a bold, high-contrast rim that frames the iris like natural eyeliner and holds attention from across the room.',
+            'Strong':   'Yours is strong — a sharp, clearly visible rim that makes the iris color pop and gives the eye a defined edge.',
+            'Moderate': 'Yours is clearly defined — a ' + result.limbalColor.name.toLowerCase() + ' border that adds crisp depth to the color.',
+            'Soft':     'Yours is soft — a gentle ' + result.limbalColor.name.toLowerCase() + ' edge that adds subtle definition.',
+            'Faint':    'Yours is faint — barely there but measurably present, adding just a trace of definition at the edge.'
+          }[result.limbal] || 'A ' + result.limbalColor.name.toLowerCase() + ' rim tracing the outer iris edge.');
     items.push({
-      title: result.limbal + ' limbal ' + ftype,
+      title: result.limbal + ' limbal ring',
       desc: limbalShortDesc,
       swatch: { type: 'solid', c1: rgbCss(result.limbalRgb || result.limbalColor.rgb) },
     });
@@ -1037,7 +1043,10 @@ function renderHighlights(result){
   if (result.sectoral) {
     items.push({
       title: 'Sectoral patch · ' + result.sectoral.color.name,
-      desc: 'About 1 in 1,000 people have one — and no two are ever in the same spot.',
+      desc: 'A sectoral patch is a wedge or splash of a completely different color within the iris — '
+        + 'yours is ' + result.sectoral.color.name.toLowerCase() + ' near '
+        + result.sectoral.clock + " o'clock. "
+        + 'About 1 in 1,000 people have one, caused by a localised pigment difference. No two are ever in the same position.',
       swatch: { type: 'solid', c1: rgbCss(result.sectoral.rgb) },
     });
   }
@@ -1062,25 +1071,17 @@ function renderHighlights(result){
       swatch: { type: 'solid', c1: rm2.color }
     });
   }
-  // ===== Collarette (autonomic nerve wreath) =====
+  // ===== Collarette =====
   if (result.collarette && result.collarette.label !== 'Indistinct') {
     var cProminent = result.collarette.label === 'Prominent';
     items.push({
-      title: result.collarette.label + ' collarette',
-      desc: 'The autonomic nerve wreath — a jagged ring at ~' + result.collarette.radialPct
-        + '% of iris radius — marks the boundary between the pupillary and ciliary zones. '
+      title: 'Inner ring · collarette',
+      desc: 'Most people have never noticed their collarette — it\'s a textured, slightly raised ring '
+        + 'that runs across the iris roughly a third of the way out from the pupil. '
         + (cProminent
-            ? 'Yours is clearly defined and will photograph well at close range.'
-            : 'Yours is subtle but detectable; sharper lighting may reveal it more fully.'),
+            ? 'Yours is clearly visible. If you hold a phone camera close to your eye in good light, you can see it — the rippled inner border before the main iris color starts.'
+            : 'Yours is faint but detectable. A macro lens or bright direct light would make it more visible.'),
       swatch: { type: 'solid', c1: cProminent ? '#34d399' : '#a3b4c8' }
-    });
-  }
-  // ===== Color fingerprint (always shown last, smaller) =====
-  if (result.fingerprint) {
-    items.push({
-      title: 'Color fingerprint · ' + result.fingerprint.hex.toUpperCase(),
-      desc: 'Color, structure, markings — the more traits we measure, the rarer every eye becomes. This exact combination is yours alone.',
-      swatch: { type: 'solid', c1: rgbCss(result.fingerprint.rgb) },
     });
   }
   // Render
