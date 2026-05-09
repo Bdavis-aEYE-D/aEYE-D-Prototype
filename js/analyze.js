@@ -592,6 +592,21 @@ function analyze(){
     console.warn('Collarette detect failed:', e);
   }
 
+  // ---- Pupil eccentricity (iris center vs pupil center offset) ----
+  // Close-up images confirmed pupil ≠ iris center; this surfaces the offset.
+  var pupilEcc = null;
+  try {
+    var eccCxP = donut.cxPupil != null ? donut.cxPupil : donut.cx;
+    var eccCyP = donut.cyPupil != null ? donut.cyPupil : donut.cy;
+    var eccDx  = eccCxP - donut.cx, eccDy = eccCyP - donut.cy;
+    var eccPx  = Math.sqrt(eccDx*eccDx + eccDy*eccDy);
+    var eccPct = Math.round(eccPx / rOut * 100);
+    var eccLabel = eccPct <= 3 ? 'Centered'
+                 : eccPct <= 8 ? 'Slight offset · ' + eccPct + '%'
+                 : 'Eccentric · ' + eccPct + '%';
+    pupilEcc = { label: eccLabel, pct: eccPct };
+  } catch(e) {}
+
   // Build result
   // Read optional birthdate for age-adjusted scoring
   var birthdateEl = document.getElementById('birthdate-input');
@@ -647,7 +662,9 @@ function analyze(){
     },
     portraitImage: null,   // populated by btn-portrait flow
     rayid: rayid,          // {label, streamScore, jewelScore, flowerScore} or null
-    collarette: collarette // {label, radialPct, score} or null
+    collarette: collarette, // {label, radialPct, score} or null
+    eyeShape: window.currentEyeShape || null,  // {label, ar, tiltDeg} or null
+    pupilEcc: pupilEcc     // {label, pct} or null
   };
   // Compute composite rarity score now that all fields are in result
   result.rarityScore = computeRarityScore(result);
@@ -827,6 +844,25 @@ function renderResult(result){
     collEl.style.color = cl.label === 'Prominent' ? '#34d399'
                        : cl.label === 'Faint'     ? '#a3b4c8'
                        : 'var(--ink-dim)';
+  }
+  // Eye shape
+  var esEl = $('r-eyeshape');
+  if (esEl) {
+    if (result.eyeShape) {
+      var esColors = { Almond:'#a3b4c8', Round:'#60a5fa', Upturned:'#f59e0b',
+                       Downturned:'#f87171', Narrow:'var(--ink-dim)' };
+      esEl.textContent = result.eyeShape.label;
+      esEl.style.color = esColors[result.eyeShape.label] || '';
+    } else {
+      esEl.textContent = '—';
+      esEl.style.color = '';
+    }
+  }
+  // Pupil offset (eccentricity of pupil center vs iris center)
+  var peEl = $('r-pupil-ecc');
+  if (peEl && result.pupilEcc) {
+    peEl.textContent = result.pupilEcc.label;
+    peEl.style.color = result.pupilEcc.pct <= 3 ? 'var(--ink-dim)' : '#a3b4c8';
   }
 
   // If both eyes have been analyzed, show the two-eye summary
@@ -1202,6 +1238,18 @@ function renderStory(result){
       + 'governed by the sphincter pupillae muscle, and the outer <em>ciliary zone</em>, governed '
       + 'by the dilator pupillae. Its irregular, frill-like edge reflects the uneven thickness of '
       + 'the iris stroma at this junction — a structural feature that is completely unique to each eye.');
+  }
+
+  // ── Eye shape ─────────────────────────────────────────────────────────────
+  if (result.eyeShape) {
+    var esStories = {
+      Almond:     'The <strong>almond eye shape</strong> — tapered ends, moderate vertical opening, corner-to-corner line roughly horizontal — is the most anatomically common form. The inner (medial) and outer (lateral) canthus sit at nearly the same height, giving the eye a balanced look across most lighting conditions.',
+      Round:      'The <strong>round eye shape</strong> has a generous vertical opening relative to its width — the iris is exposed more fully, and the upper or lower sclera may be visible at neutral gaze. Round eyes tend to emphasise iris colour and are particularly effective at conveying depth of expression.',
+      Upturned:   'An <strong>upturned (cat-eye) shape</strong> — the outer corner sits perceptibly higher than the inner corner. This positive canthal tilt is a distinctive structural feature associated with a "lifted" appearance at the lateral edge. The angle is fixed by the lateral canthal tendon and the orbital rim.',
+      Downturned: 'A <strong>downturned eye shape</strong> — the outer corner drops below the inner corner. The gentle negative canthal tilt lends a soft, considered appearance at rest. This form is associated with a longer medial canthal tendon relative to the lateral anchor.',
+      Narrow:     'A <strong>narrow eye opening</strong> — the visible aperture is compact relative to the width. This may reflect a naturally close upper and lower lid margin, a hooded brow ridge limiting visible lid height, or strong orbicularis tone. Iris colour is partially framed by the lash line even in open-eye gaze.'
+    };
+    if (esStories[result.eyeShape.label]) paras.push(esStories[result.eyeShape.label]);
   }
 
   // ── Closing note ──────────────────────────────────────────────────────────

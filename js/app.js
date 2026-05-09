@@ -522,6 +522,7 @@ function applyAutoFit(){
   if (st)   st.textContent   = ' ';
   var retakeBtn = $('btn-quality-retake');
   if (retakeBtn) retakeBtn.style.display = 'none';
+  window.currentEyeShape = null; // reset per-eye; set below when MP landmarks are available
 
   initMediaPipe().then(function(lm) {
     if (!lm || !originalImgEl) { _applyFitClassical(); return; }
@@ -562,6 +563,9 @@ function applyAutoFit(){
       // as a radius floor doubles the estimate and inflates the zoom crop 2×.)
       var ipdPx = Math.hypot((L[468].x - L[473].x) * imgW, (L[468].y - L[473].y) * imgH);
       if (ipdPx > 20) ir = Math.max(ir, ipdPx * 0.085);
+
+      // Eye shape classification — uses eyelid corner + lid-peak landmarks
+      window.currentEyeShape = _classifyEyeShape(L, currentSide, imgW, imgH);
 
       // Transform from originalImgEl space → cropped imgEl space → stage
       var cx_img = c.x * imgW - (cropRegion ? cropRegion.x : 0);
@@ -666,6 +670,50 @@ function applyAutoFit(){
   });
 }
 
+// ---- Eye shape classifier (MediaPipe landmarks) ----
+// Uses eyelid corner landmarks and upper/lower lid peaks to compute
+// aspect ratio and canthal tilt, then classifies into 5 shapes.
+// Landmark indices (MediaPipe 478-point face mesh):
+//   Right eye (subject's right, viewer's left): outer=33, inner=133, top=159, bot=145
+//   Left  eye (subject's left, viewer's right): outer=263, inner=362, top=386, bot=374
+function _classifyEyeShape(L, side, imgW, imgH) {
+  try {
+    var outer, inner, upper, lower;
+    if (side === 'Right') {
+      outer = L[33];  inner = L[133]; upper = L[159]; lower = L[145];
+    } else {
+      outer = L[263]; inner = L[362]; upper = L[386]; lower = L[374];
+    }
+    if (!outer || !inner || !upper || !lower) return null;
+    // Eye width: corner-to-corner distance
+    var eyeW = Math.hypot((outer.x - inner.x) * imgW, (outer.y - inner.y) * imgH);
+    if (eyeW < 8) return null;
+    // Eye height: upper-lid-peak to lower-lid-valley distance
+    var eyeH = Math.hypot((upper.x - lower.x) * imgW, (upper.y - lower.y) * imgH);
+    var ar = eyeH / eyeW;  // aspect ratio: round eyes >0.33, narrow <0.21
+    // Canthal tilt: angle of line from inner corner to outer corner.
+    // Using abs(dx) so formula is identical for both eyes.
+    // tiltDeg > 0 = outer corner HIGHER (upturned); < 0 = outer lower (downturned).
+    var dx = Math.abs(outer.x - inner.x) * imgW;
+    var dy = (outer.y - inner.y) * imgH;      // positive = outer lower = downturned
+    var tiltDeg = Math.atan2(-dy, dx) * 180 / Math.PI;
+    // Classify
+    var label;
+    if      (tiltDeg >  6)  label = 'Upturned';
+    else if (tiltDeg < -6)  label = 'Downturned';
+    else if (ar      > 0.33) label = 'Round';
+    else if (ar      < 0.21) label = 'Narrow';
+    else                    label = 'Almond';
+    return {
+      label:    label,
+      ar:       Math.round(ar      * 100) / 100,
+      tiltDeg:  Math.round(tiltDeg * 10)  / 10
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
 function _applyFitClassical(closeup){
   if (!imgEl) return false;
   var hint = $('autofit-hint');
@@ -674,14 +722,28 @@ function _applyFitClassical(closeup){
     var fit = autoFit(imgEl, !!closeup);
     var scaleX = drawInfo.dw / imgEl.width;
     var scaleY = drawInfo.dh / imgEl.height;
-    donut.cx     = drawInfo.dx + fit.cxFrac * imgEl.width * scaleX;
-    donut.cy     = drawInfo.dy + fit.cyFrac * imgEl.height * scaleY;
-    donut.cxPupil = fit.cxPupilFrac != null
-      ? drawInfo.dx + fit.cxPupilFrac * imgEl.width  * scaleX
-      : donut.cx;
-    donut.cyPupil = fit.cyPupilFrac != null
-      ? drawInfo.dy + fit.cyPupilFrac * imgEl.height * scaleY
-      : donut.cy;
+
+    // Close-up: refine pupil center with weighted-centroid dark-pixel scan —
+    // same findPupilCenter() step the MediaPipe full-face path uses.
+    // This ensures close-up independent centers match full-face accuracy (#5).
+    var cxPupil_cu = fit.cxPupilFrac != null ? fit.cxPupilFrac * imgEl.width  : fit.cxFrac * imgEl.width;
+    var cyPupil_cu = fit.cyPupilFrac != null ? fit.cyPupilFrac * imgEl.height : fit.cyFrac * imgEl.height;
+    if (closeup && fit.ok) {
+      var cuHintR = Math.max(8, fit.rPupilFrac * imgEl.width * 1.6);
+      var cuRef   = findPupilCenter(imgEl, cxPupil_cu, cyPupil_cu, cuHintR);
+      if (cuRef) {
+        var cuDx = cuRef.cx - cxPupil_cu, cuDy = cuRef.cy - cyPupil_cu;
+        if (Math.sqrt(cuDx*cuDx + cuDy*cuDy) < fit.rIrisFrac * imgEl.width * 0.40) {
+          cxPupil_cu = cuRef.cx;
+          cyPupil_cu = cuRef.cy;
+        }
+      }
+    }
+
+    donut.cx     = drawInfo.dx + fit.cxFrac  * imgEl.width  * scaleX;
+    donut.cy     = drawInfo.dy + fit.cyFrac  * imgEl.height * scaleY;
+    donut.cxPupil = drawInfo.dx + cxPupil_cu * scaleX;
+    donut.cyPupil = drawInfo.dy + cyPupil_cu * scaleY;
     var rpx  = fit.rPupilFrac * imgEl.width * scaleX;
     var ripx = fit.rIrisFrac  * imgEl.width * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
@@ -1399,7 +1461,7 @@ $('btn-again').addEventListener('click', function(){
   eyeResults = {};
   currentSide = null;
   captureMode = 'analysis';
-  mpEyes = null; isCloseupMode = false;
+  mpEyes = null; isCloseupMode = false; window.currentEyeShape = null;
   $('btn-analyze').textContent = 'Analyze Iris';
   originalImgEl = null; imgEl = null; imgLoaded = false;
   _sessionId = null; _sessionFaceUploaded = false;
