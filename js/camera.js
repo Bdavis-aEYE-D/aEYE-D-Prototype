@@ -46,8 +46,9 @@ function cameraStart(facing) {
   var constraints = {
     video: {
       facingMode: camFacingMode,
-      width:  { ideal: camFacingMode === 'environment' ? 3024 : 1280 },
-      height: { ideal: camFacingMode === 'environment' ? 4032 : 960  }
+      width:      { ideal: 4096 },   // request max — iOS gives highest it supports
+      height:     { ideal: 4096 },
+      frameRate:  { ideal: 15, max: 30 }  // lower fps → more bandwidth per frame
     },
     audio: false
   };
@@ -58,6 +59,13 @@ function cameraStart(facing) {
     vid.srcObject = s;
     vid.play();
     _applyViewfinderMode();
+    // Log actual resolution granted by the browser/OS
+    var track = s.getVideoTracks()[0];
+    if (track) {
+      var settings = track.getSettings();
+      console.log('[camera] granted ' + settings.width + '×' + settings.height
+        + ' @ ' + (settings.frameRate || '?') + 'fps — facing: ' + camFacingMode);
+    }
     var label = camFacingMode === 'environment' ? 'Rear camera ready' : 'Camera ready — tap Capture when set';
     $('cam-status').textContent = label;
     $('btn-cam-capture').disabled = false;
