@@ -281,7 +281,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v1.08 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v1.08-native-cam &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -306,13 +306,17 @@
     <div class="card" id="card-capture">
       <div class="step">Step 1</div>
       <h2>Take or upload a photo</h2>
-      <p>A full-face selfie works great &mdash; you&rsquo;ll pick which eye to analyze in the next step. Close-up iris photos also work. Shoot in soft daylight, avoid on-camera flash if possible.</p>
+      <p>A full-face selfie works great &mdash; you&rsquo;ll pick which eye to analyze next. Close-up iris photos also work. Soft daylight gives the best color.</p>
       <div class="controls">
-        <button type="button" id="btn-camera">Take Photo</button>
-        <button type="button" class="secondary" id="btn-upload">Choose Photo</button>
+        <button type="button" id="btn-cam-rear">&#128247; Rear Camera</button>
+        <button type="button" class="secondary" id="btn-cam-front">&#129335; Front Camera</button>
+        <button type="button" class="secondary" id="btn-upload">Choose Existing Photo</button>
         <button type="button" class="secondary full" id="btn-sample">Use Sample Iris</button>
         <button type="button" class="secondary full" id="btn-tips">Photo Tips &rsaquo;</button>
       </div>
+      <!-- hidden inputs for native camera capture -->
+      <input type="file" id="native-cam-rear"  accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="native-cam-front" accept="image/*" capture="user"        style="display:none">
       <label class="tinylabel" style="margin-top:12px">Date of birth <span style="font-weight:400;color:var(--ink-dim)">(optional &mdash; improves limbal ring scoring)</span></label>
       <input type="date" id="birthdate-input" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;font-family:inherit;width:100%;margin-bottom:6px">
       <input type="file" id="file-input" accept="image/*">
