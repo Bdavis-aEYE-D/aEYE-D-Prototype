@@ -281,7 +281,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v1.09 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v1.08 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -307,23 +307,8 @@
       <div class="step">Step 1</div>
       <h2>Take or upload a photo</h2>
       <p>A full-face selfie works great &mdash; you&rsquo;ll pick which eye to analyze in the next step. Close-up iris photos also work. Shoot in soft daylight, avoid on-camera flash if possible.</p>
-      <!-- Camera mode toggle -->
-      <div id="cam-mode-toggle" style="display:flex;gap:0;margin:10px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden;">
-        <button type="button" id="cam-mode-native" class="cam-mode-btn active"
-          style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;border-radius:0;background:var(--accent);color:#002338;">
-          Native Camera
-        </button>
-        <button type="button" id="cam-mode-inapp" class="cam-mode-btn"
-          style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;border-radius:0;background:transparent;color:var(--ink-dim);">
-          In-App Camera
-        </button>
-      </div>
-      <p id="cam-mode-hint" style="font-size:11px;color:var(--ink-dim);margin:2px 0 8px;line-height:1.4;">
-        Opens your phone&rsquo;s camera for full-resolution photos.
-      </p>
       <div class="controls">
-        <button type="button" id="btn-cam-rear">&#128247; Rear Camera</button>
-        <button type="button" class="secondary" id="btn-cam-front">&#129335; Front Camera</button>
+        <button type="button" id="btn-camera">Take Photo</button>
         <button type="button" class="secondary" id="btn-upload">Choose Photo</button>
         <button type="button" class="secondary full" id="btn-sample">Use Sample Iris</button>
         <button type="button" class="secondary full" id="btn-tips">Photo Tips &rsaquo;</button>
@@ -331,9 +316,6 @@
       <label class="tinylabel" style="margin-top:12px">Date of birth <span style="font-weight:400;color:var(--ink-dim)">(optional &mdash; improves limbal ring scoring)</span></label>
       <input type="date" id="birthdate-input" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;font-family:inherit;width:100%;margin-bottom:6px">
       <input type="file" id="file-input" accept="image/*">
-      <!-- Hidden inputs for native camera capture -->
-      <input type="file" id="native-cam-rear"  accept="image/*" capture="environment" style="display:none">
-      <input type="file" id="native-cam-front" accept="image/*" capture="user"        style="display:none">
       <p style="font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.6;border-top:1px solid var(--line);padding-top:12px;">By using eyeD, your iris photo may be used to help build and improve the Davis Iris Color System. No photos are shared publicly or sold.</p>
     </div>
 
