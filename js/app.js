@@ -41,23 +41,72 @@ for (var i=0;i<tabs.length;i++){
 // ======================= FILE LOADING =======================
 var fileInput = $('file-input');
 
-$('btn-camera').addEventListener('click', function(){
-  // Use in-app viewfinder if getUserMedia is available (requires HTTPS)
-  if (cameraAvailable()) {
-    cameraStart();
-  } else {
-    // Fallback: native camera via file input (desktop or non-HTTPS)
-    fileInput.setAttribute('capture', 'user');
-    fileInput.click();
+// ── Camera mode toggle (Native vs In-App) ────────────────────────────────
+var camMode = 'native';   // 'native' | 'inapp'
+
+function _setCamMode(mode) {
+  camMode = mode;
+  var isNative = mode === 'native';
+  // Toggle button styles
+  $('cam-mode-native').style.background = isNative ? 'var(--accent)' : 'transparent';
+  $('cam-mode-native').style.color      = isNative ? '#002338'        : 'var(--ink-dim)';
+  $('cam-mode-inapp').style.background  = isNative ? 'transparent'    : 'var(--accent)';
+  $('cam-mode-inapp').style.color       = isNative ? 'var(--ink-dim)' : '#002338';
+  // Swap visible camera buttons
+  $('btn-cam-rear').style.display   = isNative ? ''     : 'none';
+  $('btn-cam-front').style.display  = isNative ? ''     : 'none';
+  $('btn-camera-inapp') && ($('btn-camera-inapp').style.display = isNative ? 'none' : '');
+  // Hint text
+  $('cam-mode-hint').textContent = isNative
+    ? 'Opens your phone\'s camera for full-resolution photos.'
+    : 'Uses the in-app viewfinder with flash sequence.';
+}
+
+$('cam-mode-native').addEventListener('click', function(){ _setCamMode('native'); });
+$('cam-mode-inapp').addEventListener('click',  function(){
+  _setCamMode('inapp');
+  // Ensure the in-app camera button is present (inject if first time)
+  if (!$('btn-camera-inapp')) {
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.id = 'btn-camera-inapp';
+    btn.textContent = 'Take Photo (In-App)';
+    btn.addEventListener('click', function(){
+      if (cameraAvailable()) { cameraStart(); }
+      else { fileInput.setAttribute('capture','user'); fileInput.click(); }
+    });
+    $('btn-cam-rear').parentNode.insertBefore(btn, $('btn-cam-rear'));
   }
 });
+
+// Native camera buttons
+function _nativeCamHandler(inputId) {
+  var input = $(inputId);
+  input.value = '';
+  input.click();
+}
+$('btn-cam-rear').addEventListener('click',  function(){ _nativeCamHandler('native-cam-rear');  });
+$('btn-cam-front').addEventListener('click', function(){ _nativeCamHandler('native-cam-front'); });
+
+// Wire native cam inputs → same load path as file upload
+['native-cam-rear', 'native-cam-front'].forEach(function(id) {
+  $(id).addEventListener('change', function(e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){ loadOriginalFromUrl(reader.result); };
+    reader.onerror = function(){ showError('Could not read file.'); };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+});
+
 $('btn-upload').addEventListener('click', function(){
   fileInput.removeAttribute('capture');
   fileInput.click();
 });
 $('btn-cam-capture').addEventListener('click', function(){ cameraCaptureSequence(); });
-$('btn-cam-stop').addEventListener('click', function(){ cameraStop(); });
-$('btn-cam-flip').addEventListener('click', function(){ cameraFlip(); });
+$('btn-cam-stop').addEventListener('click',    function(){ cameraStop(); });
+$('btn-cam-flip').addEventListener('click',    function(){ cameraFlip(); });
 
 $('btn-sample').addEventListener('click', function(){
   drawSyntheticFace();
