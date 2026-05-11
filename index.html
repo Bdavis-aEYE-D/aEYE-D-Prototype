@@ -144,6 +144,15 @@
   .tips-inner .tips-sub { font-size: 13px; color: var(--ink-dim); margin: 0 0 18px; }
   .tip-row { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .tip-row:last-of-type { border-bottom: none; }
+  .tip-featured { background: linear-gradient(120deg,#0d2236,#1a2240); border: 1px solid var(--accent);
+    border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .tip-featured .tip-label { font-size: 10px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 6px; }
+  .tip-featured .tip-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .tip-featured .tip-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .tip-featured .tip-steps li { font-size: 13px; color: var(--ink-dim); padding-left: 22px; position: relative; line-height: 1.4; }
+  .tip-featured .tip-steps li::before { content: attr(data-n); position: absolute; left: 0;
+    color: var(--accent); font-weight: 700; font-size: 12px; }
   .tip-icon { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; margin-top: 1px; }
   .tip-body .tip-title { font-size: 14px; font-weight: 700; color: var(--ink); }
   .tip-body .tip-desc { font-size: 13px; color: var(--ink-dim); margin-top: 2px; line-height: 1.4; }
@@ -306,10 +315,10 @@
     <div class="card" id="card-capture">
       <div class="step">Step 1</div>
       <h2>Take or upload a photo</h2>
-      <p>A full-face selfie works great &mdash; you&rsquo;ll pick which eye to analyze next. Close-up iris photos also work. Soft daylight gives the best color.</p>
+      <p>For best results: <strong>rear camera + mirror</strong> — hold your phone up to a mirror and frame one eye close-up. Or use a front-camera selfie and pick which eye to analyze. Tap <strong>Photo Tips</strong> for the full technique.</p>
       <div class="controls">
         <button type="button" id="btn-cam-front">&#129335; Front Camera</button>
-        <button type="button" class="secondary" id="btn-cam-rear">&#128247; Rear Camera &mdash; better quality</button>
+        <button type="button" class="secondary" id="btn-cam-rear">&#128247; Rear Camera &mdash; mirror technique</button>
         <button type="button" class="secondary" id="btn-upload">Choose Existing Photo</button>
         <button type="button" class="secondary full" id="btn-sample">Use Sample Iris</button>
         <button type="button" class="secondary full" id="btn-tips">Photo Tips &rsaquo;</button>
@@ -468,60 +477,61 @@
       <div class="tips-inner">
         <h3>How to take a great photo</h3>
         <p class="tips-sub">Better photos mean more accurate results.</p>
+
+        <!-- Featured: Mirror Technique -->
+        <div class="tip-featured">
+          <div class="tip-label">&#x2B50; Best quality method</div>
+          <div class="tip-title">&#x1F9F4; The Mirror Technique</div>
+          <ul class="tip-steps">
+            <li data-n="1.">Stand in front of a mirror near a window or in a well-lit room.</li>
+            <li data-n="2.">Use <strong>Rear Camera</strong> in eyeD — the rear lens is higher resolution than the front.</li>
+            <li data-n="3.">Enable the flash to light your iris. Hold the phone 10&ndash;15 cm from your eye.</li>
+            <li data-n="4.">Watch the <em>mirror reflection</em> to frame your eye in the centre of the screen.</li>
+            <li data-n="5.">Tap the volume button to shoot — steadier than tapping the screen.</li>
+            <li data-n="6.">Focus on the iris, not the lashes. Tap the iris on screen to lock focus first.</li>
+          </ul>
+        </div>
+
         <div class="tip-row">
           <div class="tip-icon">&#x1F4A1;</div>
           <div class="tip-body">
-            <div class="tip-title">Use diffuse, even lighting</div>
-            <div class="tip-desc">Avoid facing windows or bright lamps — they cause reflections on the eye. Overcast outdoor light or a well-lit room with light from multiple directions works best.</div>
-          </div>
-        </div>
-        <div class="tip-row">
-          <div class="tip-icon">&#x1F4CF;</div>
-          <div class="tip-body">
-            <div class="tip-title">Hold at arm&rsquo;s length</div>
-            <div class="tip-desc">About 18&ndash;24 inches away. Your full face should be in the frame &mdash; the app will zoom into each eye automatically.</div>
+            <div class="tip-title">Light from the side, not behind you</div>
+            <div class="tip-desc">A window to your side gives even, natural light without harsh reflections. Avoid facing a bright window — it creates glare spots on the iris that block color.</div>
           </div>
         </div>
         <div class="tip-row">
           <div class="tip-icon">&#x1F3AF;</div>
           <div class="tip-body">
-            <div class="tip-title">Lock focus on your eye</div>
-            <div class="tip-desc">Tap your eye on the phone screen before shooting to make sure the camera focuses there, not on the background.</div>
+            <div class="tip-title">Tap the iris to lock focus</div>
+            <div class="tip-desc">Before shooting, tap your iris on the camera screen. This tells the camera to focus on the iris, not the lashes or background.</div>
           </div>
         </div>
         <div class="tip-row">
-          <div class="tip-icon">&#x1F9D0;</div>
+          <div class="tip-icon">&#x1F440;</div>
           <div class="tip-body">
-            <div class="tip-title">Look straight at the camera</div>
-            <div class="tip-desc">Face the lens squarely and open your eyes wide. Both eyes visible in the same photo is ideal.</div>
+            <div class="tip-title">Eyes wide open</div>
+            <div class="tip-desc">Look straight at the lens and open your eyes as wide as comfortable. More iris visible = more data = better results.</div>
           </div>
         </div>
         <div class="tip-row">
           <div class="tip-icon">&#x23F8;</div>
           <div class="tip-body">
-            <div class="tip-title">Hold still</div>
-            <div class="tip-desc">Even slight blur reduces accuracy. Brace your elbow or rest your hand against something steady.</div>
+            <div class="tip-title">Hold still — brace yourself</div>
+            <div class="tip-desc">Rest your elbow on a surface or brace your hand against your face. Even a millimetre of blur softens the iris detail the app reads.</div>
           </div>
         </div>
         <div class="tip-row">
           <div class="tip-icon">&#x1F453;</div>
           <div class="tip-body">
-            <div class="tip-title">Remove glasses if you can</div>
-            <div class="tip-desc">Glasses frames and lens reflections make it much harder for the app to find your iris. Even thin frames can throw off detection. Take the photo without them when possible.</div>
-          </div>
-        </div>
-        <div class="tip-row">
-          <div class="tip-icon">&#x1F4F8;</div>
-          <div class="tip-body">
-            <div class="tip-title">Take a few shots and upload the best one</div>
-            <div class="tip-desc">Use your phone&rsquo;s camera app to snap 3&ndash;5 photos, then tap <strong>Choose Photo</strong> to pick the sharpest, best-lit one. Your camera app often produces better results than shooting directly in-app.</div>
+            <div class="tip-title">Remove glasses</div>
+            <div class="tip-desc">Frames and lens reflections make it much harder to detect the iris. Take the photo without them when possible.</div>
           </div>
         </div>
         <div class="tip-row">
           <div class="tip-icon">&#x1F5BC;&#xFE0F;</div>
           <div class="tip-body">
             <div class="tip-title">Already have a good photo? Use it</div>
-            <div class="tip-desc">Any clear, front-facing photo where both eyes are visible works &mdash; recent portraits, ID-style headshots, or close-up selfies. Tap <strong>Choose Photo</strong> to upload from your camera roll.</div>
+            <div class="tip-desc">Clear portraits, headshots, or close-up eye photos all work. Tap <strong>Choose Photo</strong> to upload from your camera roll.</div>
           </div>
         </div>
         <button type="button" id="btn-tips-close" style="margin-top:18px">Got it</button>
