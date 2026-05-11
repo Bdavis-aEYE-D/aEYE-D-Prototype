@@ -1496,6 +1496,24 @@ $('btn-other-eye').addEventListener('click', function(){
   if (mpEyes) { jumpToEye(other); } else { showLocate(); }
 });
 
+// Both Eyes Card — jump to Post Maker with both-eyes template pre-selected
+$('btn-both-eyes-card').addEventListener('click', function(){
+  // Set the Post Maker template to both-eyes
+  pmActiveTemplate = 'both-eyes';
+  // Switch to the Post tab (mirrors the tab-btn click logic)
+  var allTabs = document.querySelectorAll('.tab-btn');
+  for (var i = 0; i < allTabs.length; i++) allTabs[i].classList.remove('active');
+  var postBtn = document.querySelector('.tab-btn[data-tab="post"]');
+  if (postBtn) postBtn.classList.add('active');
+  ['capture','post','about'].forEach(function(n){
+    var el = $('tab-' + n);
+    if (el) el.classList.toggle('hidden', n !== 'post');
+  });
+  drawPostStage();
+  var postTab = $('tab-post');
+  if (postTab) setTimeout(function(){ postTab.scrollIntoView({behavior:'smooth', block:'start'}); }, 60);
+});
+
 // Beauty-shot button — start a portrait capture for the existing result
 $('btn-portrait').addEventListener('click', function(){
   captureMode = 'portrait';

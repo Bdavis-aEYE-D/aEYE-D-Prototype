@@ -914,8 +914,10 @@ function renderResult(result){
     $('bilateral-detail').textContent  = detail;
     $('bilateral-row').className = cls;
   }
-  // Hide "Other Eye" button if both done
+  // Hide "Other Eye" button if both done; show Both Eyes Card button instead
   $('btn-other-eye').style.display = hasBoth ? 'none' : '';
+  var btnBoth = $('btn-both-eyes-card');
+  if (btnBoth) btnBoth.classList.toggle('hidden', !hasBoth);
   // Update Beauty Shot button label based on whether one is already attached
   var btnPortrait = $('btn-portrait');
   if (btnPortrait) {
