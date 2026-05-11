@@ -748,12 +748,56 @@ function _applyFitClassical(closeup){
       }
     }
 
-    donut.cx     = drawInfo.dx + fit.cxFrac  * imgEl.width  * scaleX;
-    donut.cy     = drawInfo.dy + fit.cyFrac  * imgEl.height * scaleY;
+    // Close-up iris radius refinement cascade — same RIP → ODH → RC → SAT cascade
+    // the full-face MediaPipe path uses. autoFit()'s horizontal band scan gives a good
+    // center but can mis-size the radius on high-contrast or asymmetric close-up shots.
+    // Anchoring the RIP/ODH cascade on autoFit's detected center reliably tightens it.
+    var cuIrisR  = fit.rIrisFrac * imgEl.width;
+    var cuIrisCx = fit.cxFrac    * imgEl.width;
+    var cuIrisCy = fit.cyFrac    * imgEl.height;
+    var cuRadSrc = 'AF';
+    if (closeup && fit.ok && cuIrisR > 8) {
+      // Primary: Radial Intensity Profile (full-circle mean, confidence-scored)
+      var cuRip = findIrisODByRIP(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR);
+      if (cuRip && cuRip.confidence >= 0.35 &&
+          cuRip.irisR > cuIrisR * 0.50 && cuRip.irisR < cuIrisR * 1.60) {
+        cuIrisR = cuRip.irisR;
+        cuRadSrc = 'RIP' + Math.round(cuRip.confidence * 10);
+      } else {
+        // Secondary: horizontal gradient scan (3/9 o'clock + near-horizontal rays)
+        var cuPupR = findPupilRadiusByRays(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR);
+        var cuODH  = findIrisODHorizontal(imgEl, cxPupil_cu, cyPupil_cu, cuPupR);
+        if (cuODH && cuODH.irisR > cuIrisR * 0.50 && cuODH.irisR < cuIrisR * 1.60) {
+          // Adopt horizontal scan's x-center only if it didn't drift far from autoFit
+          if (Math.abs(cuODH.cxIris - cuIrisCx) < cuIrisR * 0.40) cuIrisCx = cuODH.cxIris;
+          cuIrisR = cuODH.irisR;
+          cuRadSrc = 'ODH';
+        } else {
+          // Tertiary: ring-contrast global search
+          var cuRC = findIrisByRingContrast(imgEl, cuIrisCx, cuIrisCy, cuIrisR);
+          if (cuRC && cuRC.score > 15 && cuRC.r > cuIrisR * 0.50 && cuRC.r < cuIrisR * 1.60) {
+            cuIrisR = cuRC.r;
+            cuRadSrc = 'RC' + Math.round(cuRC.score);
+          } else {
+            // Tier 3.5: saturation ring — dark irises where all luminance methods fail
+            var cuSAT = findIrisODBySaturation(imgEl, cuIrisCx, cuIrisCy, cuIrisR);
+            if (cuSAT && cuSAT.confidence >= 0.25 &&
+                cuSAT.irisR > cuIrisR * 0.50 && cuSAT.irisR < cuIrisR * 1.60) {
+              cuIrisR = cuSAT.irisR;
+              cuRadSrc = 'SAT' + Math.round(cuSAT.confidence * 100);
+            }
+            // else: keep autoFit's radius estimate
+          }
+        }
+      }
+    }
+
+    donut.cx     = drawInfo.dx + cuIrisCx   * scaleX;
+    donut.cy     = drawInfo.dy + cuIrisCy   * scaleY;
     donut.cxPupil = drawInfo.dx + cxPupil_cu * scaleX;
     donut.cyPupil = drawInfo.dy + cyPupil_cu * scaleY;
     var rpx  = fit.rPupilFrac * imgEl.width * scaleX;
-    var ripx = fit.rIrisFrac  * imgEl.width * scaleX;
+    var ripx = cuIrisR * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
     rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
     donut.rIris  = ripx;
@@ -761,7 +805,7 @@ function _applyFitClassical(closeup){
     draw();
     if (validateIrisFit()) {
       if (hint) { hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".'; hint.style.color = ''; }
-      if (st)   st.textContent = (closeup ? 'Close-up' : 'Classical') + ' CV: ' + (fit.ok ? 'snapped' : 'estimated');
+      if (st)   st.textContent = (closeup ? 'Close-up ' + cuRadSrc : 'Classical') + ': ' + (fit.ok ? 'snapped' : 'estimated');
       zoomToEye();
     } else {
       // Both MP and classical failed — center a default circle so manual adjustment starts from the middle
