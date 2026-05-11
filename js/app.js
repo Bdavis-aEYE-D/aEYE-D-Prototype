@@ -1579,6 +1579,29 @@ var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 var _sessionId = null;           // shared ID across all photos in one session
 var _sessionFaceUploaded = false; // only upload face photo once per session
 
+// ---- Persistent device ID ----
+// Generated once on first visit and stored in localStorage so all sessions
+// from the same browser/device share a common identifier in Supabase.
+// Also captures user-agent and screen dimensions once for device fingerprinting.
+function _getOrCreateDeviceId() {
+  try {
+    var key = 'eyeid_device_id';
+    var id = localStorage.getItem(key);
+    if (!id) {
+      // crypto.randomUUID is available on all modern iOS/Android browsers
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          });
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch(e) { return null; }  // private browsing blocks localStorage — degrade gracefully
+}
+var _deviceId = _getOrCreateDeviceId();
+
 function showSaveToast(msg, success) {
   var t = document.getElementById('save-toast');
   if (!t) return;
@@ -1617,7 +1640,12 @@ function uploadToSupabase(result) {
       rayid_type: result.rayid ? result.rayid.label : null,
       iris_position: irisPos,
       photo_path: irisFileName,
-      face_photo_path: faceFileName
+      face_photo_path: faceFileName,
+      // ── Source tracking ──────────────────────────────────────────────────────
+      device_id:     _deviceId || null,
+      user_agent:    navigator.userAgent || null,
+      screen_width:  window.screen ? window.screen.width  : null,
+      screen_height: window.screen ? window.screen.height : null
     };
     fetch(SUPABASE_URL + '/rest/v1/analyses', {
       method: 'POST',
