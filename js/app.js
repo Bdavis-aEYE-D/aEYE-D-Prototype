@@ -845,6 +845,7 @@ function layoutStage(){
   donut.cy = stageH / 2;
   donut.rIris  = Math.min(dw, dh) * 0.42;
   donut.rPupil = donut.rIris * 0.30;
+  donut.analyzed = false;   // reset ghost-ring mode for new fit session
   draw();
 }
 
@@ -1088,6 +1089,16 @@ function draw(){
 
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, stageW, stageH);
   ctx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
+
+  if (donut.analyzed) {
+    // ── Post-analysis: clean view — thin ghost rings only, no overlay or handles
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(108,196,255,0.30)';
+    ctx.beginPath(); ctx.arc(donut.cx, donut.cy, donut.rIris, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,214,108,0.30)';
+    ctx.beginPath(); ctx.arc(cxP, cyP, donut.rPupil, 0, Math.PI*2); ctx.stroke();
+    return;
+  }
 
   // Dark overlay cut out by iris
   ctx.save();
@@ -1339,6 +1350,8 @@ $('btn-analyze').addEventListener('click', function(){
   if (captureMode === 'portrait') {
     savePortraitForCurrentResult();
   } else {
+    donut.analyzed = true;
+    draw();          // redraw immediately with thin rings before analysis runs
     analyze();
   }
 });

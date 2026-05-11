@@ -14,14 +14,18 @@ function analyze(){
   var rIn = Math.max(donut.rPupil || 0, rOut * 0.08);
   var cxP = donut.cxPupil != null ? donut.cxPupil : cx;
   var cyP = donut.cyPupil != null ? donut.cyPupil : cy;
-  var innerBand = rIn + (rOut - rIn) * 0.45;
+  // innerBand: boundary between inner (collarette zone) and outer (true iris body).
+  // Pushed from 0.45 → 0.62 so a prominent collarette — which can extend to ~55%
+  // of the iris span — is fully captured in `inner` rather than contaminating the
+  // `outer` dominant color. `outerM` (= overall color) then reads clean stroma.
+  var innerBand = rIn + (rOut - rIn) * 0.62;
   // Tighter zones for central-heterochromia gradient detection. The pupillary
   // zone (innermost 25% of the iris-pupil annulus) and ciliary zone (outermost
   // 50%) compare against each other for warmth/lightness gradients — catches
   // "Bryan-style" central het that doesn't cross palette categories but has
   // an obvious brown/amber inner ring within a blue/gray iris (Δb > 4 in Lab).
   var pupilZoneCut  = rIn + (rOut - rIn) * 0.25;
-  var ciliaryZoneCut = rIn + (rOut - rIn) * 0.50;
+  var ciliaryZoneCut = rIn + (rOut - rIn) * 0.55;
   var inner = [], outer = [], edge = [], bodyIris = [];
   var pupilZone = [], ciliaryZone = [];
   var edgeDarkSum = 0, edgeDarkCount = 0, midLumSum = 0, midLumCount = 0;
