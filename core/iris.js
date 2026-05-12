@@ -562,14 +562,20 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
     for (var si = 0; si < SAMPLES; si++) {
       var angle = (2 * Math.PI * si) / SAMPLES;
       var cosA = Math.cos(angle), sinA = Math.sin(angle);
-      // Skip upper hemisphere — top eyelid causes false limbus edges
-      // (sinA < -0.50 means the sample point is above cx,cy in screen coords)
-      if (sinA < -0.50) continue;
+      // Skip upper hemisphere — top eyelid causes false limbus edges.
+      // Threshold widened from -0.50 to -0.30: the 9–10 o'clock band
+      // (sinA ≈ -0.26 to -0.50) is included by -0.50 but frequently
+      // contains eyelid shadow whose shadow→sclera gradient is sharper
+      // than the true limbus, inflating the detected radius by 8–12%.
+      // Excluding to -0.30 removes that band with minimal loss of valid
+      // iris-edge information (the lower and lateral iris still provide
+      // enough samples for a reliable fit).
+      if (sinA < -0.30) continue;
       var sx = cxR + r * cosA, sy = cyR + r * sinA;
       if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
       var l = lum(sx, sy);
       // Down-weight extreme pixels: bright = eyelid skin/sclera spill; dark = lash shadow
-      var w = (l > 210 || l < 28) ? 0.15 : 1.0;
+      var w = (l > 210 || l < 35) ? 0.15 : 1.0;
       wsum += l * w; wcount += w;
     }
     var pi = r - rMin;
@@ -606,7 +612,34 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
   var lumRange   = vMax - vMin;
   var confidence = lumRange > 5 ? Math.min(1, maxDeriv / lumRange) : 0;
 
-  return { irisR: rMin + bestIdx, confidence: confidence };
+  // ── Sclera boundary shrink ─────────────────────────────────────────
+  // Walk the detected circle and count bright (sclera-white) pixels in
+  // the lateral–upper quadrant (9–12 o'clock, sinA in -0.30…0).  If
+  // more than 25 % of those samples are sclera-bright, shrink the radius
+  // one step at a time until the sclera fraction drops below 15 %.
+  // Maximum shrink: 15 % of the detected radius (prevents over-trimming).
+  var detectedR = rMin + bestIdx;
+  var shrinkR = detectedR;
+  var maxShrink = Math.round(detectedR * 0.15);
+  var SCLERA_THR = 195;   // lum > 195 → almost certainly sclera white
+  var CHKSAMP = 32;
+  for (var attempt = 0; attempt < maxShrink; attempt++) {
+    var nCheck = 0, nSclera = 0;
+    for (var ci = 0; ci < CHKSAMP; ci++) {
+      var ca = (2 * Math.PI * ci) / CHKSAMP;
+      var csA = Math.sin(ca);
+      if (csA < -0.30 || csA > 0) continue;   // only 9–12 o'clock lateral band
+      var cx2 = Math.round(cxR + shrinkR * Math.cos(ca));
+      var cy2 = Math.round(cyR + shrinkR * Math.sin(ca));
+      if (cx2 < 0 || cx2 >= W || cy2 < 0 || cy2 >= H) continue;
+      nCheck++;
+      if (lum(cx2, cy2) > SCLERA_THR) nSclera++;
+    }
+    if (nCheck < 3 || nSclera / nCheck <= 0.25) break;
+    shrinkR--;
+  }
+
+  return { irisR: shrinkR, confidence: confidence };
 }
 
 // ---- Iris OD: Saturation Ring Profile (dark-iris fallback) ----
