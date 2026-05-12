@@ -758,8 +758,12 @@ function _applyFitClassical(closeup){
     var cuRadSrc = 'AF';
     if (closeup && fit.ok && cuIrisR > 8) {
       // Primary: Radial Intensity Profile (full-circle mean, confidence-scored)
+      // Threshold lowered to 0.22: grey/heterochromic irises produce gradual
+      // transitions that score 0.22-0.35 on this metric. RIP still gives a
+      // more accurate full-circle radius than ODH (which contaminates with
+      // downward eyelid rays) even at moderate confidence.
       var cuRip = findIrisODByRIP(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR);
-      if (cuRip && cuRip.confidence >= 0.35 &&
+      if (cuRip && cuRip.confidence >= 0.22 &&
           cuRip.irisR > cuIrisR * 0.50 && cuRip.irisR < cuIrisR * 1.60) {
         cuIrisR = cuRip.irisR;
         cuRadSrc = 'RIP' + Math.round(cuRip.confidence * 10);
@@ -795,7 +799,7 @@ function _applyFitClassical(closeup){
     // systematically overestimating the iris radius by ~4%.  Trim only when
     // all cascade methods failed (cuRadSrc still 'AF') so confident detections
     // (RIP/ODH/RC/SAT) are never touched.
-    if (closeup && cuRadSrc === 'AF') cuIrisR = Math.round(cuIrisR * 0.96);
+    if (closeup && cuRadSrc === 'AF') cuIrisR = Math.round(cuIrisR * 0.93);
 
     donut.cx     = drawInfo.dx + cuIrisCx   * scaleX;
     donut.cy     = drawInfo.dy + cuIrisCy   * scaleY;
@@ -1039,7 +1043,7 @@ function zoomToEye() {
       // ───────────────────────────────────────────────────────────────────────────
       var _zRipConf = 0, _zFellBack = false;
       var zRIP = findIrisODByRIP(imgEl, zPupil.cx, zPupil.cy, iR);
-      if (zRIP && zRIP.confidence >= 0.35 && zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * 1.4) {
+      if (zRIP && zRIP.confidence >= 0.22 && zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * 1.4) {
         // Primary succeeded — hard-cap at 1.25× MP to block eyelid overshoot
         donut.rIris = Math.min(zRIP.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
         _zRipConf = zRIP.confidence;
