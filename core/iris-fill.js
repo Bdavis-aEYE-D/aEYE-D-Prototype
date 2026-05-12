@@ -228,12 +228,9 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
 
   /* ── Rotational offsets — 180° first, then ±90° (cleanest lateral),
      then ±30° steps ─────────────────────────────────────────────────── */
-  // ±90° added: for a bottom-skin pixel (angle≈90°) the ±90° offsets land
-  // at 0° and 180° — the pure lateral positions which are always clean iris.
-  // For a top-lash pixel (angle≈270°) ±90° also reaches pure lateral.
   var OFFS = [
     Math.PI,                             // 180° — opposite side
-    Math.PI / 2,   -Math.PI / 2,         // ±90° — pure lateral (NEW)
+    Math.PI / 2,   -Math.PI / 2,         // ±90° — pure lateral
     Math.PI / 6,   -Math.PI / 6,         // ±30°
     Math.PI / 3,   -Math.PI / 3,         // ±60°
     Math.PI * 2/3, -Math.PI * 2/3,       // ±120°
@@ -264,10 +261,20 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   /* ── Second pass: fill from clean rotationally-offset pixels ─────── */
   // Source guard: !isBad(srcI) is required; !isSkin(srcI) prevents the amber
   // inner ring from being pasted onto lash positions in the lower hemisphere.
+  //
+  // Lower-hemisphere warm-source guard: when filling a lower-hemisphere pixel
+  // (ftheta ∈ (0,π)), reject any candidate source that (a) comes from above
+  // the iris centre (upper hemisphere) AND (b) is noticeably warm (R−B > 0.10).
+  // This stops the upper amber/heterochromia iris zone from being pasted into
+  // the cool-grey lower iris during lash/shadow fill.  When no non-warm source
+  // is found the pixel is left as-is (graceful degradation — a dark iris/lash
+  // pixel is far less visible than a warm amber smear).
+  var isLowerFill = false;
   for (var k = 0; k < toFill.length; k += 4) {
     var fpx = toFill[k], fpy = toFill[k + 1];
     var fr  = toFill[k + 2], ftheta = toFill[k + 3];
     var dstI = (fpy * outSize + fpx) * 4;
+    isLowerFill = (ftheta > 0 && ftheta < Math.PI);
 
     for (var o = 0; o < OFFS.length; o++) {
       var spx = Math.round(cx + fr * Math.cos(ftheta + OFFS[o]));
@@ -275,6 +282,10 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       if (spx < 0 || spy < 0 || spx >= outSize || spy >= outSize) continue;
       var srcI = (spy * outSize + spx) * 4;
       if (!isBad(srcI) && pixels[srcI + 3] > 20 && !isSkin(srcI)) {
+        if (isLowerFill && spy < cy) {
+          // source is in upper hemisphere — reject if warm
+          if ((pixels[srcI] - pixels[srcI + 2]) > 25) continue;  // > ~0.10 warm
+        }
         pixels[dstI]     = pixels[srcI];
         pixels[dstI + 1] = pixels[srcI + 1];
         pixels[dstI + 2] = pixels[srcI + 2];
@@ -282,7 +293,7 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
         break;
       }
     }
-    // if no clean sample found at any angle: leave original (graceful degradation)
+    // if no clean non-warm source found: leave original (graceful degradation)
   }
 
   /* ── Third pass: lower-hemisphere eyelid skin ────────────────────── */
@@ -326,6 +337,17 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
         needsFill = true;
       }
 
+      // ── Warm-tinted dark pixels: eyelid margin staining ──────────────
+      // These slip below isBad (sat > 0.35 so "not a plain dark lash") and
+      // below isSkin (lm too low to be "bright skin"). They show up as warm-
+      // brown blotches at the lower iris border. Catch them by warmth alone:
+      // any pixel in the outer lower iris that is meaningfully red-shifted
+      // relative to blue (warm > 0.06) and not essentially black (lm > 0.03).
+      var warm3 = (pixels[si2] - pixels[si2 + 2]) / 255;
+      if (!needsFill && warm3 > 0.06 && lm3 > 0.03) {
+        needsFill = true;
+      }
+
       if (needsFill) {
         toFillSkin.push(spx2, spy2, sdist, Math.atan2(sdy, sdx));
       }
@@ -336,6 +358,7 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     var fspx = toFillSkin[ks], fspy = toFillSkin[ks + 1];
     var fsr  = toFillSkin[ks + 2], fstheta = toFillSkin[ks + 3];
     var dstIs = (fspy * outSize + fspx) * 4;
+    var isLowerSkin = (fstheta > 0 && fstheta < Math.PI);
 
     for (var os = 0; os < OFFS.length; os++) {
       var sspx = Math.round(cx + fsr * Math.cos(fstheta + OFFS[os]));
@@ -343,6 +366,10 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       if (sspx < 0 || sspy < 0 || sspx >= outSize || sspy >= outSize) continue;
       var srcIs = (sspy * outSize + sspx) * 4;
       if (isSkinSrc(srcIs)) {
+        // Same lower-hemisphere warm-source guard as Pass 2
+        if (isLowerSkin && sspy < cy) {
+          if ((pixels[srcIs] - pixels[srcIs + 2]) > 25) continue;
+        }
         pixels[dstIs]     = pixels[srcIs];
         pixels[dstIs + 1] = pixels[srcIs + 1];
         pixels[dstIs + 2] = pixels[srcIs + 2];
