@@ -91,21 +91,31 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
                          : (mx - mn) / (2 - mx - mn));
     // Glare: very bright + desaturated (specular reflection)
     if (lum > 0.82 && sat < 0.18) return true;
-    // Lash / lid: very dark + desaturated
-    if (lum < 0.19 && sat < 0.22) return true;
+    // Lash / lid: very dark + mostly desaturated.
+    // Dark-brown lashes on warm irises can reach sat ≈ 0.30–0.35 —
+    // raising threshold to 0.35 catches them without touching the
+    // iris ring (which is always brighter than lum 0.19 in this zone).
+    if (lum < 0.19 && sat < 0.35) return true;
     return false;
   }
 
   /* ── Iris reference color (upper-lateral sectors only) ──────────── */
   // Sample iris tissue at 3 & 9 o'clock ± offsets — strictly in the upper
   // hemisphere (sin < 0 in screen coords where y increases downward).
-  // BUG FIX: the earlier set included 30° and 150° which point INTO the lower
-  // hemisphere (sin = +0.5). When the lower eyelid covers those positions,
-  // skin pixels contaminate the reference, inflating irisRefLum and
-  // irisRefWarm past the actual iris values. The detection thresholds then
-  // shift ABOVE the skin itself, making the entire skin detection blind.
-  // 30° → replaced with 300° (upper-right mirror); 150° → 240° (upper-left).
-  var REF_ANGLES_DEG = [0, 15, 345, 300, 330, 180, 165, 195, 210, 240];
+  // All angles must have sin ≤ 0 in screen coords (y↓) so sample points land
+  // in the upper / lateral hemisphere, never on the lower eyelid.
+  //   sin(θ) in screen coords = Math.sin(θ * π/180)
+  //   positive sin → below centre → eyelid territory → excluded
+  //
+  // History of fixes:
+  //   v1.25: removed 30° (sin=+0.50) and 150° (sin=+0.50)
+  //   v1.26: also removed 15° (sin=+0.259) and 165° (sin=+0.259);
+  //          replaced with upper-hemisphere mirrors 315° and 225°.
+  //
+  // Final set — all 10 angles have sin ≤ 0:
+  //   Right side:  0°(0), 345°(-0.26), 330°(-0.50), 315°(-0.71), 300°(-0.87)
+  //   Left  side: 180°(0), 195°(-0.26), 210°(-0.50), 225°(-0.71), 240°(-0.87)
+  var REF_ANGLES_DEG = [0, 345, 330, 315, 300, 180, 195, 210, 225, 240];
   var refSampleR = wIR * 0.75;
   var irisRefSumL = 0, irisRefSumR = 0, irisRefSumB = 0, irisRefN = 0;
   for (var ri = 0; ri < REF_ANGLES_DEG.length; ri++) {
