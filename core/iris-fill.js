@@ -96,11 +96,16 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     return false;
   }
 
-  /* ── Iris reference color (lateral sectors only) ────────────────── */
-  // Sample iris tissue at 3 & 9 o'clock ± a few degrees — least-occluded.
-  // Captures both luminance AND warm/cool balance (R-B) so skin detection
-  // works across all iris colors, not just dark ones.
-  var REF_ANGLES_DEG = [0, 15, 345, 30, 330, 180, 165, 195, 150, 210];
+  /* ── Iris reference color (upper-lateral sectors only) ──────────── */
+  // Sample iris tissue at 3 & 9 o'clock ± offsets — strictly in the upper
+  // hemisphere (sin < 0 in screen coords where y increases downward).
+  // BUG FIX: the earlier set included 30° and 150° which point INTO the lower
+  // hemisphere (sin = +0.5). When the lower eyelid covers those positions,
+  // skin pixels contaminate the reference, inflating irisRefLum and
+  // irisRefWarm past the actual iris values. The detection thresholds then
+  // shift ABOVE the skin itself, making the entire skin detection blind.
+  // 30° → replaced with 300° (upper-right mirror); 150° → 240° (upper-left).
+  var REF_ANGLES_DEG = [0, 15, 345, 300, 330, 180, 165, 195, 210, 240];
   var refSampleR = wIR * 0.75;
   var irisRefSumL = 0, irisRefSumR = 0, irisRefSumB = 0, irisRefN = 0;
   for (var ri = 0; ri < REF_ANGLES_DEG.length; ri++) {
