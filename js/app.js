@@ -604,21 +604,15 @@ function applyAutoFit(){
       // on good-quality full-face images is 0.19–0.22.  Close-up path uses 0.22; we
       // use 0.18 to capture the full-face range without accepting truly noise-floor results.
       if (rip1 && rip1.confidence >= 0.18 && rip1.irisR > ir * 0.4 && rip1.irisR < ir * 3.5) {
-        // RIP skips the upper hemisphere (eyelid guard) so it can underestimate irisR.
-        // Run ODH bilateral scan to get the true horizontal center and a corrected radius.
-        var odhCor = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
-        var useODH = odhCor
-          && odhCor.irisR >= rip1.irisR * 0.80
-          && odhCor.irisR <= rip1.irisR * 1.50;
-        cxIris_img = useODH ? odhCor.cxIris : cx_img;
+        cxIris_img = cx_img;
         cyIris_img = cy_img;
-        irisR_img  = useODH ? odhCor.irisR : rip1.irisR;
-        radSrc = 'RIP' + Math.round(rip1.confidence * 10) + (useODH ? '+H' : '');
+        irisR_img  = rip1.irisR;
+        radSrc = 'RIP' + Math.round(rip1.confidence * 10);
       } else {
         // Secondary: horizontal gradient scan
         var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
         if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 3.5) {
-          cxIris_img = odh.cxIris;
+          cxIris_img = cx_img;
           cyIris_img = cy_img;
           irisR_img  = odh.irisR;
           radSrc = 'OD';
