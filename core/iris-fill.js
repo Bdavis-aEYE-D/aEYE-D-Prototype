@@ -96,13 +96,13 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     return false;
   }
 
-  /* ── Iris reference luminance (lateral sectors only) ────────────── */
-  // Sample iris tissue at 3 & 9 o'clock ± a few degrees — these are the
-  // least-occluded positions. Average gives a per-image iris brightness
-  // baseline used to detect eyelid skin in the lower hemisphere.
+  /* ── Iris reference color (lateral sectors only) ────────────────── */
+  // Sample iris tissue at 3 & 9 o'clock ± a few degrees — least-occluded.
+  // Captures both luminance AND warm/cool balance (R-B) so skin detection
+  // works across all iris colors, not just dark ones.
   var REF_ANGLES_DEG = [0, 15, 345, 30, 330, 180, 165, 195, 150, 210];
   var refSampleR = wIR * 0.75;
-  var irisRefLumSum = 0, irisRefLumN = 0;
+  var irisRefSumL = 0, irisRefSumR = 0, irisRefSumB = 0, irisRefN = 0;
   for (var ri = 0; ri < REF_ANGLES_DEG.length; ri++) {
     var ra = REF_ANGLES_DEG[ri] * Math.PI / 180;
     var rsx = Math.round(cx + refSampleR * Math.cos(ra));
@@ -110,14 +110,44 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     if (rsx < 0 || rsy < 0 || rsx >= outSize || rsy >= outSize) continue;
     var rsi = (rsy * outSize + rsx) * 4;
     if (pixels[rsi + 3] < 20) continue;
-    irisRefLumSum += pixLum(rsi);
-    irisRefLumN++;
+    irisRefSumL += pixLum(rsi);
+    irisRefSumR += pixels[rsi]     / 255;
+    irisRefSumB += pixels[rsi + 2] / 255;
+    irisRefN++;
   }
-  var irisRefLum   = irisRefLumN > 0 ? irisRefLumSum / irisRefLumN : 0.35;
-  // Skin threshold: eyelid skin is noticeably brighter than iris tissue
-  var lidLumThresh = irisRefLum + 0.22;
-  // Max lum a genuine iris source pixel may have (used in skin-fill guard)
-  var irisSrcMax   = irisRefLum + 0.10;
+  var irisRefLum  = irisRefN > 0 ? irisRefSumL / irisRefN : 0.35;
+  var irisRefR    = irisRefN > 0 ? irisRefSumR / irisRefN : 0.40;
+  var irisRefB    = irisRefN > 0 ? irisRefSumB / irisRefN : 0.35;
+  // Iris warmth baseline: negative = cool (blue/grey), positive = warm (brown)
+  var irisRefWarm = irisRefR - irisRefB;
+
+  // Skin triggers if EITHER significantly brighter OR significantly warmer
+  // than the iris reference. The warmth criterion catches light irises where
+  // lum alone can't separate grey iris tissue from pinkish skin.
+  var lidLumThresh  = irisRefLum + 0.15;    // much brighter than iris
+  var lidWarmThresh = irisRefWarm + 0.12;   // notably warmer/pinker than iris
+
+  // Source guard: the replacement pixel must look like iris, not skin
+  var irisSrcMaxL = irisRefLum  + 0.12;
+  var irisSrcMaxW = irisRefWarm + 0.08;     // not warmer than iris + small margin
+
+  /* ── isSkin: lower-hemisphere pixel is eyelid skin ───────────────── */
+  function isSkin(i) {
+    if (pixels[i + 3] < 20) return false;
+    var lm = pixLum(i);
+    if (lm < 0.22 || lm > 0.92) return false;   // not too dark, not glare
+    var rw = pixels[i] / 255 - pixels[i + 2] / 255;  // red-blue warmth
+    return (lm > lidLumThresh) || (rw > lidWarmThresh);
+  }
+
+  /* ── isSkinSrc: pixel is suitable iris-tissue replacement ────────── */
+  function isSkinSrc(i) {
+    if (pixels[i + 3] < 20) return false;
+    if (isBad(i)) return false;
+    if (pixLum(i) > irisSrcMaxL) return false;
+    var rw = pixels[i] / 255 - pixels[i + 2] / 255;
+    return rw <= irisSrcMaxW;
+  }
 
   /* ── Rotational offsets — 180° mirror first, then ±30° steps ────── */
   var OFFS = [
@@ -169,14 +199,14 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   }
 
   /* ── Third pass: lower-hemisphere eyelid skin ────────────────────── */
-  // The lower eyelid (pinkish, medium brightness) is not caught by isBad()
-  // because its lum (≈0.45–0.65) is far from the dark-lash and glare bands.
-  // Scan ONLY below the iris center (ddy > 0 = 6 o'clock direction) and flag
-  // any pixel brighter than irisRefLum + 0.22 as likely skin, then replace
-  // it from a rotationally-offset source pixel that IS dark enough to be
-  // genuine iris tissue (srcLum ≤ irisRefLum + 0.10).
+  // Lashes (dark) and glare are caught by passes 1-2.  Eyelid SKIN is in
+  // the middle: pinkish, medium brightness, lum ≈ 0.45–0.70.  It won't
+  // trigger isBad(), but isSkin() flags it by luminance OR warmth (R-B).
+  // The warmth criterion is key for light grey/blue irises where lum alone
+  // cannot separate cool iris tissue from warm pink skin.
+  // Scan ONLY below the iris center (ddy > 0 = 6 o'clock direction).
   var toFillSkin = [];
-  var skinBoxT = Math.max(0, Math.ceil(cy));           // start at center row
+  var skinBoxT = Math.max(0, Math.ceil(cy));
   var skinBoxB = Math.min(outSize - 1, Math.ceil(cy + maxR));
 
   for (var spy2 = skinBoxT; spy2 <= skinBoxB; spy2++) {
@@ -185,9 +215,8 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       var sdist = Math.sqrt(sdx * sdx + sdy * sdy);
       if (sdist < minR || sdist > maxR) continue;
       var si2 = (spy2 * outSize + spx2) * 4;
-      if (pixels[si2 + 3] < 20) continue;
-      if (isBad(si2)) continue;  // already handled by pass 2
-      if (pixLum(si2) > lidLumThresh) {
+      if (isBad(si2)) continue;   // already handled by pass 2
+      if (isSkin(si2)) {
         toFillSkin.push(spx2, spy2, sdist, Math.atan2(sdy, sdx));
       }
     }
@@ -203,17 +232,14 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       var sspy = Math.round(cy + fsr * Math.sin(fstheta + OFFS[os]));
       if (sspx < 0 || sspy < 0 || sspx >= outSize || sspy >= outSize) continue;
       var srcIs = (sspy * outSize + sspx) * 4;
-      if (pixels[srcIs + 3] < 20) continue;
-      if (isBad(srcIs)) continue;
-      // Only use source pixels that are actual iris tissue (not more skin)
-      if (pixLum(srcIs) <= irisSrcMax) {
+      if (isSkinSrc(srcIs)) {
         pixels[dstIs]     = pixels[srcIs];
         pixels[dstIs + 1] = pixels[srcIs + 1];
         pixels[dstIs + 2] = pixels[srcIs + 2];
         break;
       }
     }
-    // if no iris-dark source found: leave original
+    // if no clean iris-tissue source found at any angle: leave original
   }
 
   wCtx.putImageData(id, 0, 0);
