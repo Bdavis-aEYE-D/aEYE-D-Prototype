@@ -197,7 +197,7 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       if (pddx * pddx + pddy * pddy > pupilSampleR * pupilSampleR) continue;
       var pia = (pya * outSize + pxa) * 4;
       if (pixels[pia + 3] < 20) continue;
-      if (pixLum(pia) > 0.18) continue;   // only genuinely dark pupil pixels
+      if (pixLum(pia) > 0.10) continue;   // only truly dark pupil pixels; 0.10 excludes catchlight/ring bleed from avg
       pSumR += pixels[pia]; pSumG += pixels[pia + 1]; pSumB += pixels[pia + 2];
       pN++;
     }
@@ -207,17 +207,18 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   var pAvgG = pN >= 4 ? Math.round(pSumG / pN) : 18;
   var pAvgB = pN >= 4 ? Math.round(pSumB / pN) : 18;
 
-  // Sub-pass B: replace any pixel that's noticeably brighter than a pupil
-  // should be. Threshold lowered to 0.30 to catch secondary/diffuse catchlights
-  // that are bright but not fully specular (primary reflections are > 0.80,
-  // secondary diffuse reflections can be 0.30-0.50).
+  // Sub-pass B: replace any pixel inside the pupil zone that is noticeably
+  // brighter than the true dark pupil (~lm 0.04-0.05).  The threshold is set
+  // to 0.10 to catch not just specular/diffuse catchlights (lm 0.30–1.0) but
+  // also medium-dark amber / heterochromia-ring pixels (lm 0.10–0.20) that
+  // bleed into the pupil area and create a visible brown ring if left alone.
   for (var pyb = pupZoneY0; pyb <= pupZoneY1; pyb++) {
     for (var pxb = 0; pxb < outSize; pxb++) {
       var pbdx = pxb - cx,  pbdy = pyb - cy;
       if (pbdx * pbdx + pbdy * pbdy > pupilReplaceR * pupilReplaceR) continue;
       var pib = (pyb * outSize + pxb) * 4;
       if (pixels[pib + 3] < 20) continue;
-      if (pixLum(pib) > 0.30) {   // replace catchlights and diffuse reflections
+      if (pixLum(pib) > 0.10) {   // replace catchlights, diffuse reflections, and amber-ring bleed
         pixels[pib]     = pAvgR;
         pixels[pib + 1] = pAvgG;
         pixels[pib + 2] = pAvgB;
