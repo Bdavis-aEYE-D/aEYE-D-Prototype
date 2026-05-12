@@ -1103,7 +1103,11 @@ function zoomToEye() {
     var placement = checkIrisPlacement(imgEl, cx_chk, cy_chk, rIris_chk);
     var retakeBtn2 = $('btn-quality-retake');
     if (hint) {
-      var needsAdvisory = !placement.ok || _zFellBack || _zRipConf < 0.35;
+      // placement.ok is the ground-truth quality signal: it confirms sclera
+      // contrast is visible just outside the circle at 3/9 o'clock. When it
+      // passes, the circle is correctly fitted regardless of which OD algorithm
+      // fired. Only show an advisory when placement actually fails.
+      var needsAdvisory = !placement.ok;
       // Glasses detection: if the zoom crop covered less than 15% of the pre-zoom image
       // width, detection was confused by glasses frames (tiny circle got upscaled).
       var preW = preZoomState && preZoomState.imgEl ? preZoomState.imgEl.width : imgEl.width;
@@ -1128,10 +1132,10 @@ function zoomToEye() {
         hint.style.color = '#f5a623';
         if (retakeBtn2) retakeBtn2.style.display = '';
       } else if (needsAdvisory) {
-        // Differentiate: total fallback (low) vs uncertain fit (medium)
+        // Differentiate by how far we fell back: total fallback vs partial
         var isLowConf = _zFellBack && _zRipConf < 0.15;
         hint.textContent = isLowConf
-          ? 'Low confidence — a clearer photo will give better results. Retake or drag the circle to fit manually.'
+          ? 'Low confidence — try a clearer photo, or drag the ring to fit manually and tap Analyze.'
           : 'Uncertain fit — drag the ring to adjust if needed, then tap Analyze.';
         hint.style.color = '#f5a623';
         if (retakeBtn2) retakeBtn2.style.display = '';
