@@ -612,47 +612,7 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
   var lumRange   = vMax - vMin;
   var confidence = lumRange > 5 ? Math.min(1, maxDeriv / lumRange) : 0;
 
-  // ── Inward-scan limbus correction ─────────────────────────────────────
-  // Replaces the "shrink loop" approach used in v1.35–v1.36, which checked
-  // pixels AT the boundary and never fired because eyelash shadows sit
-  // OUTSIDE the sclera — making the boundary dark, not sclera-bright.
-  //
-  // This approach scans INWARD from the detected radius:
-  //   1. Walk from detectedR toward center along each ray in the 9–11 o'clock arc.
-  //   2. Note when we enter sclera (lum > SCLERA_ENTER).
-  //   3. Note when we exit sclera back into iris (lum < SCLERA_EXIT).
-  //   4. That exit crossing is the true limbus for that ray.
-  //   5. Set correctedR = minimum limbus radius found across all rays.
-  //
-  // QC-validated on Bryan.jpg: detectedR=297 canvas px → correctedR=286
-  // (4 % shrink, clears sclera at all 7 sampled angles in 9–11 o'clock zone).
-  var detectedR  = rMin + bestIdx;
-  var correctedR = detectedR;
-  var scanMin    = Math.round(detectedR * 0.65);  // max 35 % shrink
-  var SCLERA_ENTER = 150;  // lum > this → we've entered sclera
-  var SCLERA_EXIT  = 118;  // lum < this (while in sclera) → crossed limbus into iris
-  var CHKSAMP = 48;
-
-  for (var ci = 0; ci < CHKSAMP; ci++) {
-    var ca  = (2 * Math.PI * ci) / CHKSAMP;
-    var csA = Math.sin(ca);
-    var ccA = Math.cos(ca);
-    // 9–11 o'clock arc: sinA in (-0.80, +0.01], left half only (ccA < 0)
-    // +0.01 instead of 0 to include 180° despite floating-point sin(π) ≈ 1.2e-16
-    if (csA < -0.80 || csA > 0.01 || ccA > 0) continue;
-
-    var inSclera = false;
-    for (var r = detectedR; r >= scanMin; r--) {
-      var lv = lum(cxR + r * ccA, cyR + r * csA);
-      if (!inSclera) {
-        if (lv >= SCLERA_ENTER) { inSclera = true; }
-      } else {
-        if (lv < SCLERA_EXIT) { correctedR = Math.min(correctedR, r); break; }
-      }
-    }
-  }
-
-  return { irisR: correctedR, confidence: confidence };
+  return { irisR: rMin + bestIdx, confidence: confidence };
 }
 
 // ---- Iris OD: Saturation Ring Profile (dark-iris fallback) ----
