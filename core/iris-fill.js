@@ -149,7 +149,6 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   // pigmented tissue). Amber ring (lm ≈ 0.35–0.45) stays well below the
   // threshold; actual skin (lm ≈ 0.55–0.80) is reliably above it.
   var lidLumThresh = irisRefLum + 0.15;   // brighter than outer iris → skin
-  var irisSrcMaxL  = irisRefLum + 0.12;   // source lum ceiling (iris tissue range)
 
   /* ── isSkin: pixel is eyelid / lower-lid skin ────────────────────── */
   function isSkin(i) {
@@ -157,18 +156,6 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     var lm = pixLum(i);
     if (lm < 0.22 || lm > 0.92) return false;   // not too dark, not glare
     return lm > lidLumThresh;
-  }
-
-  /* ── isSkinSrc: pixel is valid iris-tissue replacement ───────────── */
-  // Requires: (1) not glare/lash, (2) not skin (lum check), (3) not too
-  // dark to be iris (limbal ring), (4) not too bright (skin range).
-  // Floor lowered to 0.20 so the dark outer limbal ring qualifies.
-  function isSkinSrc(i) {
-    if (pixels[i + 3] < 20) return false;
-    if (isBad(i)) return false;
-    if (isSkin(i)) return false;
-    var lm = pixLum(i);
-    return lm >= 0.20 && lm <= irisSrcMaxL;
   }
 
   /* ── Pupil pass: fill catchlight / glare inside pupil zone ─────── */
@@ -294,89 +281,6 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       }
     }
     // if no clean non-warm source found: leave original (graceful degradation)
-  }
-
-  /* ── Third pass: lower-hemisphere eyelid skin ────────────────────── */
-  // Lashes (dark) and glare are caught by passes 1-2.  Eyelid SKIN is in
-  // the middle: pinkish, medium brightness, lum ≈ 0.45–0.70.  It won't
-  // trigger isBad(), but isSkin() flags it by luminance OR warmth (R-B).
-  // The warmth criterion is key for light grey/blue irises where lum alone
-  // cannot separate cool iris tissue from warm pink skin.
-  // Scan ONLY below the iris center (ddy > 0 = 6 o'clock direction).
-  var toFillSkin = [];
-  var skinBoxT = Math.max(0, Math.ceil(cy));
-  var skinBoxB = Math.min(outSize - 1, Math.ceil(cy + maxR));
-
-  // Restrict skin pass to outer iris only — inner ring (amber heterochromia,
-  // warm-coloured but real iris tissue) is at < 60% irisR and must be left alone.
-  var skinMinR = Math.max(wPR_eff * 1.03, wIR * 0.60);
-
-  for (var spy2 = skinBoxT; spy2 <= skinBoxB; spy2++) {
-    for (var spx2 = 0; spx2 < outSize; spx2++) {
-      var sdx = spx2 - cx,  sdy = spy2 - cy;
-      var sdist = Math.sqrt(sdx * sdx + sdy * sdy);
-      if (sdist < skinMinR || sdist > maxR) continue;
-      var si2 = (spy2 * outSize + spx2) * 4;
-      if (isBad(si2)) continue;   // already handled by pass 2
-      var lm3 = pixLum(si2);
-
-      // ── Skin: brighter than outer iris reference ──────────────────────
-      var needsFill = lm3 > lidLumThresh;
-
-      // ── Eyelid margin / shadow: DARKER than outer iris reference ─────
-      // The conjunctival margin and the eyelid shadow on the lower iris are
-      // medium-dark (lm ≈ 0.15–0.38). They are too bright for isBad() and
-      // too dark for isSkin(). Without this criterion they survive all passes
-      // and appear as the "brown line exactly where the eyelid was."
-      //   • Only in the outer iris (r > 70% irisR) — safely above the amber
-      //     inner ring (r < 50% irisR) so no false positives on heterochromia.
-      //   • Must be noticeably darker than iris reference (–0.06 headroom).
-      //   • Must be above 0.15 lum to avoid re-catching lash-dark pixels that
-      //     isBad already processed (but whose neighbours landed here).
-      if (!needsFill && sdist > wIR * 0.70 && lm3 > 0.15 && lm3 < irisRefLum - 0.06) {
-        needsFill = true;
-      }
-
-      // ── Warm-tinted dark pixels: eyelid margin staining ──────────────
-      // These slip below isBad (sat > 0.35 so "not a plain dark lash") and
-      // below isSkin (lm too low to be "bright skin"). They show up as warm-
-      // brown blotches at the lower iris border. Catch them by warmth alone:
-      // any pixel in the outer lower iris that is meaningfully red-shifted
-      // relative to blue (warm > 0.06) and not essentially black (lm > 0.03).
-      var warm3 = (pixels[si2] - pixels[si2 + 2]) / 255;
-      if (!needsFill && warm3 > 0.06 && lm3 > 0.03) {
-        needsFill = true;
-      }
-
-      if (needsFill) {
-        toFillSkin.push(spx2, spy2, sdist, Math.atan2(sdy, sdx));
-      }
-    }
-  }
-
-  for (var ks = 0; ks < toFillSkin.length; ks += 4) {
-    var fspx = toFillSkin[ks], fspy = toFillSkin[ks + 1];
-    var fsr  = toFillSkin[ks + 2], fstheta = toFillSkin[ks + 3];
-    var dstIs = (fspy * outSize + fspx) * 4;
-    var isLowerSkin = (fstheta > 0 && fstheta < Math.PI);
-
-    for (var os = 0; os < OFFS.length; os++) {
-      var sspx = Math.round(cx + fsr * Math.cos(fstheta + OFFS[os]));
-      var sspy = Math.round(cy + fsr * Math.sin(fstheta + OFFS[os]));
-      if (sspx < 0 || sspy < 0 || sspx >= outSize || sspy >= outSize) continue;
-      var srcIs = (sspy * outSize + sspx) * 4;
-      if (isSkinSrc(srcIs)) {
-        // Same lower-hemisphere warm-source guard as Pass 2
-        if (isLowerSkin && sspy < cy) {
-          if ((pixels[srcIs] - pixels[srcIs + 2]) > 25) continue;
-        }
-        pixels[dstIs]     = pixels[srcIs];
-        pixels[dstIs + 1] = pixels[srcIs + 1];
-        pixels[dstIs + 2] = pixels[srcIs + 2];
-        break;
-      }
-    }
-    // if no clean iris-tissue source found at any angle: leave original
   }
 
   wCtx.putImageData(id, 0, 0);
