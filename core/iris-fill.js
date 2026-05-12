@@ -130,44 +130,45 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     irisRefSumB += pixels[rsi + 2] / 255;
     irisRefN++;
   }
-  var irisRefLum  = irisRefN > 0 ? irisRefSumL / irisRefN : 0.35;
-  var irisRefR    = irisRefN > 0 ? irisRefSumR / irisRefN : 0.40;
-  var irisRefB    = irisRefN > 0 ? irisRefSumB / irisRefN : 0.35;
-  // Iris warmth baseline: negative = cool (blue/grey), positive = warm (brown)
-  var irisRefWarm = irisRefR - irisRefB;
+  var irisRefLum = irisRefN > 0 ? irisRefSumL / irisRefN : 0.35;
 
-  // Skin triggers if EITHER significantly brighter OR significantly warmer
-  // than the iris reference. The warmth criterion catches light irises where
-  // lum alone can't separate grey iris tissue from pinkish skin.
-  var lidLumThresh  = irisRefLum + 0.15;    // much brighter than iris
-  var lidWarmThresh = irisRefWarm + 0.12;   // notably warmer/pinker than iris
+  // ── Why lum-only skin detection (warmth criterion removed) ──────────
+  // Two symmetric failures when a warmth margin is applied:
+  //
+  //  Grey iris (Bryan): irisRefWarm ≈ −0.08 → lidWarmThresh = +0.04.
+  //  The amber heterochromia inner ring has warmth ≈ +0.20 → above threshold
+  //  → amber flagged as skin → isSkinSrc rejects it → no source found
+  //  → skin left unfilled.
+  //
+  //  Warm amber iris (Terri1): irisRefWarm ≈ +0.28 → lidWarmThresh = +0.40.
+  //  Eyelid skin warmth ≈ +0.15–0.25 < 0.40 → skin NOT detected by warmth
+  //  → Pass 2 uses skin as lash-fill source → skin pasted over lash positions.
+  //
+  // Lum-only is reliable because eyelid skin is ALWAYS meaningfully brighter
+  // than the iris tissue sampled at the same radius (diffuse surface vs. deep
+  // pigmented tissue). Amber ring (lm ≈ 0.35–0.45) stays well below the
+  // threshold; actual skin (lm ≈ 0.55–0.80) is reliably above it.
+  var lidLumThresh = irisRefLum + 0.15;   // brighter than outer iris → skin
+  var irisSrcMaxL  = irisRefLum + 0.12;   // source lum ceiling (iris tissue range)
 
-  // Source guard: the replacement pixel must look like iris, not skin
-  var irisSrcMaxL = irisRefLum  + 0.12;
-  var irisSrcMaxW = irisRefWarm + 0.08;     // not warmer than iris + small margin
-
-  /* ── isSkin: lower-hemisphere pixel is eyelid skin ───────────────── */
+  /* ── isSkin: pixel is eyelid / lower-lid skin ────────────────────── */
   function isSkin(i) {
     if (pixels[i + 3] < 20) return false;
     var lm = pixLum(i);
     if (lm < 0.22 || lm > 0.92) return false;   // not too dark, not glare
-    var rw = pixels[i] / 255 - pixels[i + 2] / 255;  // red-blue warmth
-    return (lm > lidLumThresh) || (rw > lidWarmThresh);
+    return lm > lidLumThresh;
   }
 
-  /* ── isSkinSrc: pixel is suitable iris-tissue replacement ────────── */
-  // A valid source just needs to: (1) not be glare/lash, (2) not be skin
-  // itself (the !isSkin check already covers warmth), (3) not be a dark
-  // limbal ring pixel (lm ≥ 0.25), and (4) not be too bright.
-  // The previous rw ≤ irisSrcMaxW warmth guard was over-strict: grey outer
-  // iris tissue has rw anywhere from −0.10 to +0.05, so rw > +0.01 was
-  // rejecting valid sources and causing graceful degradation (skin left as-is).
+  /* ── isSkinSrc: pixel is valid iris-tissue replacement ───────────── */
+  // Requires: (1) not glare/lash, (2) not skin (lum check), (3) not too
+  // dark to be iris (limbal ring), (4) not too bright (skin range).
+  // Floor lowered to 0.20 so the dark outer limbal ring qualifies.
   function isSkinSrc(i) {
     if (pixels[i + 3] < 20) return false;
     if (isBad(i)) return false;
-    if (isSkin(i)) return false;        // must not be skin itself
+    if (isSkin(i)) return false;
     var lm = pixLum(i);
-    return lm >= 0.25 && lm <= irisSrcMaxL;
+    return lm >= 0.20 && lm <= irisSrcMaxL;
   }
 
   /* ── Pupil pass: fill catchlight / glare inside pupil zone ─────── */
@@ -224,13 +225,18 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     }
   }
 
-  /* ── Rotational offsets — 180° mirror first, then ±30° steps ────── */
+  /* ── Rotational offsets — 180° first, then ±90° (cleanest lateral),
+     then ±30° steps ─────────────────────────────────────────────────── */
+  // ±90° added: for a bottom-skin pixel (angle≈90°) the ±90° offsets land
+  // at 0° and 180° — the pure lateral positions which are always clean iris.
+  // For a top-lash pixel (angle≈270°) ±90° also reaches pure lateral.
   var OFFS = [
-    Math.PI,
-    Math.PI / 6,   -Math.PI / 6,
-    Math.PI / 3,   -Math.PI / 3,
-    Math.PI * 2/3, -Math.PI * 2/3,
-    Math.PI * 5/6, -Math.PI * 5/6
+    Math.PI,                             // 180° — opposite side
+    Math.PI / 2,   -Math.PI / 2,         // ±90° — pure lateral (NEW)
+    Math.PI / 6,   -Math.PI / 6,         // ±30°
+    Math.PI / 3,   -Math.PI / 3,         // ±60°
+    Math.PI * 2/3, -Math.PI * 2/3,       // ±120°
+    Math.PI * 5/6, -Math.PI * 5/6        // ±150°
   ];
 
   /* ── First pass: collect bad pixels in the iris ring ────────────── */
