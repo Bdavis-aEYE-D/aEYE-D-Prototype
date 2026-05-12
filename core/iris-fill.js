@@ -144,7 +144,10 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   function isSkinSrc(i) {
     if (pixels[i + 3] < 20) return false;
     if (isBad(i)) return false;
-    if (pixLum(i) > irisSrcMaxL) return false;
+    var lm = pixLum(i);
+    // Exclude very dark limbal ring (lum 0.15–0.25) — painting the dark limbal
+    // boundary onto the lower zone would create a visible dark arc artefact.
+    if (lm < 0.25 || lm > irisSrcMaxL) return false;
     var rw = pixels[i] / 255 - pixels[i + 2] / 255;
     return rw <= irisSrcMaxW;
   }
@@ -177,6 +180,8 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   }
 
   /* ── Second pass: fill from clean rotationally-offset pixels ─────── */
+  // Source guard: !isBad(srcI) is required; !isSkin(srcI) prevents the amber
+  // inner ring from being pasted onto lash positions in the lower hemisphere.
   for (var k = 0; k < toFill.length; k += 4) {
     var fpx = toFill[k], fpy = toFill[k + 1];
     var fr  = toFill[k + 2], ftheta = toFill[k + 3];
@@ -187,7 +192,7 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       var spy = Math.round(cy + fr * Math.sin(ftheta + OFFS[o]));
       if (spx < 0 || spy < 0 || spx >= outSize || spy >= outSize) continue;
       var srcI = (spy * outSize + spx) * 4;
-      if (!isBad(srcI) && pixels[srcI + 3] > 20) {
+      if (!isBad(srcI) && pixels[srcI + 3] > 20 && !isSkin(srcI)) {
         pixels[dstI]     = pixels[srcI];
         pixels[dstI + 1] = pixels[srcI + 1];
         pixels[dstI + 2] = pixels[srcI + 2];
@@ -209,11 +214,15 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   var skinBoxT = Math.max(0, Math.ceil(cy));
   var skinBoxB = Math.min(outSize - 1, Math.ceil(cy + maxR));
 
+  // Restrict skin pass to outer iris only — inner ring (amber heterochromia,
+  // warm-coloured but real iris tissue) is at < 60% irisR and must be left alone.
+  var skinMinR = Math.max(minR, wIR * 0.60);
+
   for (var spy2 = skinBoxT; spy2 <= skinBoxB; spy2++) {
     for (var spx2 = 0; spx2 < outSize; spx2++) {
       var sdx = spx2 - cx,  sdy = spy2 - cy;
       var sdist = Math.sqrt(sdx * sdx + sdy * sdy);
-      if (sdist < minR || sdist > maxR) continue;
+      if (sdist < skinMinR || sdist > maxR) continue;
       var si2 = (spy2 * outSize + spx2) * 4;
       if (isBad(si2)) continue;   // already handled by pass 2
       if (isSkin(si2)) {

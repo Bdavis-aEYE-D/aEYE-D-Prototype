@@ -791,6 +791,11 @@ function _applyFitClassical(closeup){
         }
       }
     }
+    // autoFit's horizontal band scan fires at the outer limbal/sclera boundary,
+    // systematically overestimating the iris radius by ~4%.  Trim only when
+    // all cascade methods failed (cuRadSrc still 'AF') so confident detections
+    // (RIP/ODH/RC/SAT) are never touched.
+    if (closeup && cuRadSrc === 'AF') cuIrisR = Math.round(cuIrisR * 0.96);
 
     donut.cx     = drawInfo.dx + cuIrisCx   * scaleX;
     donut.cy     = drawInfo.dy + cuIrisCy   * scaleY;
