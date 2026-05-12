@@ -220,7 +220,12 @@ function _drawIrisStoryCard(ctx, W, H, result) {
     ctx.fillRect(irisCx - irisR, irisCy - irisR, irisR*2, irisR*2);
     var sX0 = Math.max(0, sx), sY0 = Math.max(0, sy);
     var sX1 = Math.min(srcW, sx + crop), sY1 = Math.min(srcH, sy + crop);
-    if (sX1 > sX0 && sY1 > sY0) {
+    var filled = (typeof buildFilledIris === 'function')
+      ? buildFilledIris(srcImg, irisSpec) : null;
+    if (filled) {
+      ctx.drawImage(filled, irisCx - irisR, irisCy - irisR, irisR*2, irisR*2);
+      drewReal = true;
+    } else if (sX1 > sX0 && sY1 > sY0) {
       var dx0 = (sX0 - sx)/crop, dy0 = (sY0 - sy)/crop;
       var dx1 = (sX1 - sx)/crop, dy1 = (sY1 - sy)/crop;
       ctx.drawImage(srcImg, sX0, sY0, sX1-sX0, sY1-sY0,
@@ -581,9 +586,14 @@ function _drawBothEyesCard(ctx, W, H, rRight, rLeft) {
       var iR3=iSpec.rIris*sxR3, crop=iR3*1.9;
       var sx=ix-crop/2, sy=iy-crop/2;
       var sX0=Math.max(0,sx),sY0=Math.max(0,sy),sX1=Math.min(srcW2,sx+crop),sY1=Math.min(srcH2,sy+crop);
-      if (sX1>sX0&&sY1>sY0){
-        ctx.fillStyle=rgb(darken(bRgb,20));
-        ctx.fillRect(cx-cR,cY-cR,cR*2,cR*2);
+      ctx.fillStyle=rgb(darken(bRgb,20));
+      ctx.fillRect(cx-cR,cY-cR,cR*2,cR*2);
+      var filledB = (typeof buildFilledIris === 'function')
+        ? buildFilledIris(srcImg, iSpec) : null;
+      if (filledB) {
+        ctx.drawImage(filledB, cx-cR, cY-cR, cR*2, cR*2);
+        drew = true;
+      } else if (sX1>sX0&&sY1>sY0){
         var dx0=(sX0-sx)/crop, dy0=(sY0-sy)/crop, dx1=(sX1-sx)/crop, dy1=(sY1-sy)/crop;
         ctx.drawImage(srcImg,sX0,sY0,sX1-sX0,sY1-sY0,
           cx-cR+dx0*cR*2,cY-cR+dy0*cR*2,(dx1-dx0)*cR*2,(dy1-dy0)*cR*2);

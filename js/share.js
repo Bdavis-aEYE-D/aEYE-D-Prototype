@@ -261,15 +261,21 @@ function drawIrisCrop(ctx, cx, cy, r, baseRgb, imageSpec){
     var sx = imgIrisX - crop / 2, sy = imgIrisY - crop / 2;
     ctx.fillStyle = 'rgb(' + baseRgb.join(',') + ')';
     ctx.fillRect(cx - r, cy - r, r*2, r*2);
-    var srcX0 = Math.max(0, sx), srcY0 = Math.max(0, sy);
-    var srcX1 = Math.min(srcW, sx + crop), srcY1 = Math.min(srcH, sy + crop);
-    if (srcX1 > srcX0 && srcY1 > srcY0) {
-      var dx0 = (srcX0 - sx) / crop, dy0 = (srcY0 - sy) / crop;
-      var dx1 = (srcX1 - sx) / crop, dy1 = (srcY1 - sy) / crop;
-      ctx.drawImage(srcImg,
-        srcX0, srcY0, srcX1-srcX0, srcY1-srcY0,
-        cx - r + dx0 * (r*2), cy - r + dy0 * (r*2),
-        (dx1-dx0) * (r*2), (dy1-dy0) * (r*2));
+    var filled = (typeof buildFilledIris === 'function')
+      ? buildFilledIris(srcImg, iris) : null;
+    if (filled) {
+      ctx.drawImage(filled, cx - r, cy - r, r*2, r*2);
+    } else {
+      var srcX0 = Math.max(0, sx), srcY0 = Math.max(0, sy);
+      var srcX1 = Math.min(srcW, sx + crop), srcY1 = Math.min(srcH, sy + crop);
+      if (srcX1 > srcX0 && srcY1 > srcY0) {
+        var dx0 = (srcX0 - sx) / crop, dy0 = (srcY0 - sy) / crop;
+        var dx1 = (srcX1 - sx) / crop, dy1 = (srcY1 - sy) / crop;
+        ctx.drawImage(srcImg,
+          srcX0, srcY0, srcX1-srcX0, srcY1-srcY0,
+          cx - r + dx0 * (r*2), cy - r + dy0 * (r*2),
+          (dx1-dx0) * (r*2), (dy1-dy0) * (r*2));
+      }
     }
   } else {
     ctx.fillStyle = 'rgb(' + baseRgb.join(',') + ')';
