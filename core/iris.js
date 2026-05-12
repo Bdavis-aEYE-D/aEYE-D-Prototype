@@ -113,7 +113,7 @@ function autoFit(src, closeup){
   var pcx=best.cx, pcy=best.cy, pr=best.r;
 
   var bandH = 4;
-  var minGrad = 25;
+  var minGrad = closeup ? 20 : 25;  // close-up irises can have lower iris-sclera contrast
   var guardR = Math.round(pr * 1.3);
 
   // Helper: scan one horizontal band at scanY, return {leftHit, rightHit} or {-1,-1}.
@@ -184,11 +184,11 @@ function autoFit(src, closeup){
         var tExt  = (tExtL + tExtR) * 0.5;
         var tScore = span * Math.max(0, tExt - tInt);
         var tR = Math.round(span / 2);
-        // When initial scan succeeded, cap Tier-1 radius at 1.35× the initial
-        // estimate. Eyelid skin rows score high (wide span, good contrast) but
-        // produce a radius ~40-60% larger than the true limbal span — this
-        // rejects them while still allowing the equatorial row to widen slightly.
-        var tRinRange = tR <= R_MAX_CU && (!ok || tR <= irisR * 1.20);
+        // Cap Tier-1 radius at 1.45× the initial estimate. Eyelid rows are
+        // 1.40-1.60× the true limbal span — blocked here. 1.45 also covers the
+        // case where the initial scan locked on a lash line (~0.70× true limbus),
+        // so the true limbus sits at ~1.43× initial and would be missed at 1.20.
+        var tRinRange = tR <= R_MAX_CU && (!ok || tR <= irisR * 1.45);
         if (tScore > bestScore && tRinRange) {
           bestScore = tScore;
           bestCy = ty; bestCx = tCx; bestIrisR = tR;
@@ -1003,7 +1003,7 @@ function checkIrisPlacement(imgEl, cx, cy, rIris) {
   var rightInnerLum = patchLum(cx + rIris * innerMul, cy, pr);
   var leftInnerLum  = patchLum(cx - rIris * innerMul, cy, pr);
 
-  var SCLERA_MIN    = 110;  // sclera should be at least this bright
+  var SCLERA_MIN    = 80;   // sclera should be at least this bright (80 supports dark-sclera eyes)
   var CONTRAST_MIN  = 25;   // and at least this much brighter than the iris body beside it
 
   var rightOk = rightOuterLum >= SCLERA_MIN &&

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UBIRIS v2 Validation — aEYE-D</title>
+<script src="core/iris.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 16px; }
+  h1 { margin: 0 0 4px; font-size: 18px; }
+  #summary { font-size: 14px; margin: 8px 0 16px; color: #aaa; }
+  #summary b { color: #fff; }
+  #stats-bar { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat { background: #222; border-radius: 8px; padding: 10px 16px; min-width: 120px; }
+  .stat .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .05em; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-top: 2px; }
+  .stat.good .value { color: #4caf50; }
+  .stat.warn .value { color: #ff9800; }
+  .stat.bad  .value { color: #f44336; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, 220px); gap: 12px; }
+  .card { background: #1a1a1a; border-radius: 8px; overflow: hidden; position: relative; }
+  .card canvas { display: block; width: 100%; }
+  .card .info { padding: 6px 8px; font-size: 11px; line-height: 1.5; }
+  .card .info .name { color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .info .result { font-weight: 600; }
+  .card .info .result.pass { color: #4caf50; }
+  .card .info .result.fail { color: #f44336; }
+  .card .info .result.partial { color: #ff9800; }
+  .card .info .metrics { color: #aaa; margin-top: 2px; }
+  .badge { position: absolute; top: 6px; right: 6px; font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.7); }
+  .badge.pass { color: #4caf50; border: 1px solid #4caf50; }
+  .badge.fail { color: #f44336; border: 1px solid #f44336; }
+  .badge.partial { color: #ff9800; border: 1px solid #ff9800; }
+  #progress { color: #888; font-size: 13px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<h1>UBIRIS v2 Close-up Validation</h1>
+<div id="summary">Running detection with production <code>core/iris.js</code> · autoFit(img, true) → checkIrisPlacement</div>
+<div id="progress">Loading…</div>
+<div id="stats-bar"></div>
+<div id="grid"></div>
+
+<script>
+'use strict';
+
+var IMAGES = [
+  'C104_S1_I12.jpg','C14_S1_I10.jpg','C154_S1_I4.jpg','C171_S1_I12.jpg',
+  'C189_S2_I8.jpg','C199_S1_I4.jpg','C221_S1_I7.jpg','C257_S1_I6.jpg',
+  'C290_S1_I15.jpg','C308_S2_I5.jpg','C309_S1_I10.jpg','C326_S1_I10.jpg',
+  'C339_S1_I4.jpg','C365_S2_I2.jpg','C379_S2_I2.jpg','C37_S1_I3.jpg',
+  'C389_S2_I3.jpg','C448_S1_I4.jpg','C448_S1_I9.jpg','C459_S2_I9.jpg',
+  'C466_S2_I9.jpg','C484_S2_I3.jpg','C48_S1_I13.jpg','C509_S1_I6.jpg',
+  'C522_S2_I4.jpg','C69_S1_I13.jpg','C69_S1_I7.jpg','C71_S1_I12.jpg',
+  'C7_S1_I14.jpg','C97_S1_I4.jpg'
+];
+
+var results = [];
+var loaded  = 0;
+
+var progressEl  = document.getElementById('progress');
+var gridEl      = document.getElementById('grid');
+var statsBarEl  = document.getElementById('stats-bar');
+
+function renderStats() {
+  var total    = results.length;
+  var pass     = results.filter(function(r){ return r.placement && r.placement.ok && r.autoFit && r.autoFit.ok; }).length;
+  var fitOk    = results.filter(function(r){ return r.autoFit && r.autoFit.ok; }).length;
+  var placeOk  = results.filter(function(r){ return r.placement && r.placement.ok; }).length;
+
+  statsBarEl.innerHTML =
+    stat('Placement pass', placeOk + ' / ' + total, placeOk === total ? 'good' : placeOk >= total*0.7 ? 'warn' : 'bad') +
+    stat('autoFit ok', fitOk + ' / ' + total, fitOk === total ? 'good' : fitOk >= total*0.7 ? 'warn' : 'bad') +
+    stat('Both pass', pass + ' / ' + total, pass === total ? 'good' : pass >= total*0.7 ? 'warn' : 'bad') +
+    stat('Pass rate', Math.round(placeOk/total*100) + '%', placeOk/total >= 0.8 ? 'good' : placeOk/total >= 0.6 ? 'warn' : 'bad');
+}
+
+function stat(label, value, cls) {
+  return '<div class="stat ' + cls + '"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
+}
+
+function processImage(name) {
+  return new Promise(function(resolve) {
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+      var W = img.naturalWidth;
+      var H = img.naturalHeight;
+
+      // Run autoFit with closeup=true
+      var af = null, placement = null, err = null;
+      try {
+        af = autoFit(img, true);
+      } catch(e) { err = e.message || String(e); }
+
+      // Pixel-space values
+      var cx = af ? af.cxFrac * W : W/2;
+      var cy = af ? af.cyFrac * H : H/2;
+      var rIris = af ? af.rIrisFrac * W : 0;
+      var cxPupil = af ? af.cxPupilFrac * W : cx;
+      var cyPupil = af ? af.cyPupilFrac * H : cy;
+      var rPupil  = af ? af.rPupilFrac  * W : 0;
+
+      // checkIrisPlacement using autoFit iris circle
+      if (af && rIris > 5) {
+        try { placement = checkIrisPlacement(img, cx, cy, rIris); } catch(e) {}
+      }
+
+      var result = { name: name, img: img, W: W, H: H,
+        cx: cx, cy: cy, rIris: rIris,
+        cxPupil: cxPupil, cyPupil: cyPupil, rPupil: rPupil,
+        autoFit: af, placement: placement, err: err };
+      results.push(result);
+      renderCard(result);
+
+      loaded++;
+      progressEl.textContent = 'Processed ' + loaded + ' / ' + IMAGES.length;
+      if (loaded === IMAGES.length) {
+        progressEl.textContent = 'Done — ' + IMAGES.length + ' images processed.';
+        renderStats();
+      }
+      resolve();
+    };
+    img.onerror = function() {
+      results.push({ name: name, img: null, err: 'load failed' });
+      loaded++;
+      progressEl.textContent = 'Processed ' + loaded + ' / ' + IMAGES.length;
+      if (loaded === IMAGES.length) renderStats();
+      resolve();
+    };
+    img.src = 'ubiris/' + name;
+  });
+}
+
+function renderCard(r) {
+  var card = document.createElement('div');
+  card.className = 'card';
+
+  // Draw canvas overlay
+  var canvas = document.createElement('canvas');
+  var DISP = 220; // display width in px
+  var scale = DISP / r.W;
+  canvas.width  = DISP;
+  canvas.height = Math.round(r.H * scale);
+  var ctx = canvas.getContext('2d');
+
+  if (r.img) {
+    ctx.drawImage(r.img, 0, 0, canvas.width, canvas.height);
+
+    // Determine pass/fail state
+    var afOk = r.autoFit && r.autoFit.ok;
+    var placeOk = r.placement && r.placement.ok;
+    var placeLeft  = r.placement && r.placement.leftOk;
+    var placeRight = r.placement && r.placement.rightOk;
+
+    if (r.rIris > 5) {
+      // Iris circle
+      var irisColor = !r.placement ? '#888' :
+                      placeOk     ? '#00e676' :
+                      (placeLeft || placeRight) ? '#ff9800' : '#f44336';
+      ctx.strokeStyle = irisColor;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(r.cx * scale, r.cy * scale, r.rIris * scale, 0, Math.PI*2);
+      ctx.stroke();
+
+      // 3/9 o'clock sclera sample dots
+      if (r.placement) {
+        var outerMul = 1.18;
+        drawDot(ctx, (r.cx + r.rIris * outerMul) * scale, r.cy * scale,
+          r.placement.rightOk ? '#00e676' : '#f44336', 3);
+        drawDot(ctx, (r.cx - r.rIris * outerMul) * scale, r.cy * scale,
+          r.placement.leftOk  ? '#00e676' : '#f44336', 3);
+      }
+    }
+
+    // Pupil circle
+    if (r.rPupil > 2) {
+      ctx.strokeStyle = 'rgba(255,255,100,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3,2]);
+      ctx.beginPath();
+      ctx.arc(r.cxPupil * scale, r.cyPupil * scale, r.rPupil * scale, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Center cross
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    var cx2 = r.cx * scale, cy2 = r.cy * scale;
+    ctx.beginPath(); ctx.moveTo(cx2-5, cy2); ctx.lineTo(cx2+5, cy2);
+    ctx.moveTo(cx2, cy2-5); ctx.lineTo(cx2, cy2+5);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = '#333';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#888';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('load error', 8, 20);
+  }
+  card.appendChild(canvas);
+
+  // Badge
+  var badgeClass, badgeText;
+  if (!r.placement) {
+    badgeClass = 'fail'; badgeText = 'ERROR';
+  } else if (r.placement.ok) {
+    badgeClass = 'pass'; badgeText = 'PASS';
+  } else if (r.placement.leftOk || r.placement.rightOk) {
+    badgeClass = 'partial'; badgeText = 'PARTIAL';
+  } else {
+    badgeClass = 'fail'; badgeText = 'FAIL';
+  }
+  var badge = document.createElement('div');
+  badge.className = 'badge ' + badgeClass;
+  badge.textContent = badgeText;
+  card.appendChild(badge);
+
+  // Info row
+  var info = document.createElement('div');
+  info.className = 'info';
+
+  var resultClass = badgeClass;
+  var resultLabel = badgeText;
+
+  var lOk = r.placement ? (r.placement.leftOk  ? 'L✓' : 'L✗') : '';
+  var rOk = r.placement ? (r.placement.rightOk ? 'R✓' : 'R✗') : '';
+  var afLabel = r.autoFit ? (r.autoFit.ok ? 'fit✓' : 'fit?') : 'fit✗';
+  var lumStr = r.placement
+    ? 'L:' + r.placement.leftOuterLum + ' R:' + r.placement.rightOuterLum
+    : (r.err || '');
+  var radStr = r.rIris > 0 ? 'r=' + Math.round(r.rIris) + 'px' : '';
+
+  info.innerHTML =
+    '<div class="name">' + r.name.replace('.jpg','') + '</div>' +
+    '<div class="result ' + resultClass + '">' + resultLabel + ' &nbsp;' + lOk + ' ' + rOk + ' &nbsp;' + afLabel + '</div>' +
+    '<div class="metrics">' + radStr + (radStr && lumStr ? ' · ' : '') + lumStr + '</div>';
+
+  card.appendChild(info);
+  gridEl.appendChild(card);
+}
+
+function drawDot(ctx, x, y, color, r) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fill();
+}
+
+// Process images sequentially to avoid overwhelming the browser
+(function runNext(i) {
+  if (i >= IMAGES.length) return;
+  processImage(IMAGES[i]).then(function() { runNext(i+1); });
+})(0);
+</script>
+</body>
+</html>
