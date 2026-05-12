@@ -236,7 +236,8 @@ function renderResult(result){
   var esEl = $('r-eyeshape');
   if (esEl) {
     if (result.eyeShape) {
-      var esColors = { Almond:'#a3b4c8', Round:'#60a5fa', Upturned:'#f59e0b',
+      var esColors = { Almond:'#a3b4c8', Round:'#60a5fa', Hooded:'#c084fc',
+                       Monolid:'#f0abfc', Upturned:'#f59e0b',
                        Downturned:'#f87171', Narrow:'var(--ink-dim)' };
       esEl.textContent = result.eyeShape.label;
       esEl.style.color = esColors[result.eyeShape.label] || '';
@@ -625,6 +626,8 @@ function renderStory(result){
     var esStories = {
       Almond:     'The <strong>almond eye shape</strong> — tapered ends, moderate vertical opening, corner-to-corner line roughly horizontal — is the most anatomically common form. The inner (medial) and outer (lateral) canthus sit at nearly the same height, giving the eye a balanced look across most lighting conditions.',
       Round:      'The <strong>round eye shape</strong> has a generous vertical opening relative to its width — the iris is exposed more fully, and the upper or lower sclera may be visible at neutral gaze. Round eyes tend to emphasise iris colour and are particularly effective at conveying depth of expression.',
+      Hooded:     'A <strong>hooded eye shape</strong> — the upper eyelid fold descends past the lid crease, partially draping over the iris when the eye is in neutral gaze. The crease is still visible (distinguishing hooded from monolid), but the upper iris is covered by skin rather than open lid. This is an anatomical trait unrelated to tiredness — it results from the relative depth of the brow ridge and the volume of the upper eyelid. Note: the upper iris region may be less fully sampled in this analysis.',
+      Monolid:    'A <strong>monolid eye shape</strong> — the upper lid has no visible crease or fold, so the skin runs in a single smooth plane from brow to lash. Common in East Asian heritage, this is purely an anatomical variant reflecting the attachment of the levator palpebrae to the eyelid skin. The absence of a crease means the upper lid sits closer to the pupil than in a creased eye, and the upper iris zone may be partially covered. This analysis captures the visible iris region.',
       Upturned:   'An <strong>upturned (cat-eye) shape</strong> — the outer corner sits perceptibly higher than the inner corner. This positive canthal tilt is a distinctive structural feature associated with a "lifted" appearance at the lateral edge. The angle is fixed by the lateral canthal tendon and the orbital rim.',
       Downturned: 'A <strong>downturned eye shape</strong> — the outer corner drops below the inner corner. The gentle negative canthal tilt lends a soft, considered appearance at rest. This form is associated with a longer medial canthal tendon relative to the lateral anchor.',
       Narrow:     'A <strong>narrow eye opening</strong> — the visible aperture is compact relative to the width. This may reflect a naturally close upper and lower lid margin, a hooded brow ridge limiting visible lid height, or strong orbicularis tone. Iris colour is partially framed by the lash line even in open-eye gaze.'
