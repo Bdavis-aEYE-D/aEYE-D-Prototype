@@ -696,5 +696,43 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   result.rarityOneInX  = _rd.oneInX;
   result.rarityFactors = _rd.factors;
 
+  // ── Image quality assessment ────────────────────────────────────────────
+  // Reads the pixel mask stats collected during the scan above.
+  // Returns { label:'Good'|'Fair'|'Poor', score:0-100, reasons:[] }
+  // Never blocks — advisory only. Attached to result so any UI can act on it.
+  (function(){
+    var reasons = [];
+    var pts = 100;
+    var qTotal = maskStats.kept + maskStats.glare + maskStats.lash
+               + maskStats.shadow + maskStats.sclera + maskStats.lid;
+
+    if (qTotal > 0) {
+      var glareRatio = maskStats.glare / qTotal;
+      var lashRatio  = maskStats.lash  / qTotal;
+      var keepRatio  = maskStats.kept  / qTotal;
+
+      if      (glareRatio > 0.30) { pts -= 35; reasons.push('Heavy glare on iris — try softer or side lighting'); }
+      else if (glareRatio > 0.15) { pts -= 15; reasons.push('Some glare on iris'); }
+
+      if (lashRatio > 0.22) { pts -= 20; reasons.push('Eye may be partially closed — open wider'); }
+
+      if      (keepRatio  < 0.20) { pts -= 25; reasons.push('Low valid pixel coverage'); }
+      else if (keepRatio  < 0.35) { pts -= 10; }
+    }
+
+    // Iris size relative to stage — too small = photo taken too far away
+    var irisRel = stageW > 0 ? donut.rIris / stageW : 0;
+    if      (irisRel < 0.13) { pts -= 40; reasons.push('Move closer — iris is too small in frame'); }
+    else if (irisRel < 0.20) { pts -= 15; reasons.push('Move a little closer for sharper detail'); }
+
+    // Outer pixel count — raw sample size
+    if      (outer.length < 150) { pts -= 30; }
+    else if (outer.length < 350) { pts -= 10; }
+
+    pts = Math.max(0, pts);
+    var label = pts >= 72 ? 'Good' : pts >= 46 ? 'Fair' : 'Poor';
+    result.quality = { label: label, score: pts, reasons: reasons };
+  })();
+
   return result;
 }

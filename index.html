@@ -278,6 +278,29 @@
     transform: translate(-50%, -50%);
     color: rgba(255,255,255,0.2); font-size: 80px; font-weight: 800;
   }
+
+  /* ── Quality advisory ─────────────────────────────── */
+  #quality-advisory {
+    margin: 0 0 4px;
+    padding: 14px 16px 12px;
+    border-radius: 14px;
+    border: 1.5px solid #f5a623;
+    background: rgba(245,166,35,0.08);
+  }
+  #quality-advisory.qa-poor {
+    border-color: #f5623b;
+    background: rgba(245,98,59,0.08);
+  }
+  .qa-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .qa-icon   { font-size: 18px; flex-shrink: 0; }
+  .qa-title  { font-size: 14px; font-weight: 700; color: #f5a623; }
+  #quality-advisory.qa-poor .qa-title { color: #f5623b; }
+  .qa-reasons {
+    font-size: 13px; color: var(--ink-dim);
+    margin: 0 0 10px; line-height: 1.45;
+  }
+  .qa-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .qa-actions button { font-size: 13px; padding: 8px 16px; }
 </style>
 </head>
 <body>
@@ -290,7 +313,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v1.15 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v1.16 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -410,6 +433,18 @@
 
     <!-- ============== Step 4: Davis Card ============== -->
     <div id="card-result" style="display:none">
+      <!-- Quality advisory — shown for Fair/Poor image quality only -->
+      <div id="quality-advisory" style="display:none">
+        <div class="qa-header">
+          <span class="qa-icon" id="qa-icon">⚠️</span>
+          <span class="qa-title" id="qa-title">Photo quality is fair</span>
+        </div>
+        <p class="qa-reasons" id="qa-reasons"></p>
+        <div class="qa-actions">
+          <button type="button" id="btn-qa-retake">↩ Retake Photo</button>
+          <button type="button" class="secondary" id="btn-qa-dismiss">Keep This Result</button>
+        </div>
+      </div>
       <div class="result">
         <div class="step">eyeD Card</div>
         <span class="eye-badge" id="r-side">Right Eye</span>

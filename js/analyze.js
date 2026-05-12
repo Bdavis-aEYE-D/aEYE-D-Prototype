@@ -39,6 +39,30 @@ function analyze(){
 function renderResult(result){
   var resCard = $('card-result');
   resCard.style.display = 'block';
+
+  // ── Quality advisory ──────────────────────────────────────────────────────
+  var qa = $('quality-advisory');
+  if (qa) {
+    var q = result.quality;
+    if (q && q.label !== 'Good') {
+      var isPoor = q.label === 'Poor';
+      qa.className = isPoor ? 'qa-poor' : '';
+      qa.style.display = 'block';
+      $('qa-icon').textContent  = isPoor ? '⚠️' : '💛';
+      $('qa-title').textContent = isPoor
+        ? 'Photo quality is poor — result may be inaccurate'
+        : 'Photo quality is fair — result may vary';
+      var reasonsEl = $('qa-reasons');
+      if (reasonsEl) {
+        reasonsEl.textContent = q.reasons.length
+          ? q.reasons.slice(0, 2).join(' · ')
+          : 'Try a closer, clearer photo for best accuracy.';
+      }
+    } else {
+      qa.style.display = 'none';
+    }
+  }
+
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = result.overall.name;
   // ── Opening line: colour + intensity ──────────────────────────────────────

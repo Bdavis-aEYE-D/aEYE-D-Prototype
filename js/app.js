@@ -1467,6 +1467,18 @@ $('share-close').addEventListener('click', function(){
   $('share-modal').classList.remove('show');
 });
 
+// Quality advisory buttons
+$('btn-qa-retake').addEventListener('click', function(){
+  $('quality-advisory').style.display = 'none';
+  $('card-result').style.display = 'none';
+  $('card-fit').style.display = 'none';
+  $('card-locate').style.display = 'none';
+  $('card-capture').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('btn-qa-dismiss').addEventListener('click', function(){
+  $('quality-advisory').style.display = 'none';
+});
+
 // View toggle wiring (Card vs Story)
 (function(){
   var btnCard = $('view-card'), btnStory = $('view-story');
