@@ -409,7 +409,7 @@ function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
 // Scans the sclera→iris boundary horizontally where the contrast is strongest.
 // Returns { irisR, cxIris, cyIris } in imgEl pixels, or null if not enough hits.
 // pupilRHint: guard radius so we skip the pupil→iris boundary.
-function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
+function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint, irisRHint) {
   var W = imgEl.naturalWidth  || imgEl.width;
   var H = imgEl.naturalHeight || imgEl.height;
   if (!W || !H) return null;
@@ -447,15 +447,18 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint) {
   var leftHit = -1, rightHit = -1;
 
   // Restrict horizontal scan to a plausible limbus zone.
-  // Scanning all the way to the image edge picks up face/skin boundaries far outside
-  // the iris (e.g. when the eye is near the crop edge) and produces r > 1.5× iris.
-  // Cap at 5.5× pupil radius (iris is ~3–4× pupil, so this allows generous margin).
-  // Floor at W*0.38: when the pupil hint is tiny (catch-light fallback = iR*0.15),
-  // pupilHint*5.5 = iR*0.825 which stops SHORT of the true limbus. The floor ensures
-  // the scan always reaches past the iris regardless of how small the pupil hint is.
-  var maxSearchR = pupilRHint > 0
-    ? Math.min(Math.min(W, H) * 0.47, Math.max(Math.round(pupilRHint * 5.5), Math.round(Math.min(W, H) * 0.38)))
-    : Math.min(W, H) * 0.47;
+  // When an iris-radius hint is supplied (full-face path), cap search at 1.5× that hint
+  // so the scan cannot reach eyelid/skin boundaries beyond the iris zone.
+  // Without the hint (close-up path), use the pupil-based formula that ensures the
+  // scan always reaches past the iris regardless of how small the pupil hint is.
+  var maxSearchR;
+  if (irisRHint > 0) {
+    maxSearchR = Math.round(irisRHint * 1.5);
+  } else if (pupilRHint > 0) {
+    maxSearchR = Math.min(Math.min(W, H) * 0.47, Math.max(Math.round(pupilRHint * 5.5), Math.round(Math.min(W, H) * 0.38)));
+  } else {
+    maxSearchR = Math.min(W, H) * 0.47;
+  }
 
   // Left limbus: scan rightward from the capped start, find steepest brightness DROP entering iris
   var leftMax = 20;   // minimum gradient threshold (lum units over 2px)

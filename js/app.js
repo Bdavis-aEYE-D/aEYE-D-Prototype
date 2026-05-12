@@ -599,20 +599,20 @@ function applyAutoFit(){
       //   Tertiary:  ring-contrast global search, then raw MediaPipe radius
       var cxIris_img, cyIris_img, irisR_img, radSrc;
       var rip1 = findIrisODByRIP(imgEl, cxPupil_img, cyPupil_img, ir);
-      // Threshold 0.18: full-face MediaPipe crops are small (322–1008 px) so the
-      // gradient transition is shallower than on close-up shots; observed confidence
-      // on good-quality full-face images is 0.19–0.22.  Close-up path uses 0.22; we
-      // use 0.18 to capture the full-face range without accepting truly noise-floor results.
-      if (rip1 && rip1.confidence >= 0.18 && rip1.irisR > ir * 0.4 && rip1.irisR < ir * 3.5) {
+      // Threshold 0.35: close-up images score 0.35+; full-face portrait crops score
+      // lower (~0.15–0.30) because the limbus transition is softer at portrait resolution.
+      // When RIP confidence is below 0.35, fall through to ODH which uses a capped
+      // search range (irisRHint = ir) so it stays within the iris zone.
+      if (rip1 && rip1.confidence >= 0.35 && rip1.irisR > ir * 0.4 && rip1.irisR < ir * 3.5) {
         cxIris_img = cx_img;
         cyIris_img = cy_img;
         irisR_img  = rip1.irisR;
         radSrc = 'RIP' + Math.round(rip1.confidence * 10);
       } else {
-        // Secondary: horizontal gradient scan
-        var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre);
-        if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 3.5) {
-          cxIris_img = cx_img;
+        // Secondary: horizontal gradient scan with iris-radius cap to stay within iris zone
+        var odh = findIrisODHorizontal(imgEl, cxPupil_img, cyPupil_img, pupilR_pre, ir);
+        if (odh && odh.irisR > ir * 0.4 && odh.irisR < ir * 1.6) {
+          cxIris_img = odh.cxIris;
           cyIris_img = cy_img;
           irisR_img  = odh.irisR;
           radSrc = 'OD';
