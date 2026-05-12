@@ -734,5 +734,14 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     result.quality = { label: label, score: pts, reasons: reasons };
   })();
 
+  // Eye shape classification (optional — only runs if eye-shape.js is loaded)
+  if (typeof classifyEyeShape === 'function') {
+    result.eyeShape = classifyEyeShape(imgEl, {
+      cx: donut.cx, cy: donut.cy,
+      rIris: donut.rIris, rPupil: donut.rPupil,
+      drawInfo: drawInfo
+    });
+  }
+
   return result;
 }
