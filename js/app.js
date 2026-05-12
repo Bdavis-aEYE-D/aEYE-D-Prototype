@@ -599,7 +599,11 @@ function applyAutoFit(){
       //   Tertiary:  ring-contrast global search, then raw MediaPipe radius
       var cxIris_img, cyIris_img, irisR_img, radSrc;
       var rip1 = findIrisODByRIP(imgEl, cxPupil_img, cyPupil_img, ir);
-      if (rip1 && rip1.confidence >= 0.35 && rip1.irisR > ir * 0.4 && rip1.irisR < ir * 3.5) {
+      // Threshold 0.18: full-face MediaPipe crops are small (322–1008 px) so the
+      // gradient transition is shallower than on close-up shots; observed confidence
+      // on good-quality full-face images is 0.19–0.22.  Close-up path uses 0.22; we
+      // use 0.18 to capture the full-face range without accepting truly noise-floor results.
+      if (rip1 && rip1.confidence >= 0.18 && rip1.irisR > ir * 0.4 && rip1.irisR < ir * 3.5) {
         cxIris_img = cx_img;
         cyIris_img = cy_img;
         irisR_img  = rip1.irisR;
