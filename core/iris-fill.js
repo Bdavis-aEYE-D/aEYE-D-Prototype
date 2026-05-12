@@ -152,6 +152,47 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     return rw <= irisSrcMaxW;
   }
 
+  /* ── Pupil pass: fill catchlight / glare inside pupil zone ─────── */
+  // The pupil is an almost-black disc. Any bright pixel inside it is a
+  // specular catchlight (camera flash reflection). Replace those bright
+  // pixels with the average dark color sampled from the same pupil zone,
+  // producing a clean solid-dark pupil for the share card.
+  var pupilZoneR  = wPR * 1.08;   // full pupil + thin edge band
+  var pupZoneY0   = Math.max(0,            Math.floor(cy - pupilZoneR));
+  var pupZoneY1   = Math.min(outSize - 1,  Math.ceil( cy + pupilZoneR));
+  // Sub-pass A: collect average dark pupil color (skip any bright pixels)
+  var pSumR = 0, pSumG = 0, pSumB = 0, pN = 0;
+  for (var pya = pupZoneY0; pya <= pupZoneY1; pya++) {
+    for (var pxa = 0; pxa < outSize; pxa++) {
+      var pddx = pxa - cx,  pddy = pya - cy;
+      if (pddx * pddx + pddy * pddy > pupilZoneR * pupilZoneR) continue;
+      var pia = (pya * outSize + pxa) * 4;
+      if (pixels[pia + 3] < 20) continue;
+      if (pixLum(pia) > 0.38) continue;   // ignore catchlights when averaging
+      pSumR += pixels[pia]; pSumG += pixels[pia + 1]; pSumB += pixels[pia + 2];
+      pN++;
+    }
+  }
+  // Fallback: if pupil is mostly glare (very unusual), use near-black
+  var pAvgR = pN >= 4 ? Math.round(pSumR / pN) : 18;
+  var pAvgG = pN >= 4 ? Math.round(pSumG / pN) : 18;
+  var pAvgB = pN >= 4 ? Math.round(pSumB / pN) : 18;
+
+  // Sub-pass B: replace any bright / glare pixel inside the pupil zone
+  for (var pyb = pupZoneY0; pyb <= pupZoneY1; pyb++) {
+    for (var pxb = 0; pxb < outSize; pxb++) {
+      var pbdx = pxb - cx,  pbdy = pyb - cy;
+      if (pbdx * pbdx + pbdy * pbdy > pupilZoneR * pupilZoneR) continue;
+      var pib = (pyb * outSize + pxb) * 4;
+      if (pixels[pib + 3] < 20) continue;
+      if (pixLum(pib) > 0.42) {   // catchlight threshold — pupils never reach this lum
+        pixels[pib]     = pAvgR;
+        pixels[pib + 1] = pAvgG;
+        pixels[pib + 2] = pAvgB;
+      }
+    }
+  }
+
   /* ── Rotational offsets — 180° mirror first, then ±30° steps ────── */
   var OFFS = [
     Math.PI,
