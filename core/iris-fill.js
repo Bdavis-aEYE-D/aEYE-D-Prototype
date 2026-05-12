@@ -175,14 +175,17 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   // specular catchlight (camera flash reflection). Replace those bright
   // pixels with the average dark color sampled from the same pupil zone,
   // producing a clean solid-dark pupil for the share card.
-  // Sampling zone: strictly inside the pupil (75% of pupil radius) so we
-  // never accidentally include the inner amber/heterochromia ring which starts
-  // just outside the pupil edge. The wider 1.08× zone was pulling the average
-  // toward amber and producing a brownish disc in the share card.
-  var pupilSampleR = wPR * 0.75;
-  // Replacement zone: the pupil proper (95% of pupil radius). Leaving the
-  // pupil-iris transition untouched avoids an unnatural hard boundary.
-  var pupilReplaceR = wPR * 0.95;
+  //
+  // Guard: if rPupil wasn't detected (wPR very small), estimate it as 20%
+  // of iris radius so the pass doesn't silently no-op on undetected pupils.
+  var wPR_eff = wPR > 4 ? wPR : wIR * 0.20;
+
+  // Sampling zone: strictly inside 70% of effective pupil radius so we never
+  // accidentally include the inner amber/heterochromia ring which starts just
+  // outside the pupil edge.
+  var pupilSampleR = wPR_eff * 0.70;
+  // Replacement zone: full pupil (1.02× to safely cover the entire dark disc).
+  var pupilReplaceR = wPR_eff * 1.02;
   var pupZoneY0   = Math.max(0,            Math.floor(cy - pupilReplaceR));
   var pupZoneY1   = Math.min(outSize - 1,  Math.ceil( cy + pupilReplaceR));
   // Sub-pass A: collect average dark pupil color from strict inner zone
@@ -203,14 +206,17 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   var pAvgG = pN >= 4 ? Math.round(pSumG / pN) : 18;
   var pAvgB = pN >= 4 ? Math.round(pSumB / pN) : 18;
 
-  // Sub-pass B: replace any bright / glare pixel inside the replacement zone
+  // Sub-pass B: replace any pixel that's noticeably brighter than a pupil
+  // should be. Threshold lowered to 0.30 to catch secondary/diffuse catchlights
+  // that are bright but not fully specular (primary reflections are > 0.80,
+  // secondary diffuse reflections can be 0.30-0.50).
   for (var pyb = pupZoneY0; pyb <= pupZoneY1; pyb++) {
     for (var pxb = 0; pxb < outSize; pxb++) {
       var pbdx = pxb - cx,  pbdy = pyb - cy;
       if (pbdx * pbdx + pbdy * pbdy > pupilReplaceR * pupilReplaceR) continue;
       var pib = (pyb * outSize + pxb) * 4;
       if (pixels[pib + 3] < 20) continue;
-      if (pixLum(pib) > 0.42) {   // catchlight threshold — pupils never reach this lum
+      if (pixLum(pib) > 0.30) {   // replace catchlights and diffuse reflections
         pixels[pib]     = pAvgR;
         pixels[pib + 1] = pAvgG;
         pixels[pib + 2] = pAvgB;
@@ -228,7 +234,10 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
   ];
 
   /* ── First pass: collect bad pixels in the iris ring ────────────── */
-  var minR  = Math.max(0, wPR * 0.85);  // just inside pupil edge
+  // minR uses wPR_eff so it stays consistent with the pupil pass zone.
+  // The pupil zone (0 → pupilReplaceR) was already cleaned above; start
+  // Pass 1 just past that boundary so it never re-darkens the replacement.
+  var minR  = Math.max(0, wPR_eff * 1.03);  // just past pupil replacement edge
   var maxR  = wIR * 1.08;               // just past iris edge
   var boxMn = Math.max(0, Math.floor(cy - maxR));
   var boxMx = Math.min(outSize - 1, Math.ceil(cy + maxR));
@@ -282,7 +291,7 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
 
   // Restrict skin pass to outer iris only — inner ring (amber heterochromia,
   // warm-coloured but real iris tissue) is at < 60% irisR and must be left alone.
-  var skinMinR = Math.max(minR, wIR * 0.60);
+  var skinMinR = Math.max(wPR_eff * 1.03, wIR * 0.60);
 
   for (var spy2 = skinBoxT; spy2 <= skinBoxB; spy2++) {
     for (var spx2 = 0; spx2 < outSize; spx2++) {
