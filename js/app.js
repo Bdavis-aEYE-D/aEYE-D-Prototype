@@ -1081,6 +1081,12 @@ function zoomToEye() {
       // and dark irises inflate the scan result without this tighter ceiling.
       donut.rPupil = Math.max(6, Math.min(zPR * nsx, donut.rIris * 0.26));
     }
+    // Close-up OD trim: RIP and ODH anchor at the outer limbal/sclera boundary,
+    // overestimating the true iris edge by 5–8%. The 0.93 trim in _applyFitClassical
+    // only fires for the pure autoFit fallback; after zoomToEye reruns RIP/ODH that
+    // trim is gone. Apply a 6% trim here for all close-up photos so the final circle
+    // sits on the iris, not on the sclera.
+    if (isCloseupMode) donut.rIris = Math.round(donut.rIris * 0.94);
     draw();
 
     // ── Placement check + confidence-aware advisory ─────────────────────────

@@ -306,7 +306,26 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       if (sdist < skinMinR || sdist > maxR) continue;
       var si2 = (spy2 * outSize + spx2) * 4;
       if (isBad(si2)) continue;   // already handled by pass 2
-      if (isSkin(si2)) {
+      var lm3 = pixLum(si2);
+
+      // ── Skin: brighter than outer iris reference ──────────────────────
+      var needsFill = lm3 > lidLumThresh;
+
+      // ── Eyelid margin / shadow: DARKER than outer iris reference ─────
+      // The conjunctival margin and the eyelid shadow on the lower iris are
+      // medium-dark (lm ≈ 0.15–0.38). They are too bright for isBad() and
+      // too dark for isSkin(). Without this criterion they survive all passes
+      // and appear as the "brown line exactly where the eyelid was."
+      //   • Only in the outer iris (r > 70% irisR) — safely above the amber
+      //     inner ring (r < 50% irisR) so no false positives on heterochromia.
+      //   • Must be noticeably darker than iris reference (–0.06 headroom).
+      //   • Must be above 0.15 lum to avoid re-catching lash-dark pixels that
+      //     isBad already processed (but whose neighbours landed here).
+      if (!needsFill && sdist > wIR * 0.70 && lm3 > 0.15 && lm3 < irisRefLum - 0.06) {
+        needsFill = true;
+      }
+
+      if (needsFill) {
         toFillSkin.push(spx2, spy2, sdist, Math.atan2(sdy, sdx));
       }
     }
