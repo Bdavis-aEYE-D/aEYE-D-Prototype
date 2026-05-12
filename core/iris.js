@@ -614,28 +614,39 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
 
   // ── Sclera boundary shrink ─────────────────────────────────────────
   // Walk the detected circle and count bright (sclera-white) pixels in
-  // the lateral–upper quadrant (9–12 o'clock, sinA in -0.30…0).  If
-  // more than 25 % of those samples are sclera-bright, shrink the radius
-  // one step at a time until the sclera fraction drops below 15 %.
-  // Maximum shrink: 15 % of the detected radius (prevents over-trimming).
+  // the upper-left quadrant (9–11 o'clock, sinA in -0.80…0, cosA < 0).
+  // If more than 20 % of those samples are sclera-bright, shrink the
+  // radius one step at a time until the sclera fraction drops below 15 %.
+  // Maximum shrink: 20 % of the detected radius (prevents over-trimming).
+  //
+  // v1.36 fixes vs v1.35:
+  //   • Check zone widened: sinA cutoff -0.30 → -0.80 so the 10–11 o'clock
+  //     band (sinA -0.50 to -0.87) is actually sampled — it was silently
+  //     skipped before, which is why the shrink loop never fired.
+  //   • SCLERA_THR lowered 195 → 170: shadowed sclera in the upper-left
+  //     quadrant may only reach lum ~160–180, not the 195 threshold.
+  //   • maxShrink raised 15 % → 20 % to give enough headroom to clear the
+  //     bleed without over-trimming healthy eyes.
   var detectedR = rMin + bestIdx;
   var shrinkR = detectedR;
-  var maxShrink = Math.round(detectedR * 0.15);
-  var SCLERA_THR = 195;   // lum > 195 → almost certainly sclera white
+  var maxShrink = Math.round(detectedR * 0.20);
+  var SCLERA_THR = 170;   // lum > 170 → sclera (catches shadowed sclera)
   var CHKSAMP = 32;
   for (var attempt = 0; attempt < maxShrink; attempt++) {
     var nCheck = 0, nSclera = 0;
     for (var ci = 0; ci < CHKSAMP; ci++) {
       var ca = (2 * Math.PI * ci) / CHKSAMP;
       var csA = Math.sin(ca);
-      if (csA < -0.30 || csA > 0) continue;   // only 9–12 o'clock lateral band
+      // 9–11 o'clock band: sinA between -0.80 and 0, left half only
+      if (csA < -0.80 || csA > 0) continue;
+      if (Math.cos(ca) > 0) continue;   // skip right half
       var cx2 = Math.round(cxR + shrinkR * Math.cos(ca));
       var cy2 = Math.round(cyR + shrinkR * Math.sin(ca));
       if (cx2 < 0 || cx2 >= W || cy2 < 0 || cy2 >= H) continue;
       nCheck++;
       if (lum(cx2, cy2) > SCLERA_THR) nSclera++;
     }
-    if (nCheck < 3 || nSclera / nCheck <= 0.25) break;
+    if (nCheck < 3 || nSclera / nCheck <= 0.15) break;
     shrinkR--;
   }
 
