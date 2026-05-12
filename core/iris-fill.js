@@ -73,6 +73,13 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
 
   var cx = outSize * 0.5,  cy = outSize * 0.5;
 
+  /* ── Luminance helper (HSL) ─────────────────────────────────────── */
+  function pixLum(i) {
+    var r = pixels[i] / 255, g = pixels[i+1] / 255, b = pixels[i+2] / 255;
+    var mx = Math.max(r, g, b),  mn = Math.min(r, g, b);
+    return (mx + mn) * 0.5;
+  }
+
   /* ── Bad-pixel test (glare or lash/lid) ─────────────────────────── */
   function isBad(i) {
     if (pixels[i + 3] < 20) return false;      // transparent = out-of-bounds
@@ -88,6 +95,29 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
     if (lum < 0.19 && sat < 0.22) return true;
     return false;
   }
+
+  /* ── Iris reference luminance (lateral sectors only) ────────────── */
+  // Sample iris tissue at 3 & 9 o'clock ± a few degrees — these are the
+  // least-occluded positions. Average gives a per-image iris brightness
+  // baseline used to detect eyelid skin in the lower hemisphere.
+  var REF_ANGLES_DEG = [0, 15, 345, 30, 330, 180, 165, 195, 150, 210];
+  var refSampleR = wIR * 0.75;
+  var irisRefLumSum = 0, irisRefLumN = 0;
+  for (var ri = 0; ri < REF_ANGLES_DEG.length; ri++) {
+    var ra = REF_ANGLES_DEG[ri] * Math.PI / 180;
+    var rsx = Math.round(cx + refSampleR * Math.cos(ra));
+    var rsy = Math.round(cy + refSampleR * Math.sin(ra));
+    if (rsx < 0 || rsy < 0 || rsx >= outSize || rsy >= outSize) continue;
+    var rsi = (rsy * outSize + rsx) * 4;
+    if (pixels[rsi + 3] < 20) continue;
+    irisRefLumSum += pixLum(rsi);
+    irisRefLumN++;
+  }
+  var irisRefLum   = irisRefLumN > 0 ? irisRefLumSum / irisRefLumN : 0.35;
+  // Skin threshold: eyelid skin is noticeably brighter than iris tissue
+  var lidLumThresh = irisRefLum + 0.22;
+  // Max lum a genuine iris source pixel may have (used in skin-fill guard)
+  var irisSrcMax   = irisRefLum + 0.10;
 
   /* ── Rotational offsets — 180° mirror first, then ±30° steps ────── */
   var OFFS = [
@@ -136,6 +166,54 @@ function buildFilledIris(srcImg, irisSpec, cropFactor) {
       }
     }
     // if no clean sample found at any angle: leave original (graceful degradation)
+  }
+
+  /* ── Third pass: lower-hemisphere eyelid skin ────────────────────── */
+  // The lower eyelid (pinkish, medium brightness) is not caught by isBad()
+  // because its lum (≈0.45–0.65) is far from the dark-lash and glare bands.
+  // Scan ONLY below the iris center (ddy > 0 = 6 o'clock direction) and flag
+  // any pixel brighter than irisRefLum + 0.22 as likely skin, then replace
+  // it from a rotationally-offset source pixel that IS dark enough to be
+  // genuine iris tissue (srcLum ≤ irisRefLum + 0.10).
+  var toFillSkin = [];
+  var skinBoxT = Math.max(0, Math.ceil(cy));           // start at center row
+  var skinBoxB = Math.min(outSize - 1, Math.ceil(cy + maxR));
+
+  for (var spy2 = skinBoxT; spy2 <= skinBoxB; spy2++) {
+    for (var spx2 = 0; spx2 < outSize; spx2++) {
+      var sdx = spx2 - cx,  sdy = spy2 - cy;
+      var sdist = Math.sqrt(sdx * sdx + sdy * sdy);
+      if (sdist < minR || sdist > maxR) continue;
+      var si2 = (spy2 * outSize + spx2) * 4;
+      if (pixels[si2 + 3] < 20) continue;
+      if (isBad(si2)) continue;  // already handled by pass 2
+      if (pixLum(si2) > lidLumThresh) {
+        toFillSkin.push(spx2, spy2, sdist, Math.atan2(sdy, sdx));
+      }
+    }
+  }
+
+  for (var ks = 0; ks < toFillSkin.length; ks += 4) {
+    var fspx = toFillSkin[ks], fspy = toFillSkin[ks + 1];
+    var fsr  = toFillSkin[ks + 2], fstheta = toFillSkin[ks + 3];
+    var dstIs = (fspy * outSize + fspx) * 4;
+
+    for (var os = 0; os < OFFS.length; os++) {
+      var sspx = Math.round(cx + fsr * Math.cos(fstheta + OFFS[os]));
+      var sspy = Math.round(cy + fsr * Math.sin(fstheta + OFFS[os]));
+      if (sspx < 0 || sspy < 0 || sspx >= outSize || sspy >= outSize) continue;
+      var srcIs = (sspy * outSize + sspx) * 4;
+      if (pixels[srcIs + 3] < 20) continue;
+      if (isBad(srcIs)) continue;
+      // Only use source pixels that are actual iris tissue (not more skin)
+      if (pixLum(srcIs) <= irisSrcMax) {
+        pixels[dstIs]     = pixels[srcIs];
+        pixels[dstIs + 1] = pixels[srcIs + 1];
+        pixels[dstIs + 2] = pixels[srcIs + 2];
+        break;
+      }
+    }
+    // if no iris-dark source found: leave original
   }
 
   wCtx.putImageData(id, 0, 0);
