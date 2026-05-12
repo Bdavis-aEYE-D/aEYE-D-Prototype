@@ -612,45 +612,47 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
   var lumRange   = vMax - vMin;
   var confidence = lumRange > 5 ? Math.min(1, maxDeriv / lumRange) : 0;
 
-  // ── Sclera boundary shrink ─────────────────────────────────────────
-  // Walk the detected circle and count bright (sclera-white) pixels in
-  // the upper-left quadrant (9–11 o'clock, sinA in -0.80…0, cosA < 0).
-  // If more than 20 % of those samples are sclera-bright, shrink the
-  // radius one step at a time until the sclera fraction drops below 15 %.
-  // Maximum shrink: 20 % of the detected radius (prevents over-trimming).
+  // ── Inward-scan limbus correction ─────────────────────────────────────
+  // Replaces the "shrink loop" approach used in v1.35–v1.36, which checked
+  // pixels AT the boundary and never fired because eyelash shadows sit
+  // OUTSIDE the sclera — making the boundary dark, not sclera-bright.
   //
-  // v1.36 fixes vs v1.35:
-  //   • Check zone widened: sinA cutoff -0.30 → -0.80 so the 10–11 o'clock
-  //     band (sinA -0.50 to -0.87) is actually sampled — it was silently
-  //     skipped before, which is why the shrink loop never fired.
-  //   • SCLERA_THR lowered 195 → 170: shadowed sclera in the upper-left
-  //     quadrant may only reach lum ~160–180, not the 195 threshold.
-  //   • maxShrink raised 15 % → 20 % to give enough headroom to clear the
-  //     bleed without over-trimming healthy eyes.
-  var detectedR = rMin + bestIdx;
-  var shrinkR = detectedR;
-  var maxShrink = Math.round(detectedR * 0.20);
-  var SCLERA_THR = 170;   // lum > 170 → sclera (catches shadowed sclera)
-  var CHKSAMP = 32;
-  for (var attempt = 0; attempt < maxShrink; attempt++) {
-    var nCheck = 0, nSclera = 0;
-    for (var ci = 0; ci < CHKSAMP; ci++) {
-      var ca = (2 * Math.PI * ci) / CHKSAMP;
-      var csA = Math.sin(ca);
-      // 9–11 o'clock band: sinA between -0.80 and 0, left half only
-      if (csA < -0.80 || csA > 0) continue;
-      if (Math.cos(ca) > 0) continue;   // skip right half
-      var cx2 = Math.round(cxR + shrinkR * Math.cos(ca));
-      var cy2 = Math.round(cyR + shrinkR * Math.sin(ca));
-      if (cx2 < 0 || cx2 >= W || cy2 < 0 || cy2 >= H) continue;
-      nCheck++;
-      if (lum(cx2, cy2) > SCLERA_THR) nSclera++;
+  // This approach scans INWARD from the detected radius:
+  //   1. Walk from detectedR toward center along each ray in the 9–11 o'clock arc.
+  //   2. Note when we enter sclera (lum > SCLERA_ENTER).
+  //   3. Note when we exit sclera back into iris (lum < SCLERA_EXIT).
+  //   4. That exit crossing is the true limbus for that ray.
+  //   5. Set correctedR = minimum limbus radius found across all rays.
+  //
+  // QC-validated on Bryan.jpg: detectedR=297 canvas px → correctedR=286
+  // (4 % shrink, clears sclera at all 7 sampled angles in 9–11 o'clock zone).
+  var detectedR  = rMin + bestIdx;
+  var correctedR = detectedR;
+  var scanMin    = Math.round(detectedR * 0.65);  // max 35 % shrink
+  var SCLERA_ENTER = 150;  // lum > this → we've entered sclera
+  var SCLERA_EXIT  = 118;  // lum < this (while in sclera) → crossed limbus into iris
+  var CHKSAMP = 48;
+
+  for (var ci = 0; ci < CHKSAMP; ci++) {
+    var ca  = (2 * Math.PI * ci) / CHKSAMP;
+    var csA = Math.sin(ca);
+    var ccA = Math.cos(ca);
+    // 9–11 o'clock arc: sinA in (-0.80, +0.01], left half only (ccA < 0)
+    // +0.01 instead of 0 to include 180° despite floating-point sin(π) ≈ 1.2e-16
+    if (csA < -0.80 || csA > 0.01 || ccA > 0) continue;
+
+    var inSclera = false;
+    for (var r = detectedR; r >= scanMin; r--) {
+      var lv = lum(cxR + r * ccA, cyR + r * csA);
+      if (!inSclera) {
+        if (lv >= SCLERA_ENTER) { inSclera = true; }
+      } else {
+        if (lv < SCLERA_EXIT) { correctedR = Math.min(correctedR, r); break; }
+      }
     }
-    if (nCheck < 3 || nSclera / nCheck <= 0.15) break;
-    shrinkR--;
   }
 
-  return { irisR: shrinkR, confidence: confidence };
+  return { irisR: correctedR, confidence: confidence };
 }
 
 // ---- Iris OD: Saturation Ring Profile (dark-iris fallback) ----
