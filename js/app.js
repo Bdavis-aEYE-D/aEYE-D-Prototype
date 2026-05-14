@@ -90,32 +90,41 @@ fileInput.addEventListener('change', function(e){
 
 // Synthetic "face" with two tinted irises so the locate flow can be demoed without a camera
 function drawSyntheticFace(){
-  var c = document.createElement('canvas'); c.width = 900; c.height = 600;
+  // Portrait close-up so MediaPipe iris radius lands at ~0.20× stage width after crop scaling
+  var c = document.createElement('canvas'); c.width = 600; c.height = 800;
   var ctx = c.getContext('2d');
   // background
-  var bg = ctx.createLinearGradient(0,0,0,600);
-  bg.addColorStop(0,'#d6c0a8'); bg.addColorStop(1,'#b89a7c');
-  ctx.fillStyle = bg; ctx.fillRect(0,0,900,600);
-  // face silhouette
-  ctx.fillStyle = '#e8cdb3';
-  ctx.beginPath(); ctx.ellipse(450, 320, 270, 310, 0, 0, Math.PI*2); ctx.fill();
-  // eyes: left (person's right in image = viewer's left) and right
-  drawSynthEye(ctx, 355, 290, true);
-  drawSynthEye(ctx, 545, 290, false);
+  var bg = ctx.createLinearGradient(0,0,0,800);
+  bg.addColorStop(0,'#c8b09a'); bg.addColorStop(1,'#a08060');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,600,800);
+  // face silhouette — fills most of frame for a close-up look
+  ctx.fillStyle = '#eac9a8';
+  ctx.beginPath(); ctx.ellipse(300, 460, 240, 340, 0, 0, Math.PI*2); ctx.fill();
+  // eyebrows
+  ctx.strokeStyle = '#6b3a1f'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(110,235); ctx.quadraticCurveTo(180,215,250,240); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(350,240); ctx.quadraticCurveTo(420,215,490,235); ctx.stroke();
+  // eyes: subject's right = viewer's left (smaller x), hetero=true; left eye = pure blue
+  drawSynthEye(ctx, 182, 305, true);
+  drawSynthEye(ctx, 418, 305, false);
   // nose
   ctx.strokeStyle = '#b58f70'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(450,310); ctx.quadraticCurveTo(440,380,450,420); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(300,355); ctx.quadraticCurveTo(286,415,300,455); ctx.stroke();
   // mouth
-  ctx.strokeStyle = '#8a4e3a'; ctx.lineWidth = 5; ctx.beginPath();
-  ctx.moveTo(400,470); ctx.quadraticCurveTo(450,495,500,470); ctx.stroke();
+  ctx.strokeStyle = '#8a4e3a'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(238,530); ctx.quadraticCurveTo(300,562,362,530); ctx.stroke();
   loadOriginalFromUrl(c.toDataURL());
 }
 function drawSynthEye(ctx, cx, cy, hetero){
+  var irisR = 50, eyeW = 80, eyeH = 50;
   // sclera
   ctx.fillStyle = '#fafafa';
-  ctx.beginPath(); ctx.ellipse(cx, cy, 60, 32, 0, 0, Math.PI*2); ctx.fill();
-  // iris gradient (blue for both; add pupillary amber on the "hetero" side)
-  var grad = ctx.createRadialGradient(cx,cy,6, cx,cy,30);
+  ctx.beginPath(); ctx.ellipse(cx, cy, eyeW, eyeH, 0, 0, Math.PI*2); ctx.fill();
+  // clip iris to sclera ellipse
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(cx, cy, eyeW, eyeH, 0, 0, Math.PI*2); ctx.clip();
+  // iris gradient
+  var grad = ctx.createRadialGradient(cx,cy,9, cx,cy,irisR);
   if (hetero){
     grad.addColorStop(0.00,'#caa15a');
     grad.addColorStop(0.30,'#caa15a');
@@ -127,28 +136,33 @@ function drawSynthEye(ctx, cx, cy, hetero){
     grad.addColorStop(0.70,'#4d7aa5');
     grad.addColorStop(1.00,'#23466b');
   }
-  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
-  // texture
-  for (var k=0;k<160;k++){
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(cx,cy,irisR,0,Math.PI*2); ctx.fill();
+  // texture strands
+  for (var k=0;k<220;k++){
     var a = Math.random()*Math.PI*2;
-    var r1 = 8 + Math.random()*18, r2 = r1+2+Math.random()*3;
+    var r1 = 13 + Math.random()*28, r2 = r1+2+Math.random()*5;
     ctx.strokeStyle = 'rgba(255,255,255,'+(0.04+Math.random()*0.08)+')';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx+Math.cos(a)*r1, cy+Math.sin(a)*r1);
     ctx.lineTo(cx+Math.cos(a)*r2, cy+Math.sin(a)*r2);
     ctx.stroke();
   }
+  // limbal ring
+  ctx.strokeStyle = 'rgba(10,15,35,0.65)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx,cy,irisR,0,Math.PI*2); ctx.stroke();
   // pupil
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx,cy,13,0,Math.PI*2); ctx.fill();
   // catch-light
-  ctx.fillStyle = 'rgba(255,255,255,0.95)';
-  ctx.beginPath(); ctx.arc(cx-4, cy-4, 2.5, 0, Math.PI*2); ctx.fill();
-  // lashes / lid hints
-  ctx.strokeStyle = '#3a2717'; ctx.lineWidth = 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath(); ctx.arc(cx-7, cy-7, 5, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // lid arcs drawn over clipped area
+  ctx.strokeStyle = '#3a2717'; ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(cx-62, cy-4); ctx.quadraticCurveTo(cx, cy-38, cx+62, cy-4); ctx.stroke();
+  ctx.moveTo(cx-84, cy-7); ctx.quadraticCurveTo(cx, cy-56, cx+84, cy-7); ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(cx-60, cy+4); ctx.quadraticCurveTo(cx, cy+32, cx+60, cy+4); ctx.stroke();
+  ctx.moveTo(cx-82, cy+7); ctx.quadraticCurveTo(cx, cy+48, cx+82, cy+7); ctx.stroke();
 }
 
 // ======================= STATE =======================
