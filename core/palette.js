@@ -14,14 +14,16 @@ var PALETTE = [
   ['Blue','Iris Blue','#5060A0'],['Blue','Wedgwood','#5B80A0'],['Blue','Aquamarine','#6ACCC0'],
   ['Blue','Teal Blue','#4AAAB0'],['Blue','Blue-Gray','#6080A0'],['Blue','Heather Blue','#7090B0'],
   ['Blue','Smoky Blue','#607A90'],['Blue','Pewter Blue','#708090'],
-  // ── GRAY (20 entries: silver → charcoal) ──
+  ['Blue','Silver Blue','#8090A0'],['Blue','Steel Mist','#708898'],
+  ['Blue','Glacial Gray','#6A7880'],['Blue','Haze Blue','#697986'],
+  // ── GRAY (18 entries: silver → charcoal) ──
   ['Gray','Silver Mist','#D0D4DC'],['Gray','Pearl Gray','#C0C5CC'],['Gray','Dove Gray','#B0B5BC'],
   ['Gray','Cloud Gray','#A0A5AC'],['Gray','Ash Gray','#90969C'],['Gray','Smoke Gray','#80868C'],
-  ['Gray','Dune Mist','#908880'],['Gray','Morning Fog','#808890'],['Gray','Slate Gray','#708090'],
+  ['Gray','Dune Mist','#908880'],['Gray','Morning Fog','#808890'],
   ['Gray','Steel Gray','#608088'],['Gray','Flint','#505860'],['Gray','Graphite','#404850'],
   ['Gray','Charcoal','#384048'],['Gray','Thunderhead','#303840'],['Gray','Gun Metal','#485860'],
   ['Gray','Coastal Haze','#607080'],['Gray','Anvil','#506070'],['Gray','Evening Stone','#485868'],
-  ['Gray','Silver Blue','#8090A0'],['Gray','Pewter','#708898'],
+  ['Gray','Iron Mist','#5A6068'],
   // ── GREEN (28 entries: pale mint → dark forest) ──
   ['Green','Mint Frost','#D0E8D4'],['Green','Pale Sage','#B8D4BC'],['Green','Sea Glass','#A0C4A8'],
   ['Green','Seafoam','#88B898'],['Green','Celadon','#78A888'],['Green','Sage','#70A078'],
