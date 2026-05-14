@@ -2,12 +2,19 @@
 
 // ======================= ANALYZE — eye-D UI layer =======================
 
-// Returns the display string for a color: "Specific Name · Category" unless
-// the specific name already contains the category word (e.g. "Sky Blue · Blue"
+// Returns the label display string: "Specific Name · Category" unless the
+// specific name already contains the category word (e.g. "Sky Blue · Blue"
 // would be redundant, so just "Sky Blue").
 function colorDisplayName(name, cat) {
   if (!cat || name.toLowerCase().indexOf(cat.toLowerCase()) >= 0) return name;
   return name + ' · ' + cat;
+}
+
+// Returns the prose display string: "Specific Name Category" (space-joined,
+// no punctuation) for use inside sentences. Same suppression rule applies.
+function colorProseName(name, cat) {
+  if (!cat || name.toLowerCase().indexOf(cat.toLowerCase()) >= 0) return name;
+  return name + ' ' + cat;
 }
 
 // Reads globals from app.js, calls core/engine.js::analyzeIris(), then
@@ -75,8 +82,9 @@ function renderResult(result){
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = colorDisplayName(result.overall.name, result.overall.cat);
   // ── Opening line: colour + intensity ──────────────────────────────────────
-  var cat  = result.overall.cat;   // e.g. 'Blue', 'Green', 'Brown', 'Hazel'
-  var name = result.overall.name;  // e.g. 'Sky Blue', 'Emerald', 'Warm Amber'
+  var cat      = result.overall.cat;            // e.g. 'Blue', 'Green', 'Brown', 'Hazel'
+  var name     = result.overall.name;           // e.g. 'Sky Blue', 'Emerald', 'Warm Amber'
+  var proseName = colorProseName(name, cat);    // e.g. 'Graphite Gray', 'Sky Blue' (no duplicate)
   var bri  = result.brightness;    // 'Dark' | 'Medium' | 'Bright'
   var sat  = result.saturation;    // 'Muted' | 'Soft' | 'Vivid'
   var side = result.side.toLowerCase();
@@ -84,33 +92,33 @@ function renderResult(result){
   // Category-specific opening
   var catOpeners = {
     'Blue':  [
-      'Your ' + side + ' eye is a stunning ' + name + ' — a cool, luminous shade that arrests attention the moment people look your way.',
-      'A crystalline ' + name + ' fills your ' + side + ' iris — the kind of blue that photographs like gemstone light.',
-      'Your ' + side + ' eye blazes with ' + name + ' — pure, striking, and impossible to ignore.'
+      'Your ' + side + ' eye is a stunning ' + proseName + ' — a cool, luminous shade that arrests attention the moment people look your way.',
+      'A crystalline ' + proseName + ' fills your ' + side + ' iris — the kind of blue that photographs like gemstone light.',
+      'Your ' + side + ' eye blazes with ' + proseName + ' — pure, striking, and impossible to ignore.'
     ],
     'Green': [
-      'Your ' + side + ' eye is a rare, jewel-toned ' + name + ' — fewer than 2% of people share this captivating shade.',
-      'A rich ' + name + ' illuminates your ' + side + ' iris — bold, vivid, and genuinely rare.',
-      'Your ' + side + ' eye burns with the kind of ' + name + ' that makes people look twice.'
+      'Your ' + side + ' eye is a rare, jewel-toned ' + proseName + ' — fewer than 2% of people share this captivating shade.',
+      'A rich ' + proseName + ' illuminates your ' + side + ' iris — bold, vivid, and genuinely rare.',
+      'Your ' + side + ' eye burns with the kind of ' + proseName + ' that makes people look twice.'
     ],
     'Brown': [
-      'Your ' + side + ' eye is a warm, soulful ' + name + ' — deep, rich, and full of dimension.',
-      'A luminous ' + name + ' fills your ' + side + ' iris — earthy depth wrapped in golden warmth.',
-      'Your ' + side + ' eye radiates ' + name + ' — bold and warm, with a depth that draws people in.'
+      'Your ' + side + ' eye is a warm, soulful ' + proseName + ' — deep, rich, and full of dimension.',
+      'A luminous ' + proseName + ' fills your ' + side + ' iris — earthy depth wrapped in golden warmth.',
+      'Your ' + side + ' eye radiates ' + proseName + ' — bold and warm, with a depth that draws people in.'
     ],
     'Hazel': [
-      'Your ' + side + ' eye shifts with ' + name + ' — a captivating blend that changes with the light, never quite the same color twice.',
-      'A chameleon ' + name + ' dances through your ' + side + ' iris — warm one moment, cool the next.',
-      'Your ' + side + ' eye reads as ' + name + ' — a rare, multi-tonal beauty that defies a single description.'
+      'Your ' + side + ' eye shifts with ' + proseName + ' — a captivating blend that changes with the light, never quite the same color twice.',
+      'A chameleon ' + proseName + ' dances through your ' + side + ' iris — warm one moment, cool the next.',
+      'Your ' + side + ' eye reads as ' + proseName + ' — a rare, multi-tonal beauty that defies a single description.'
     ],
     'Gray':  [
-      'Your ' + side + ' eye is a striking ' + name + ' — cool, magnetic, and quietly intense.',
-      'A rare ' + name + ' fills your ' + side + ' iris — silver-cool and effortlessly captivating.',
-      'Your ' + side + ' eye carries a beautiful ' + name + ' — the rarest eye category in the world.'
+      'Your ' + side + ' eye is a striking ' + proseName + ' — cool, magnetic, and quietly intense.',
+      'A rare ' + proseName + ' fills your ' + side + ' iris — silver-cool and effortlessly captivating.',
+      'Your ' + side + ' eye carries a beautiful ' + proseName + ' — the rarest eye category in the world.'
     ]
   };
   var openers = catOpeners[cat] || [
-    'Your ' + side + ' eye is a beautiful ' + name + ' — a distinctive, eye-catching shade.'
+    'Your ' + side + ' eye is a beautiful ' + proseName + ' — a distinctive, eye-catching shade.'
   ];
   var n = openers[Math.floor(Math.random() * openers.length)] + ' ';
 
@@ -175,7 +183,7 @@ function renderResult(result){
   var hasHetero = (result.hetero !== 'None');
   var hasSectoral = !!result.sectoral;
   if (hasStrong && hasHetero) {
-    n += 'Together, the ' + name.toLowerCase() + ' color, inner ring, and strong limbal border create eyes that are genuinely hard to look away from. ';
+    n += 'Together, the ' + proseName.toLowerCase() + ' color, inner ring, and strong limbal border create eyes that are genuinely hard to look away from. ';
   } else if (hasStrong && (sat === 'Vivid' || bri === 'Bright')) {
     n += 'The combination of bold color and that defined limbal ring makes these eyes truly stand out — bright, beautiful, and captivating. ';
   } else if (hasSectoral || (hasHetero && hasStrong)) {
