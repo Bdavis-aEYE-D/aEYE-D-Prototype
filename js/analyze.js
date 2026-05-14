@@ -1,6 +1,15 @@
 'use strict';
 
 // ======================= ANALYZE — eye-D UI layer =======================
+
+// Returns the display string for a color: "Specific Name · Category" unless
+// the specific name already contains the category word (e.g. "Sky Blue · Blue"
+// would be redundant, so just "Sky Blue").
+function colorDisplayName(name, cat) {
+  if (!cat || name.toLowerCase().indexOf(cat.toLowerCase()) >= 0) return name;
+  return name + ' · ' + cat;
+}
+
 // Reads globals from app.js, calls core/engine.js::analyzeIris(), then
 // renders results into the DOM.
 //
@@ -64,7 +73,7 @@ function renderResult(result){
   }
 
   $('r-side').textContent = result.side + ' Eye';
-  $('r-color').textContent = result.overall.name;
+  $('r-color').textContent = colorDisplayName(result.overall.name, result.overall.cat);
   // ── Opening line: colour + intensity ──────────────────────────────────────
   var cat  = result.overall.cat;   // e.g. 'Blue', 'Green', 'Brown', 'Hazel'
   var name = result.overall.name;  // e.g. 'Sky Blue', 'Emerald', 'Warm Amber'
@@ -180,7 +189,7 @@ function renderResult(result){
     sr.appendChild(sw);
   });
   $('r-general').textContent = result.overall.cat;
-  $('r-specific').textContent = result.overall.name;
+  $('r-specific').textContent = colorDisplayName(result.overall.name, result.overall.cat);
   // Limbal ring shows "Strength · Color" when distinct, just "None" otherwise
   $('r-limbal').textContent = result.limbalColor
     ? (result.limbal + ' · ' + result.limbalColor.name + ' ' + (result.limbalType || 'ring'))
@@ -258,9 +267,9 @@ function renderResult(result){
   $('twoeye-summary').style.display = hasBoth ? 'grid' : 'none';
   if (hasBoth){
     var L = eyeResults['Left'], R = eyeResults['Right'];
-    $('left-name').textContent  = L.overall.name;
+    $('left-name').textContent  = colorDisplayName(L.overall.name, L.overall.cat);
     $('left-meta').textContent  = L.overall.cat + ' · Limbal: ' + L.limbal + ' · Het: ' + L.hetero;
-    $('right-name').textContent = R.overall.name;
+    $('right-name').textContent = colorDisplayName(R.overall.name, R.overall.cat);
     $('right-meta').textContent = R.overall.cat + ' · Limbal: ' + R.limbal + ' · Het: ' + R.hetero;
     // ===== Bilateral heterochromia (L vs R) =====
     // Compares the two eyes' overall palette anchors. Categories are the

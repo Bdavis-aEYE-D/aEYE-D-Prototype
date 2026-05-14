@@ -262,7 +262,7 @@ function _drawIrisStoryCard(ctx, W, H, result) {
   var textY = irisCy + irisR + 68;
 
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  var nameText = result.overall.name.toUpperCase();
+  var nameText = colorDisplayName(result.overall.name, result.overall.cat).toUpperCase();
   ctx.font = '800 96px -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif';
   var nw = ctx.measureText(nameText).width;
   if (nw > W - 100) {
@@ -459,7 +459,7 @@ function _drawFullEyeCard(ctx, W, H, result) {
   // Color name
   var textY = fY + fH + 68;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  var nameText = result.overall.name.toUpperCase();
+  var nameText = colorDisplayName(result.overall.name, result.overall.cat).toUpperCase();
   ctx.font = '800 92px -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif';
   var nw = ctx.measureText(nameText).width;
   if (nw > W - 100) ctx.font = '800 ' + Math.round(92*(W-100)/nw) + 'px -apple-system, sans-serif';
@@ -634,7 +634,7 @@ function _drawBothEyesCard(ctx, W, H, rRight, rLeft) {
       ctx.textBaseline='top';
       ctx.font='700 34px -apple-system, sans-serif';
       ctx.fillStyle='rgba(255,255,255,0.92)';
-      var cn = result.overall.name;
+      var cn = colorDisplayName(result.overall.name, result.overall.cat);
       if (ctx.measureText(cn).width > cR*2+20) ctx.font = '700 26px -apple-system, sans-serif';
       ctx.fillText(cn, cx, cY + cR + 18);
     }
@@ -761,7 +761,7 @@ function _drawFullFaceCard(ctx, W, H, result) {
   // Color name
   var textY = fH + 54;
   ctx.textAlign='center'; ctx.textBaseline='top';
-  var nameText=result.overall.name.toUpperCase();
+  var nameText=colorDisplayName(result.overall.name, result.overall.cat).toUpperCase();
   ctx.font='800 96px -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif';
   var nw=ctx.measureText(nameText).width;
   if (nw>W-100) ctx.font='800 '+Math.round(96*(W-100)/nw)+'px -apple-system, sans-serif';

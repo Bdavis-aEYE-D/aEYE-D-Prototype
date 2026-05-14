@@ -98,7 +98,7 @@ function renderShareCardSync(result, imageSpec){
     }
     ctx.font = '500 28px -apple-system, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    var cParts = [result.overall.cat, result.overall.name];
+    var cParts = [colorDisplayName(result.overall.name, result.overall.cat)];
     if (result.rarity) cParts.push(result.rarity.label);
     ctx.fillText(cParts.join('  ·  '), W/2, statY);
 
@@ -190,7 +190,7 @@ function pickHero(result){
              color: result.freckles[0].rgb || [60,40,20] };
   }
   // Default — vibe is the hero
-  return { type: 'vibe', label: result.vibe || result.overall.name,
+  return { type: 'vibe', label: result.vibe || colorDisplayName(result.overall.name, result.overall.cat),
            subtitle: null, color: result.overall.rgb };
 }
 
