@@ -278,7 +278,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   if (heteroDist > 25 && innerM.entry.cat !== outerM.entry.cat) hetero = 'Central';
   else if (heteroDist > 14) hetero = 'Subtle';
   // Path 2: warmth/lightness gradient between zones
-  if (hetero === 'None' && heteroPup && heteroCil) {
+  if ((hetero === 'None' || hetero === 'Subtle') && heteroPup && heteroCil) {
     heteroDb = heteroPup.lab[2] - heteroCil.lab[2];   // positive = pupillary zone is warmer
     heteroDL = heteroPup.lab[0] - heteroCil.lab[0];   // positive = pupillary zone is lighter
     if (Math.abs(heteroDb) > 4 && Math.abs(heteroDb) > Math.abs(heteroCil.lab[2])) {
