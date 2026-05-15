@@ -255,6 +255,12 @@ var VIBES = {
 function getVibe(cat, lab){
   var arr = VIBES[cat] || ['Singular'];
   var L = lab ? lab[0] : 50;
+  var b = lab ? lab[2] : 0;
+  // Cool-gray variant: Gray eyes with a blue bias (b* < -2) get vibe names that
+  // signal their blue-gray nature — photo lighting often flattens blue eyes to gray pixels.
+  if (cat === 'Gray' && b < -2){
+    arr = ['Arctic silver','Ice mist','Pale blue steel','Blue-gray haze','Steel blue','Cold iron','Blue steel','Midnight slate'];
+  }
   // map L (0-100) into the array length
   var idx = Math.max(0, Math.min(arr.length-1, Math.floor((100 - L) / (100/arr.length))));
   return arr[idx];
@@ -278,6 +284,19 @@ function rgbToHex(rgb){
 }
 function nearestPal(rgb){
   var lab=rgbLab(rgb[0],rgb[1],rgb[2]), best=null, bd=Infinity;
-  for (var i=0;i<PALETTE.length;i++){ var d=dE(lab, PALETTE[i].lab); if (d<bd){bd=d; best=PALETTE[i];} }
+  var bestBlue=null, bdBlue=Infinity, bestGray=null, bdGray=Infinity;
+  for (var i=0;i<PALETTE.length;i++){
+    var d=dE(lab, PALETTE[i].lab);
+    if (d<bd){bd=d; best=PALETTE[i];}
+    if (PALETTE[i].cat==='Blue'  && d<bdBlue){bdBlue=d; bestBlue=PALETTE[i];}
+    if (PALETTE[i].cat==='Gray'  && d<bdGray){bdGray=d; bestGray=PALETTE[i];}
+  }
+  // b* tiebreaker: blue eyes photographed under frontal lighting register as gray pixels.
+  // If the nearest match is Gray but b* < -2 (any blue bias) and the nearest Blue entry
+  // is within 5 Delta-E, the photo-lighting effect is likely the cause — prefer Blue.
+  var bStar = lab[2];
+  if (best && best.cat==='Gray' && bestBlue && bStar < -2 && (bdBlue - bdGray) < 5){
+    best = bestBlue; bd = bdBlue;
+  }
   return {entry:best, distance:bd};
 }
