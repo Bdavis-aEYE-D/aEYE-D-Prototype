@@ -138,9 +138,9 @@ function autoFit(src, closeup){
   }
 
   // Iris radius bounds for close-up mode.
-  // Upper bound: iris can't plausibly span more than 48% of the shorter image dimension —
-  // anything larger is the algorithm locking onto an eyelid, brow ridge, or glasses frame.
-  var R_MAX_CU = closeup ? Math.round(Math.min(W, H) * 0.38) : Infinity;
+  // Raised from 0.38 → 0.46: images where the iris fills 80-90% of the frame
+  // (UBIRIS-style, or a macro phone shot) have a true limbus at ~0.45× shorter dim.
+  var R_MAX_CU = closeup ? Math.round(Math.min(W, H) * 0.46) : Infinity;
 
   // Iris boundary: scan horizontally at the pupil row first.
   var init = scanBand(Math.round(pcy), pcx);
@@ -184,11 +184,13 @@ function autoFit(src, closeup){
         var tExt  = (tExtL + tExtR) * 0.5;
         var tScore = span * Math.max(0, tExt - tInt);
         var tR = Math.round(span / 2);
-        // Cap Tier-1 radius at 1.45× the initial estimate. Eyelid rows are
-        // 1.40-1.60× the true limbal span — blocked here. 1.45 also covers the
-        // case where the initial scan locked on a lash line (~0.70× true limbus),
-        // so the true limbus sits at ~1.43× initial and would be missed at 1.20.
-        var tRinRange = tR <= R_MAX_CU && (!ok || tR <= irisR * 1.45);
+        // Cap Tier-1 radius at 1.45× the initial estimate normally.
+        // Floor at pr × 3.5 so Tier-1 can still reach the true iris limbus when
+        // the horizontal scan locked onto the pupil/collarette boundary (irisR ≈ pupilR)
+        // rather than the true outer limbus — a common failure for close-up images
+        // with no sclera visible. Without this floor the cap would be ~pupilR × 1.45,
+        // too small to ever find a limbus at 2.5-3× pupilR.
+        var tRinRange = tR <= R_MAX_CU && (!ok || tR <= Math.max(irisR * 1.45, Math.round(pr * 3.5)));
         if (tScore > bestScore && tRinRange) {
           bestScore = tScore;
           bestCy = ty; bestCx = tCx; bestIrisR = tR;

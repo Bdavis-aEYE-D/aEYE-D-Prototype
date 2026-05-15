@@ -774,7 +774,18 @@ function _applyFitClassical(closeup){
     var cuIrisCx = fit.cxFrac    * imgEl.width;
     var cuIrisCy = fit.cyFrac    * imgEl.height;
     var cuRadSrc = 'AF';
-    if (closeup && fit.ok && cuIrisR > 8) {
+    // Sanity check: iris must be at least 1.3× the pupil radius (even a maximally
+    // dilated pupil is still <50% of iris diameter). autoFit can latch onto the
+    // collarette/pupil boundary instead of the true limbus for very close-up images
+    // where no sclera is visible — giving irisR ≈ pupilR. Correct the estimate here
+    // so the RIP/ODH/RC/SAT cascade searches from the right starting point.
+    var cuPupEstimate = fit.rPupilFrac * imgEl.width;
+    if (closeup && cuPupEstimate > 4 && cuIrisR < cuPupEstimate * 1.3) {
+      cuIrisR = Math.round(cuPupEstimate * 2.5);
+    }
+    // Allow cascade even when fit.ok=false: autoFit falls back to pr×2.1 when no
+    // limbus was found, which is a reasonable seed for the refinement cascade.
+    if (closeup && cuIrisR > 8) {
       // Primary: Radial Intensity Profile (full-circle mean, confidence-scored)
       // Threshold lowered to 0.22: grey/heterochromic irises produce gradual
       // transitions that score 0.22-0.35 on this metric. RIP still gives a
