@@ -287,13 +287,43 @@ function renderResult(result){
     // Using palette anchors (not raw RGB) keeps this stable across lighting.
     var biDe = dE(L.overall.lab, R.overall.lab);
     var sameCat = L.overall.cat === R.overall.cat;
+
+    // Same-name snapping: when both eyes land in the same category but on
+    // opposite sides of a palette boundary (biDe < 10), they look identical
+    // to observers — find the single palette entry that best fits both and
+    // use that name for both rather than reporting two different shades.
+    if (sameCat && biDe < 10 && typeof PALETTE !== 'undefined') {
+      var labL = L.fingerprint ? L.fingerprint.lab : L.overall.lab;
+      var labR = R.fingerprint ? R.fingerprint.lab : R.overall.lab;
+      var snapBest = null, snapBestSum = Infinity;
+      for (var _pi = 0; _pi < PALETTE.length; _pi++) {
+        var _pe = PALETTE[_pi];
+        if (_pe.cat !== L.overall.cat) continue;
+        var _s = dE(labL, _pe.lab) + dE(labR, _pe.lab);
+        if (_s < snapBestSum) { snapBestSum = _s; snapBest = _pe; }
+      }
+      if (snapBest) {
+        L.overall = snapBest;
+        R.overall = snapBest;
+        // Update the bilateral row names and the currently-displayed result card
+        var _dn = colorDisplayName(snapBest.name, snapBest.cat);
+        $('left-name').textContent  = _dn;
+        $('right-name').textContent = _dn;
+        if ($('r-color'))    $('r-color').textContent    = _dn;
+        if ($('r-specific')) $('r-specific').textContent = _dn;
+      }
+    }
+
     var verdict, detail, cls;
     if (!sameCat){
       verdict = 'Complete bilateral heterochromia';
       detail  = L.overall.cat + ' on the left, ' + R.overall.cat + ' on the right — two genuinely different eye colors. '
               + 'About 1 in 200,000 people have eyes this distinct. David Bowie made it iconic; you\'re in rare company.';
       cls = 'bilateral';
-    } else if (biDe > 18){
+    } else if (biDe > 25){
+      // Raised from 18 → 25: differences below this threshold are within the
+      // normal per-photo variation of a single iris color and not visually
+      // noticeable as heterochromia to an observer.
       verdict = 'Subtle bilateral heterochromia';
       detail  = 'Both eyes are ' + L.overall.cat.toLowerCase() + ', but they\'re measurably different — '
               + L.overall.name + ' on the left versus ' + R.overall.name + ' on the right. '
@@ -301,8 +331,10 @@ function renderResult(result){
       cls = 'bilateral';
     } else {
       verdict = 'Matched eyes';
-      detail  = L.overall.name + ' left, ' + R.overall.name + ' right — a well-matched pair. '
-              + 'The color reads consistently across both eyes.';
+      var _ln = L.overall.name, _rn = R.overall.name;
+      detail  = (_ln === _rn)
+        ? _ln + ' in both eyes — a perfectly matched pair.'
+        : _ln + ' left, ' + _rn + ' right — a well-matched pair. The color reads consistently across both eyes.';
       cls = 'bilateral match';
     }
     $('bilateral-verdict').textContent = verdict;
