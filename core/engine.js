@@ -133,7 +133,12 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
         midLumSum += lum; midLumCount++;
       }
       if (dist < innerBand) inner.push([r,g,b]);
-      else outer.push([r,g,b]);
+      // outer: mid-outer stroma only (innerBand → 0.88×rOut).
+      // Cap at 0.88 to exclude the dark limbal ring (0.85-1.00) which reads
+      // brownish-dark and would otherwise pull the dominant color toward Brown
+      // even on green/gray irises. The edge array already captures that zone
+      // separately for limbal ring strength analysis.
+      else if (dist < rOut * 0.88) outer.push([r,g,b]);
       // Pupillary / ciliary zones for central-het gradient detection
       if (dist < pupilZoneCut) pupilZone.push([r,g,b]);
       else if (dist >= ciliaryZoneCut) ciliaryZone.push([r,g,b]);

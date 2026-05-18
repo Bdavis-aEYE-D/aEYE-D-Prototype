@@ -303,11 +303,11 @@ function nearestPal(rgb){
     best = bestBlue; bd = bdBlue;
   }
   // a* tiebreaker: green/teal eyes can land in Brown when they are dark or
-  // when WB correction warms them. Lab a* < -4 means the pixel has a clear
-  // green component — no brown iris ever has negative a*. If the nearest
-  // match landed in Brown, redirect to the nearest Green or Hazel entry
-  // (whichever is closer in Lab space).
-  if (best && best.cat==='Brown' && aStar < -4) {
+  // when WB correction warms them. Lab a* < -2 means the pixel has a
+  // measurable green component — no brown iris ever has negative a*. If the
+  // nearest match landed in Brown, redirect to the nearest Green or Hazel
+  // entry (whichever is closer in Lab space).
+  if (best && best.cat==='Brown' && aStar < -2) {
     if (bestGreen && bestHazel) {
       if (bdGreen <= bdHazel) { best = bestGreen; bd = bdGreen; }
       else                     { best = bestHazel; bd = bdHazel; }
