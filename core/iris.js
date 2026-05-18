@@ -46,7 +46,9 @@ function autoFit(src, closeup){
   }
   function bm(x0,y0,x1,y1){
     x0=Math.max(0,x0|0); y0=Math.max(0,y0|0); x1=Math.min(W,x1|0); y1=Math.min(H,y1|0);
-    var n=(x1-x0)*(y1-y0); return n>0 ? bs(x0,y0,x1,y1)/n : 1e9;
+    // Return meanLum (neutral) for empty boxes — prevents off-screen surround probes
+    // from returning 1e9 ("very bright"), which would make edge positions win the coarse scan.
+    var n=(x1-x0)*(y1-y0); return n>0 ? bs(x0,y0,x1,y1)/n : meanLum;
   }
 
   // Pupil: dark circle surrounded by brighter tissue.
@@ -64,7 +66,11 @@ function autoFit(src, closeup){
   }
   function pupilScore(cx,cy,r){
     var inner = darkMean(cx-r,cy-r,cx+r,cy+r);
-    if (inner > darkThresh + 35) return -1e9;
+    // Close-up: iris-edge positions have darkMean ≈ 70-90 (only the few dark iris pixels
+    // at the edge are included; sclera is excluded by glareThresh). True pupils have
+    // darkMean ≈ 10-20. Use darkThresh+10 in close-up mode to reject edge positions while
+    // accepting real pupils. Full-face: keep the more lenient +35 threshold.
+    if (inner > darkThresh + (closeup ? 10 : 35)) return -1e9;
     var hr = Math.max(1, r>>1), gap = Math.max(1, r>>2);
     var surr = [
       bm(cx+r+gap, cy-hr, cx+2*r+gap, cy+hr+1),
@@ -93,6 +99,14 @@ function autoFit(src, closeup){
   var cyLo= closeup ? Math.floor(H*0.22) : Math.floor(H*0.15);
   var cyHi= closeup ? Math.ceil(H*0.78)  : Math.ceil(H*0.85);
   var coarseR = [3,5,7,9,12,15,18,22,26];
+  if (closeup) {
+    // Extend to cover large close-up pupils (radius up to ~12% of shorter dim).
+    // With only r≤26, all surrounding probe quadrants land inside a 115px pupil
+    // (zero contrast → score ≈ 0). Larger r values reach the bright amber zone
+    // outside the pupil, giving a clear high-contrast signal at the true center.
+    var maxCR = Math.round(Math.min(W, H) * 0.12);
+    for (var rr0 = 32; rr0 <= maxCR; rr0 = Math.round(rr0 * 1.40)) coarseR.push(rr0);
+  }
   for (var cx=cxLo; cx<cxHi; cx+=3){
     for (var cy=cyLo; cy<cyHi; cy+=3){
       for (var ri=0; ri<coarseR.length; ri++){
@@ -115,6 +129,10 @@ function autoFit(src, closeup){
   var bandH = 4;
   var minGrad = closeup ? 20 : 25;  // close-up irises can have lower iris-sclera contrast
   var guardR = Math.round(pr * 1.3);
+  // For close-up, enforce a minimum guardR based on image size. The coarse pupil
+  // radius may underestimate the true pupil, leaving guardR too small to prevent
+  // the high-contrast pupil-amber boundary from being detected instead of the limbus.
+  if (closeup) guardR = Math.max(guardR, Math.round(Math.min(W, H) * 0.18));
 
   // Helper: scan one horizontal band at scanY, return {leftHit, rightHit} or {-1,-1}.
   function scanBand(scanY, refCx) {
@@ -138,9 +156,11 @@ function autoFit(src, closeup){
   }
 
   // Iris radius bounds for close-up mode.
-  // Raised from 0.38 → 0.46: images where the iris fills 80-90% of the frame
-  // (UBIRIS-style, or a macro phone shot) have a true limbus at ~0.45× shorter dim.
-  var R_MAX_CU = closeup ? Math.round(Math.min(W, H) * 0.46) : Infinity;
+  // Raised 0.38 → 0.46 → 0.62: very close macro phone shots (iris fills 90-100% of the
+  // shorter dimension) have rIris ≈ 0.50–0.60 × min(W,H).  The old 0.46 cap caused the
+  // initial horizontal scan to correctly find the limbus but then set ok=false (because
+  // irisR exceeded R_MAX_CU), causing all cascade methods to miss the true limbus.
+  var R_MAX_CU = closeup ? Math.round(Math.min(W, H) * 0.62) : Infinity;
 
   // Iris boundary: scan horizontally at the pupil row first.
   var init = scanBand(Math.round(pcy), pcx);
