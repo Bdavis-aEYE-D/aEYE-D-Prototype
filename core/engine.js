@@ -189,9 +189,13 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     var wbMeanG = wbSumG / scleraSamples.length;
     var wbMeanB = wbSumB / scleraSamples.length;
     var wbGray = (wbMeanR + wbMeanG + wbMeanB) / 3;
-    wbR = wbMeanR > 0 ? Math.min(1.35, Math.max(0.74, wbGray / wbMeanR)) : 1;
-    wbG = wbMeanG > 0 ? Math.min(1.35, Math.max(0.74, wbGray / wbMeanG)) : 1;
-    wbB = wbMeanB > 0 ? Math.min(1.35, Math.max(0.74, wbGray / wbMeanB)) : 1;
+    // Clamp tightened from ±35%/26% → ±20%: the original range could boost R
+    // by 35% under cool (blue-screen) lighting, warming a green/teal iris into
+    // brown palette territory. ±20% still corrects genuine warm/cool casts while
+    // leaving strongly-hued irises in their correct Lab quadrant.
+    wbR = wbMeanR > 0 ? Math.min(1.20, Math.max(0.83, wbGray / wbMeanR)) : 1;
+    wbG = wbMeanG > 0 ? Math.min(1.20, Math.max(0.83, wbGray / wbMeanG)) : 1;
+    wbB = wbMeanB > 0 ? Math.min(1.20, Math.max(0.83, wbGray / wbMeanB)) : 1;
   }
   window.__lastWB = { n: scleraSamples.length, wbR: wbR, wbG: wbG, wbB: wbB };
   function applyWB(arr) {

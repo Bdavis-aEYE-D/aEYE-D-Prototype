@@ -285,18 +285,34 @@ function rgbToHex(rgb){
 function nearestPal(rgb){
   var lab=rgbLab(rgb[0],rgb[1],rgb[2]), best=null, bd=Infinity;
   var bestBlue=null, bdBlue=Infinity, bestGray=null, bdGray=Infinity;
+  var bestGreen=null, bdGreen=Infinity, bestHazel=null, bdHazel=Infinity;
   for (var i=0;i<PALETTE.length;i++){
     var d=dE(lab, PALETTE[i].lab);
     if (d<bd){bd=d; best=PALETTE[i];}
     if (PALETTE[i].cat==='Blue'  && d<bdBlue){bdBlue=d; bestBlue=PALETTE[i];}
     if (PALETTE[i].cat==='Gray'  && d<bdGray){bdGray=d; bestGray=PALETTE[i];}
+    if (PALETTE[i].cat==='Green' && d<bdGreen){bdGreen=d; bestGreen=PALETTE[i];}
+    if (PALETTE[i].cat==='Hazel' && d<bdHazel){bdHazel=d; bestHazel=PALETTE[i];}
   }
+  var aStar = lab[1];
+  var bStar = lab[2];
   // b* tiebreaker: blue eyes photographed under frontal lighting register as gray pixels.
   // If the nearest match is Gray but b* < -2 (any blue bias) and the nearest Blue entry
   // is within 5 Delta-E, the photo-lighting effect is likely the cause — prefer Blue.
-  var bStar = lab[2];
   if (best && best.cat==='Gray' && bestBlue && bStar < -2 && (bdBlue - bdGray) < 5){
     best = bestBlue; bd = bdBlue;
+  }
+  // a* tiebreaker: green/teal eyes can land in Brown when they are dark or
+  // when WB correction warms them. Lab a* < -4 means the pixel has a clear
+  // green component — no brown iris ever has negative a*. If the nearest
+  // match landed in Brown, redirect to the nearest Green or Hazel entry
+  // (whichever is closer in Lab space).
+  if (best && best.cat==='Brown' && aStar < -4) {
+    if (bestGreen && bestHazel) {
+      if (bdGreen <= bdHazel) { best = bestGreen; bd = bdGreen; }
+      else                     { best = bestHazel; bd = bdHazel; }
+    } else if (bestGreen)  { best = bestGreen;  bd = bdGreen;  }
+    else if (bestHazel)    { best = bestHazel;  bd = bdHazel;  }
   }
   return {entry:best, distance:bd};
 }
