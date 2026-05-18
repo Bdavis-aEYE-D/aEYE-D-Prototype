@@ -846,14 +846,12 @@ function _applyFitClassical(closeup){
       if (st)   st.textContent = (closeup ? 'Close-up ' + cuRadSrc : 'Classical') + ': ' + (fit.ok ? 'snapped' : 'estimated');
       zoomToEye();
     } else {
-      // Both MP and classical failed — center a default circle so manual adjustment starts from the middle
-      donut.cx = stageW / 2; donut.cy = stageH / 2;
-      donut.cxPupil = stageW / 2; donut.cyPupil = stageH / 2;
-      donut.rIris  = Math.round(Math.min(stageW, stageH) * 0.28);
-      donut.rPupil = Math.round(donut.rIris * 0.22);
-      draw();
-      if (hint) { hint.textContent = 'Iris not detected — a clearer photo will give better results. Retake or drag the circle manually.'; hint.style.color = '#fa0'; }
-      if (st)   st.textContent = 'low confidence';
+      // Placement check failed — keep the autoFit circle (it's based on actual image content
+      // and is always a better starting point than a blind centered default). Just flag it
+      // so the user knows to verify and adjust manually if needed.
+      // draw() already ran above with the autoFit circle set; no need to overwrite.
+      if (hint) { hint.textContent = 'Uncertain fit — drag the ring to adjust if needed, then tap "Analyze Iris".'; hint.style.color = '#fa0'; }
+      if (st)   st.textContent = (closeup ? 'Close-up ' + cuRadSrc : 'Classical') + ': unconfirmed';
       var rb = $('btn-quality-retake');
       if (rb) rb.style.display = '';
     }
