@@ -171,7 +171,11 @@ function autoFit(src, closeup){
     var bestScore = ok ? irisR * 2 * 12 : 0;
     var bestCy = pcy, bestCx = pcx, bestIrisR = irisR;
     var tier1Hit = false; // track whether any scan actually improved on the seed
-    var yEnd = Math.min(H - 1, Math.round(pcy + H * 0.30));
+    // Cap scan at one iris-radius below the pupil center. The old limit (pcy+30%H)
+    // could reach the lower eyelash line, which scores *higher* than the true iris
+    // (dark lash interior + bright sclera flanking = large contrast). Capping at
+    // irisR keeps the search inside the iris circle and can't be hijacked by lashes.
+    var yEnd = Math.min(H - 1, Math.round(pcy + (ok ? irisR : H * 0.20)));
     for (var ty = Math.round(pcy) + 3; ty <= yEnd; ty += 3) {
       var b2 = scanBand(ty, pcx);
       if (b2.lh >= 0 && b2.rh >= 0) {
@@ -190,7 +194,11 @@ function autoFit(src, closeup){
         // rather than the true outer limbus — a common failure for close-up images
         // with no sclera visible. Without this floor the cap would be ~pupilR × 1.45,
         // too small to ever find a limbus at 2.5-3× pupilR.
-        var tRinRange = tR <= R_MAX_CU && (!ok || tR <= Math.max(irisR * 1.45, Math.round(pr * 3.5)));
+        // Lower bound: lash lines are narrow — require ≥65% of the initial radius so a
+        // lash-line bilateral (shorter span than the iris) can't displace a good seed.
+        var tRinRange = tR <= R_MAX_CU &&
+                        (!ok || tR <= Math.max(irisR * 1.45, Math.round(pr * 3.5))) &&
+                        (!ok || tR >= irisR * 0.65);
         if (tScore > bestScore && tRinRange) {
           bestScore = tScore;
           bestCy = ty; bestCx = tCx; bestIrisR = tR;
