@@ -271,13 +271,53 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // dominating one bin — dominant() picks the dark cluster and returns Brown even
   // though the iris is predominantly blue/gray. Mean correctly averages both
   // populations. WB correction has already been applied to the outer[] array.
-  var outerM = (function() {
+  var outerMeanRgb = (function(){
     var n = outer.length;
-    if (!n) return nearestPal(outerDom);
+    if (!n) return outerDom;
     var rS=0, gS=0, bS=0;
     for (var _oi=0; _oi<n; _oi++) { rS+=outer[_oi][0]; gS+=outer[_oi][1]; bS+=outer[_oi][2]; }
-    return nearestPal([Math.round(rS/n), Math.round(gS/n), Math.round(bS/n)]);
+    return [Math.round(rS/n), Math.round(gS/n), Math.round(bS/n)];
   })();
+  var outerM = nearestPal(outerMeanRgb);
+  // ── Rsat guard: dark warm-neutral outer zone → Gray not Brown ──────────────
+  // SBVPI masked-subject analysis: all confirmed brown irises have (R-B)/R > 0.36;
+  // dark blue-gray irises that fall through as Brown cluster at 0.13-0.17.
+  // Threshold 0.165 fixes those edge cases with zero regressions on brown subjects.
+  if (outerM.entry.cat === 'Brown') {
+    var _rsatV = outerMeanRgb[0] > 0 ? (outerMeanRgb[0]-outerMeanRgb[2])/outerMeanRgb[0] : 0;
+    if (_rsatV < 0.165) {
+      var _rsLab = rgbLab(outerMeanRgb[0],outerMeanRgb[1],outerMeanRgb[2]);
+      var _rsGBest=null, _rsGBd=Infinity;
+      for (var _rsI=0; _rsI<PALETTE.length; _rsI++){
+        if (PALETTE[_rsI].cat!=='Gray') continue;
+        var _rsDe=dE(_rsLab,PALETTE[_rsI].lab);
+        if (_rsDe<_rsGBd){ _rsGBd=_rsDe; _rsGBest=PALETTE[_rsI]; }
+      }
+      if (_rsGBest) outerM = {entry:_rsGBest, distance:_rsGBd};
+    }
+  }
+  // ── Limbal-rim green check: outermost 15% of iris (rOut×0.85→1.00) ────────
+  // Green/olive irises concentrate their hue at the limbus. If that zone reads
+  // nearly neutral (G−R > −5, G ≥ B) while the mid-stroma was warm/Brown,
+  // re-classify from the limbal mean — catches irises where scattered brown
+  // melanin in the mid-stroma dilutes the green signal in the outer zone.
+  if (outerM.entry.cat === 'Brown' && edge.length >= 30) {
+    var _limRm=0, _limGm=0, _limBm=0;
+    for (var _limI=0; _limI<edge.length; _limI++){
+      _limRm+=edge[_limI][0]; _limGm+=edge[_limI][1]; _limBm+=edge[_limI][2];
+    }
+    _limRm/=edge.length; _limGm/=edge.length; _limBm/=edge.length;
+    if (_limGm-_limRm > -5 && _limGm > _limBm-5) {
+      var _limLab=rgbLab(Math.round(_limRm),Math.round(_limGm),Math.round(_limBm));
+      var _limBest=null, _limBd=Infinity;
+      for (var _limPi=0; _limPi<PALETTE.length; _limPi++){
+        if (PALETTE[_limPi].cat!=='Green' && PALETTE[_limPi].cat!=='Hazel') continue;
+        var _limDe=dE(_limLab,PALETTE[_limPi].lab);
+        if (_limDe<_limBd){ _limBd=_limDe; _limBest=PALETTE[_limPi]; }
+      }
+      if (_limBest) outerM = {entry:_limBest, distance:_limBd};
+    }
+  }
   // ===== Heterochromia: combined detection =====
   // Path 1 (legacy): cross-category color shift between inner/outer halves
   //   (catches Bowie-style cross-category central hetero like brown/blue).
