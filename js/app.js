@@ -1095,16 +1095,35 @@ function zoomToEye() {
       // Tertiary:  ring-contrast global search; then keep MP estimate as-is
       // ───────────────────────────────────────────────────────────────────────────
       var _zRipConf = 0, _zFellBack = false;
+      // Close-up macro shots have gradual iris-sclera ramps that produce
+      // RIP confidence 0.08–0.13.  Use the same lowered threshold as
+      // _applyFitClassical so the zoomed-image refinement pass also accepts
+      // the correct radius rather than falling back to ODH/RC/SAT.
+      var _zRipThresh = isCloseupMode ? 0.08 : 0.22;
       var zRIP = findIrisODByRIP(imgEl, zPupil.cx, zPupil.cy, iR);
-      if (zRIP && zRIP.confidence >= 0.22 && zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * 1.4) {
+      // In close-up mode the first cascade (in _applyFitClassical) already
+      // found a reliable RIP radius; iR is that trusted estimate. Tighten
+      // the zoom-cascade acceptance window to ±25 % of iR so that:
+      //   • OOB artifacts from the cropped image (RIP finds r > 1.5×iR
+      //     because most samples fall out-of-bounds) are rejected.
+      //   • Near-horizontal ray contamination from eyelashes (ODH median
+      //     pulled to ~0.73×iR) is also rejected.
+      // When a cascade tier is rejected the initialised donut.rIris = iR*nsx
+      // (the correct pre-zoom estimate) is preserved unchanged.
+      var _zDevMax = isCloseupMode ? 0.25 : 0.40;
+      if (zRIP && zRIP.confidence >= _zRipThresh &&
+          zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * 1.4 &&
+          Math.abs(zRIP.irisR - iR) <= iR * _zDevMax) {
         // Primary succeeded — hard-cap at 1.25× MP to block eyelid overshoot
         donut.rIris = Math.min(zRIP.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
         _zRipConf = zRIP.confidence;
       } else {
         _zFellBack = true;
-        // Secondary: horizontal gradient scan
-        var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0);
-        if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4) {
+        // Secondary: horizontal gradient scan; pass iR as hint so the scan
+        // is capped at iR×1.5 (prevents far-skin false positives on tight crops).
+        var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0, iR);
+        if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4 &&
+            Math.abs(zODH.irisR - iR) <= iR * _zDevMax) {
           donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
           // Adopt horizontal scan's x-center refinement if it didn't drift
           if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
