@@ -318,6 +318,35 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       if (_limBest) outerM = {entry:_limBest, distance:_limBd};
     }
   }
+  // ── Inner-outer warmth gradient (Tier 2 green detection) ───────────────────
+  // Green/olive irises get LESS warm (G−R increases) from outer stroma → pupil
+  // zone; brown irises get MORE warm toward center. Threshold: if the pupillary
+  // zone (innermost 25% of span) is >10 G-R points LESS warm than the outer
+  // stroma mean, this is the iris-greening signature — redirect to Green/Hazel.
+  // Safe for hetero: a warm-brown central ring in a blue/gray iris has MORE
+  // negative inner G-R than outer, so its delta is negative and won't trigger.
+  if ((outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
+      pupilZone.length >= 20) {
+    var _pzR=0, _pzG=0, _pzB=0;
+    for (var _pzI=0; _pzI<pupilZone.length; _pzI++){
+      _pzR+=pupilZone[_pzI][0]; _pzG+=pupilZone[_pzI][1]; _pzB+=pupilZone[_pzI][2];
+    }
+    var _pzGR = _pzG/pupilZone.length - _pzR/pupilZone.length;
+    var _ouGR  = outerMeanRgb[1] - outerMeanRgb[0];
+    if (_pzGR - _ouGR > 10) {
+      var _pzMean = [Math.round(_pzR/pupilZone.length),
+                     Math.round(_pzG/pupilZone.length),
+                     Math.round(_pzB/pupilZone.length)];
+      var _pzLab = rgbLab(_pzMean[0],_pzMean[1],_pzMean[2]);
+      var _pzBest=null, _pzBd=Infinity;
+      for (var _pzPi=0; _pzPi<PALETTE.length; _pzPi++){
+        if (PALETTE[_pzPi].cat!=='Green'&&PALETTE[_pzPi].cat!=='Hazel') continue;
+        var _pzDe=dE(_pzLab,PALETTE[_pzPi].lab);
+        if (_pzDe<_pzBd){ _pzBd=_pzDe; _pzBest=PALETTE[_pzPi]; }
+      }
+      if (_pzBest) outerM = {entry:_pzBest, distance:_pzBd};
+    }
+  }
   // ===== Heterochromia: combined detection =====
   // Path 1 (legacy): cross-category color shift between inner/outer halves
   //   (catches Bowie-style cross-category central hetero like brown/blue).
