@@ -264,7 +264,20 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   var outerDom    = dominant(outer);
   var edgeDom     = dominant(edge.length ? edge : outer);
   var bodyIrisDom = dominant(bodyIris.length >= 30 ? bodyIris : outer);
-  var innerM = nearestPal(innerDom), outerM = nearestPal(outerDom);
+  var innerM = nearestPal(innerDom);
+  // Outer-zone palette match: use RGB mean rather than the single most-frequent
+  // histogram bin (dominant). For bimodal distributions — e.g. blue/gray stroma
+  // pixels spread across multiple bins + a small cluster of dark limbal-ring pixels
+  // dominating one bin — dominant() picks the dark cluster and returns Brown even
+  // though the iris is predominantly blue/gray. Mean correctly averages both
+  // populations. WB correction has already been applied to the outer[] array.
+  var outerM = (function() {
+    var n = outer.length;
+    if (!n) return nearestPal(outerDom);
+    var rS=0, gS=0, bS=0;
+    for (var _oi=0; _oi<n; _oi++) { rS+=outer[_oi][0]; gS+=outer[_oi][1]; bS+=outer[_oi][2]; }
+    return nearestPal([Math.round(rS/n), Math.round(gS/n), Math.round(bS/n)]);
+  })();
   // ===== Heterochromia: combined detection =====
   // Path 1 (legacy): cross-category color shift between inner/outer halves
   //   (catches Bowie-style cross-category central hetero like brown/blue).
