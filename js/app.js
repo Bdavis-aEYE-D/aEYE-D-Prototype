@@ -1165,6 +1165,48 @@ function zoomToEye() {
     // trim is gone. Apply a 6% trim here for all close-up photos so the final circle
     // sits on the iris, not on the sclera.
     if (isCloseupMode) donut.rIris = Math.round(donut.rIris * 0.94);
+    // ── Close-up limbal ring back-off ────────────────────────────────────────
+    // The 0.94 trim above corrects the typical 5–8 % limbal-sclera anchor error.
+    // On macro close-ups with a wide, prominent limbal ring the trim still leaves
+    // rOut in the dark limbal band (mean ring lum < 90).  Scan inward in 3 % steps
+    // (max 22 % additional trim) until ring lum rises ≥ 10 points from the dark
+    // minimum — i.e. back into iris-stroma territory.
+    // Guard: skip if mid-iris (0.55×r) is not noticeably brighter than the edge
+    // (< lbEdge + 20).  This prevents over-trimming dark-coloured irises where
+    // the entire stroma is uniformly dim.
+    if (isCloseupMode) {
+      var _lbR   = donut.rIris / nsx;
+      var _lbCx  = (donut.cx    - drawInfo.dx) / nsx;
+      var _lbCy  = (donut.cy    - drawInfo.dy) / nsy;
+      var _lbOff = document.createElement('canvas');
+      _lbOff.width = imgEl.width; _lbOff.height = imgEl.height;
+      var _lbCtx = _lbOff.getContext('2d', {colorSpace:'srgb'});
+      _lbCtx.drawImage(imgEl, 0, 0);
+      var _lbPx  = _lbCtx.getImageData(0, 0, imgEl.width, imgEl.height).data;
+      var _lbW   = imgEl.width, _lbH = imgEl.height;
+      var _lbRingLum = function(r) {
+        var _s=0, _n=0;
+        for (var _ai=0; _ai<64; _ai++) {
+          var _ang = _ai/64*2*Math.PI;
+          var _bx  = Math.round(_lbCx + Math.cos(_ang)*r);
+          var _by  = Math.round(_lbCy + Math.sin(_ang)*r);
+          if (_bx<0||_by<0||_bx>=_lbW||_by>=_lbH) continue;
+          var _bi  = (_by*_lbW+_bx)*4;
+          _s += 0.299*_lbPx[_bi]+0.587*_lbPx[_bi+1]+0.114*_lbPx[_bi+2]; _n++;
+        }
+        return _n ? _s/_n : 100;
+      };
+      var _lbEdge = _lbRingLum(_lbR);
+      var _lbMid  = _lbRingLum(_lbR * 0.55);
+      if (_lbEdge < 90 && _lbMid > _lbEdge + 20) {
+        var _lbMin = _lbR * 0.78;
+        while (_lbR > _lbMin) {
+          _lbR *= 0.97;
+          if (_lbRingLum(_lbR) >= _lbEdge + 10) break;
+        }
+        donut.rIris = Math.round(_lbR * nsx);
+      }
+    }
     draw();
 
     // ── Placement check + confidence-aware advisory ─────────────────────────
