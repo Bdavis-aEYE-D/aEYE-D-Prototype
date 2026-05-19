@@ -632,7 +632,11 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
 
   var cxR = Math.round(cx), cyR = Math.round(cy);
   var rMin = Math.max(4, Math.round(hintR * 0.75));
-  var rMax = Math.min(Math.round(Math.min(W, H) * 0.48), Math.round(hintR * 1.40));
+  // Cap raised from 0.48 → 0.62 to match R_MAX_CU: extreme close-up irises can
+  // fill up to 62 % of the shorter image dimension, so the old 0.48 cap caused
+  // the search window to end before the true limbus was reached when the initial
+  // hintR was also underestimated (e.g., from a collarette-locked autoFit pass).
+  var rMax = Math.min(Math.round(Math.min(W, H) * 0.62), Math.round(hintR * 2.00));
   if (rMax <= rMin + 4) return null;
 
   var SAMPLES = 64;

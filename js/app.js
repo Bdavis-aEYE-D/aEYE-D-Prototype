@@ -786,16 +786,42 @@ function _applyFitClassical(closeup){
     // Allow cascade even when fit.ok=false: autoFit falls back to pr×2.1 when no
     // limbus was found, which is a reasonable seed for the refinement cascade.
     if (closeup && cuIrisR > 8) {
+      // Close-up: autoFit's horizontal scan sometimes anchors on the
+      // collarette/pupil boundary instead of the true iris-sclera limbus,
+      // returning an irisR that is 40–60 % of the true value.  If we feed that
+      // underestimate straight into findIrisODByRIP the function's search window
+      // (0.75×hint … 1.40×hint) never reaches the real limbus.
+      //
+      // Use the pupil radius to compute a minimum floor: the human iris is always
+      // at least 3.0× the pupil radius in extreme close-ups.  Also floor at
+      // 28 % of the shorter image dimension (smallest possible close-up iris).
+      // Take the maximum of autoFit's estimate and these two floors so we always
+      // search over a range that can reach the true limbus.
+      var cuMinHint = Math.max(
+        Math.round(cuPupEstimate * 3.0),
+        Math.round(Math.min(imgEl.width, imgEl.height) * 0.28)
+      );
+      var cuRipHint = Math.max(cuIrisR, cuMinHint);
+
       // Primary: Radial Intensity Profile (full-circle mean, confidence-scored)
-      // Threshold lowered to 0.22: grey/heterochromic irises produce gradual
-      // transitions that score 0.22-0.35 on this metric. RIP still gives a
-      // more accurate full-circle radius than ODH (which contaminates with
-      // downward eyelid rays) even at moderate confidence.
-      var cuRip = findIrisODByRIP(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR);
-      if (cuRip && cuRip.confidence >= 0.22 &&
-          cuRip.irisR > cuIrisR * 0.50 && cuRip.irisR < cuIrisR * 1.60) {
+      // Close-up threshold lowered to 0.08: extreme macro shots show a very
+      // gradual iris-sclera luminance ramp (80-100 px wide) because the iris
+      // fills nearly the full frame and only a thin sclera crescent is visible.
+      // The RIP confidence formula (peak-gradient / total-lum-range) naturally
+      // produces low values (0.08–0.13) for these gradual transitions even though
+      // the radius estimate is correct.  Full-face threshold stays at 0.22 since
+      // portraits have a sharper, well-lit limbus.
+      var cuRipThresh = closeup ? 0.08 : 0.22;
+      var cuRip = findIrisODByRIP(imgEl, cxPupil_cu, cyPupil_cu, cuRipHint);
+      if (cuRip && cuRip.confidence >= cuRipThresh &&
+          cuRip.irisR > cuRipHint * 0.40 && cuRip.irisR < cuRipHint * 2.00) {
         cuIrisR = cuRip.irisR;
         cuRadSrc = 'RIP' + Math.round(cuRip.confidence * 10);
+        // RIP is anchored on the pupil center (cxPupil_cu/cyPupil_cu), so
+        // the iris circle center is the pupil center. Update cuIrisCx/Cy so
+        // analyzeIris samples the correct annular region around the true iris.
+        cuIrisCx = cxPupil_cu;
+        cuIrisCy = cyPupil_cu;
       } else {
         // Secondary: horizontal gradient scan (3/9 o'clock + near-horizontal rays)
         var cuPupR = findPupilRadiusByRays(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR);
