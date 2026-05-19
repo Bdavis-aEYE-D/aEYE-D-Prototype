@@ -144,9 +144,40 @@ function autoFit(src, closeup){
       }
       prof[x] = n ? s/n : 0;
     }
-    var lh = -1, lm = minGrad;
-    for (var x = 2; x < Math.round(refCx) - guardR; x++){
-      var d = prof[x-2] - prof[x]; if (d > lm){ lm = d; lh = x; }
+    // Suppress isolated bright spikes (catch-lights) in close-up mode.
+    // A catch-light is a narrow bright spot much brighter than its 5px neighbors.
+    // Sustained bright regions (sclera) have similar lum to their neighbors so
+    // they are NOT suppressed by this filter.
+    if (closeup) {
+      for (var x = 5; x < W-5; x++) {
+        if (prof[x] > 185) {
+          var ctx5 = (prof[x-5] + prof[x+5]) * 0.5;
+          if (prof[x] > ctx5 + 30) { prof[x] = ctx5; }
+        }
+      }
+    }
+    // Left scan — close-up uses a two-pass outermost-drop approach:
+    //   Pass 1: find the maximum drop magnitude.
+    //   Pass 2: find the FIRST (leftmost/outermost) position with drop ≥ 80% of max.
+    // This prefers the true outer limbus over any internal collarette edge that
+    // may coincidentally have equal or near-equal contrast (the root cause of the
+    // ring landing on the amber zone instead of the iris-sclera boundary).
+    // Full-face mode keeps the original max-drop logic (iris is smaller/centered).
+    var lh = -1;
+    if (closeup) {
+      var lmP1 = minGrad;
+      for (var x = 2; x < Math.round(refCx) - guardR; x++){
+        var d = prof[x-2] - prof[x]; if (d > lmP1) lmP1 = d;
+      }
+      var lThresh = Math.max(minGrad, lmP1 * 0.80);
+      for (var x = 2; x < Math.round(refCx) - guardR; x++){
+        var d = prof[x-2] - prof[x]; if (d >= lThresh) { lh = x; break; }
+      }
+    } else {
+      var lm = minGrad;
+      for (var x = 2; x < Math.round(refCx) - guardR; x++){
+        var d = prof[x-2] - prof[x]; if (d > lm){ lm = d; lh = x; }
+      }
     }
     var rh = -1, rm = minGrad;
     for (var x = W-3; x > Math.round(refCx) + guardR; x--){
@@ -191,12 +222,17 @@ function autoFit(src, closeup){
     var bestScore = ok ? irisR * 2 * 12 : 0;
     var bestCy = pcy, bestCx = pcx, bestIrisR = irisR;
     var tier1Hit = false; // track whether any scan actually improved on the seed
-    // Cap scan at one iris-radius below the pupil center. The old limit (pcy+30%H)
-    // could reach the lower eyelash line, which scores *higher* than the true iris
-    // (dark lash interior + bright sclera flanking = large contrast). Capping at
-    // irisR keeps the search inside the iris circle and can't be hijacked by lashes.
-    var yEnd = Math.min(H - 1, Math.round(pcy + (ok ? irisR : H * 0.20)));
-    for (var ty = Math.round(pcy) + 3; ty <= yEnd; ty += 3) {
+    // Scan one iris-radius ABOVE and below the pupil center. Scanning only below
+    // (old behaviour) fails when the iris is very large: the pupil row has no
+    // sclera on either side, so the initial horizontal scan finds a garbage radius,
+    // and Tier-1 never reaches the upper rows where sclera is visible.  Extending
+    // the search symmetrically (±irisR) lets us find those high-contrast rows while
+    // the ±irisR cap still prevents hijacking by far-off eyelid/lash lines.
+    var yRange = ok ? irisR : Math.round(H * 0.20);
+    var yStart = Math.max(0, Math.round(pcy) - yRange);
+    var yEnd   = Math.min(H - 1, Math.round(pcy) + yRange);
+    for (var ty = yStart; ty <= yEnd; ty += 3) {
+      if (Math.abs(ty - Math.round(pcy)) < 3) continue; // skip already-scanned initial row
       var b2 = scanBand(ty, pcx);
       if (b2.lh >= 0 && b2.rh >= 0) {
         var span = b2.rh - b2.lh;
@@ -262,7 +298,11 @@ function autoFit(src, closeup){
   // indicates the seed landed on a non-iris dark region (lash shadow, canthus, etc.)
   // and the bilateral scan built a wrong circle from it.
   var centerDist = Math.hypot(pcx - W/2, pcy - H/2);
-  if (closeup && (!ok || irisR < W * 0.10 || leftHit < 0 || centerDist > W * 0.35)) {
+  // Also trigger Tier-2 when the detected iris is suspiciously small for a close-up
+  // photo (< 38% of the shorter dimension). In extreme close-ups the pupil center row
+  // may have no visible sclera, yielding a garbage initial radius that passes the old
+  // W*0.10 threshold but is clearly wrong for a true macro shot.
+  if (closeup && (!ok || irisR < W * 0.10 || irisR < Math.round(Math.min(W,H) * 0.38) || leftHit < 0 || centerDist > W * 0.35)) {
     var gBestScore = 0, gBestCy = -1, gBestCx = W>>1, gBestR = 0;
     var gyLo = Math.floor(H * 0.15), gyHi = Math.ceil(H * 0.85);
     for (var gy = gyLo; gy <= gyHi; gy += 2) {
@@ -274,11 +314,21 @@ function autoFit(src, closeup){
         }
         gprof[gx] = gn ? gs/gn : 0;
       }
-      // Find the strongest left-side drop (sclera→iris entering from left half)
+      // Same catch-light suppression applied to the Tier-2 profile.
+      for (var gx = 5; gx < W-5; gx++) {
+        if (gprof[gx] > 185) {
+          var gctx = (gprof[gx-5] + gprof[gx+5]) * 0.5;
+          if (gprof[gx] > gctx + 30) { gprof[gx] = gctx; }
+        }
+      }
+      // Tier-2 left scan: outermost drop ≥ 80% of maximum (same logic as scanBand).
       var gleft = -1, gleftMax = minGrad;
       for (var gx = 2; gx < (W>>1); gx++) {
-        var gd = gprof[gx-2] - gprof[gx];
-        if (gd > gleftMax) { gleftMax = gd; gleft = gx; }
+        var gd = gprof[gx-2] - gprof[gx]; if (gd > gleftMax) gleftMax = gd;
+      }
+      var glThresh = Math.max(minGrad, gleftMax * 0.80);
+      for (var gx = 2; gx < (W>>1); gx++) {
+        var gd = gprof[gx-2] - gprof[gx]; if (gd >= glThresh) { gleft = gx; break; }
       }
       // Find the strongest right-side drop (sclera→iris entering from right half)
       var gright = -1, grightMax = minGrad;
