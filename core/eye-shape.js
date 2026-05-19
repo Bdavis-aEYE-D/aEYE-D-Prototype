@@ -103,12 +103,12 @@ function classifyEyeShape(imgEl, irisSpec) {
   var tmp = document.createElement('canvas');
   tmp.width = cW; tmp.height = cH;
   try {
-    tmp.getContext('2d').drawImage(imgEl, rx0, ry0, rawW, rawH, 0, 0, cW, cH);
+    tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, rx0, ry0, rawW, rawH, 0, 0, cW, cH);
   } catch (e) { return UNKNOWN; }
 
   var data;
   try {
-    data = tmp.getContext('2d').getImageData(0, 0, cW, cH).data;
+    data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, cW, cH).data;
   } catch (e) { return UNKNOWN; }  // CORS taint
 
   /* ── Pixel helpers ──────────────────────────────────────────────────── */

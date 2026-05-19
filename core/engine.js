@@ -32,7 +32,9 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
 
   var off = document.createElement('canvas');
   off.width = stageW; off.height = stageH;
-  var octx = off.getContext('2d');
+  // Force sRGB colour space so iOS P3 display profile doesn't shift pixel values
+  // read via getImageData — without this, blue/grey irises map to warm/brown on iPhone.
+  var octx = off.getContext('2d', { colorSpace: 'srgb' });
   octx.fillStyle = '#000'; octx.fillRect(0, 0, stageW, stageH);
   octx.drawImage(imgEl, drawInfo.dx, drawInfo.dy, drawInfo.dw, drawInfo.dh);
   var d = octx.getImageData(0, 0, stageW, stageH).data;

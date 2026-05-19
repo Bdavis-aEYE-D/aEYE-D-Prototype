@@ -346,7 +346,7 @@ function jumpToEye(side) {
 
   var off = document.createElement('canvas');
   off.width = cw; off.height = ch;
-  off.getContext('2d').drawImage(originalImgEl, cx0, cy0, cw, ch, 0, 0, cw, ch);
+  off.getContext('2d', { colorSpace: 'srgb' }).drawImage(originalImgEl, cx0, cy0, cw, ch, 0, 0, cw, ch);
   var img = new Image();
   img.onload = function() {
     imgEl = img; imgLoaded = true;
@@ -509,7 +509,7 @@ $('btn-zoom-in').addEventListener('click', function(){
   // Build cropped image canvas from natural-pixel source region
   var off = document.createElement('canvas');
   off.width = cw; off.height = ch;
-  var octx = off.getContext('2d');
+  var octx = off.getContext('2d', { colorSpace: 'srgb' });
   octx.drawImage(originalImgEl, cx0, cy0, cw, ch, 0, 0, cw, ch);
   var img = new Image();
   img.onload = function(){
@@ -980,8 +980,8 @@ function validateIrisFit() {
 
   var off = document.createElement('canvas');
   off.width = W; off.height = H;
-  off.getContext('2d').drawImage(imgEl, 0, 0, W, H);
-  var d = off.getContext('2d').getImageData(0, 0, W, H).data;
+  off.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0, W, H);
+  var d = off.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
   function lp(x, y) {
     var px = Math.max(0, Math.min(W-1, Math.round(x)));
     var py = Math.max(0, Math.min(H-1, Math.round(y)));
@@ -1029,7 +1029,7 @@ function zoomToEye() {
   var cw = x1 - x0, ch = y1 - y0;
   var off = document.createElement('canvas');
   off.width = cw; off.height = ch;
-  off.getContext('2d').drawImage(imgEl, x0, y0, cw, ch, 0, 0, cw, ch);
+  off.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, x0, y0, cw, ch, 0, 0, cw, ch);
 
   var newImg = new Image();
   newImg.onload = function() {

@@ -16,7 +16,7 @@ function autoFit(src, closeup){
   var H = Math.max(2, Math.round(src.height * scale));
   var off = document.createElement('canvas');
   off.width = W; off.height = H;
-  var octx = off.getContext('2d');
+  var octx = off.getContext('2d', { colorSpace: 'srgb' });
   octx.drawImage(src, 0, 0, W, H);
   var data = octx.getImageData(0, 0, W, H).data;
   var lum = new Float32Array(W*H);
@@ -415,8 +415,8 @@ function findPupilCenter(imgEl, cxHint, cyHint, searchR) {
   if (!W || !H) return null;
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
   function lum(x, y) {
     var px = Math.max(0, Math.min(W-1, Math.round(x)));
     var py = Math.max(0, Math.min(H-1, Math.round(y)));
@@ -466,8 +466,8 @@ function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
   if (!W || !H) return 128;
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
   var x0 = Math.max(0, Math.round(cx - outerR));
   var x1 = Math.min(W-1, Math.round(cx + outerR));
   var y0 = Math.max(0, Math.round(cy - outerR));
@@ -495,8 +495,8 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint, irisRHint) {
   if (!W || !H) return null;
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
 
   function lum(x, y) {
     var px = Math.max(0, Math.min(W-1, Math.round(x)));
@@ -620,8 +620,8 @@ function findIrisODByRIP(imgEl, cx, cy, hintR) {
 
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
 
   function lum(x, y) {
     var px = Math.max(0, Math.min(W-1, Math.round(x)));
@@ -721,8 +721,8 @@ function findIrisODBySaturation(imgEl, cx, cy, hintR) {
 
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
 
   function sat(x, y) {
     var px = Math.max(0, Math.min(W-1, Math.round(x)));
@@ -800,8 +800,8 @@ function findPupilRadiusByRays(imgEl, cxPupil, cyPupil, irisR) {
   if (!W || !H) return irisR * 0.25;
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
 
   // Build luminance array with glare pre-pass (corneal reflections → neighbor average)
   var gl = new Float32Array(W * H);
@@ -886,8 +886,8 @@ function findIrisRadiusByRadialScan(imgEl, cxCrop, cyCrop, hintR, maxRFactor) {
   if (!W || !H) return null;
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
 
   function lum(x, y) {
     var px = Math.max(0, Math.min(W-1, Math.round(x)));
@@ -958,8 +958,8 @@ function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
 
   var tmp = document.createElement('canvas');
   tmp.width = rw; tmp.height = rh;
-  tmp.getContext('2d').drawImage(imgEl, rx0, ry0, rw, rh, 0, 0, rw, rh);
-  var d = tmp.getContext('2d').getImageData(0, 0, rw, rh).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, rx0, ry0, rw, rh, 0, 0, rw, rh);
+  var d = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, rw, rh).data;
   var lumArr = new Float32Array(rw * rh);
   for (var i = 0; i < rw * rh; i++) {
     var idx = i * 4;
@@ -1059,8 +1059,8 @@ function checkIrisPlacement(imgEl, cx, cy, rIris) {
 
   var tmp = document.createElement('canvas');
   tmp.width = W; tmp.height = H;
-  tmp.getContext('2d').drawImage(imgEl, 0, 0);
-  var data = tmp.getContext('2d').getImageData(0, 0, W, H).data;
+  tmp.getContext('2d', { colorSpace: 'srgb' }).drawImage(imgEl, 0, 0);
+  var data = tmp.getContext('2d', { colorSpace: 'srgb' }).getImageData(0, 0, W, H).data;
 
   // Average luminance in a small square patch centred on (px, py)
   function patchLum(px, py, pr) {

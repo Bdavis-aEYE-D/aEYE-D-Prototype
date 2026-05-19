@@ -41,22 +41,6 @@ function analyze(){
   if (!result) return;
   if (result.error) { showError(result.error); return; }
 
-  // ── Temporary debug overlay (remove after iOS diagnosis) ──────────────────
-  try {
-    var wb  = window.__lastWB  || {};
-    var msk = window.__lastMaskStats || {};
-    var dbg = document.getElementById('_dbg_line');
-    if (!dbg) { dbg = document.createElement('div'); dbg.id = '_dbg_line';
-      dbg.style.cssText = 'font:10px monospace;color:#ff0;background:#000;padding:4px;word-break:break-all;position:relative;z-index:999';
-      document.body.insertBefore(dbg, document.body.firstChild); }
-    dbg.textContent = 'img=' + (imgEl ? imgEl.width + 'x' + imgEl.height : '?') +
-      ' rI=' + Math.round(donut.rIris) + ' rP=' + Math.round(donut.rPupil) +
-      ' kept=' + (msk.kept||0) + ' scl=' + (msk.sclera||0) + ' lsh=' + (msk.lash||0) +
-      ' wbR=' + (wb.wbR||1).toFixed(2) + ' wbG=' + (wb.wbG||1).toFixed(2) + ' wbB=' + (wb.wbB||1).toFixed(2) +
-      ' wbN=' + (wb.n||0) + ' => ' + (result.overall ? result.overall[0]+'/'+result.overall[1] : '?');
-  } catch(e) {}
-  // ── End debug overlay ──────────────────────────────────────────────────────
-
   // Update session state and render
   eyeResults[result.side] = result;
   renderResult(result);
