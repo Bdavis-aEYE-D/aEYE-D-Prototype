@@ -867,20 +867,26 @@ function _applyFitClassical(closeup){
     donut.rIris  = ripx;
     donut.rPupil = rpx;
     draw();
-    if (validateIrisFit()) {
+    var _fitValid = validateIrisFit();
+    if (_fitValid) {
       if (hint) { hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".'; hint.style.color = ''; }
       if (st)   st.textContent = (closeup ? 'Close-up ' + cuRadSrc : 'Classical') + ': ' + (fit.ok ? 'snapped' : 'estimated');
-      zoomToEye();
     } else {
-      // Placement check failed — keep the autoFit circle (it's based on actual image content
-      // and is always a better starting point than a blind centered default). Just flag it
-      // so the user knows to verify and adjust manually if needed.
+      // Placement check failed — show advisory warning but don't block.
       // draw() already ran above with the autoFit circle set; no need to overwrite.
       if (hint) { hint.textContent = 'Uncertain fit — drag the ring to adjust if needed, then tap "Analyze Iris".'; hint.style.color = '#fa0'; }
       if (st)   st.textContent = (closeup ? 'Close-up ' + cuRadSrc : 'Classical') + ': unconfirmed';
       var rb = $('btn-quality-retake');
       if (rb) rb.style.display = '';
     }
+    // zoomToEye always runs: it crops the canvas to the iris, then refines the
+    // ring via a second cascade.  The ±25 % deviation guard (_zDevMax) already
+    // protects against bad zoom results.  Previously this was gated on
+    // validateIrisFit(), but on iOS the canvas P3 colour-space makes the sclera
+    // brightness check unreliable — the gate caused zoom to be skipped entirely,
+    // leaving the unrefined ring on a full-size image and producing a Brown result
+    // on blue-grey eyes with a prominent amber collarette.
+    zoomToEye();
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
