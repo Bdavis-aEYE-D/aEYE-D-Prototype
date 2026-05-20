@@ -1038,6 +1038,34 @@ function zoomToEye() {
     }
     imgEl = newImg;
 
+    // ── Zoom-crop sanity: pupil-iris gradient check ──────────────────────────
+    // A real iris has a dark pupil at centre with a lighter iris stroma around it.
+    // If the crop landed on background (foliage, hair, skin) the radial luminance
+    // gradient is absent.  Detect this and restore the pre-zoom image so the user
+    // sees the full photo with the ring rather than a dark background close-up.
+    var _zcCx = iCx - x0, _zcCy = iCy - y0;
+    var _zcPupilLum = estimateIrisBrightness(newImg, _zcCx, _zcCy, 0,        iR * 0.18);
+    var _zcIrisLum  = estimateIrisBrightness(newImg, _zcCx, _zcCy, iR * 0.40, iR * 0.70);
+    // Fail if: (a) centre is too bright to be a pupil, OR (b) no radial gradient
+    if (_zcPupilLum > 100 || (_zcIrisLum - _zcPupilLum) < 12) {
+      // Crop landed on background — undo zoom and restore pre-zoom state.
+      imgEl      = preZoomState.imgEl;
+      cropRegion = preZoomState.cropRegion
+                     ? Object.assign({}, preZoomState.cropRegion) : null;
+      preZoomState = null;
+      layoutStage();
+      draw();
+      var _zcHint = $('autofit-hint');
+      if (_zcHint) {
+        _zcHint.textContent = 'Auto-fit uncertain — drag the ring onto your iris, then tap Analyze.';
+        _zcHint.style.color = '#f5a623';
+      }
+      var _zcRb = $('btn-quality-retake');
+      if (_zcRb) _zcRb.style.display = '';
+      return;
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // Positions in new imgEl space (subtract the crop origin)
     var niCx  = iCx  - x0, niCy  = iCy  - y0;
     var niPCx = iPCx - x0, niPCy = iPCy - y0;
