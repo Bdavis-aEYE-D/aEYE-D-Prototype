@@ -943,10 +943,12 @@ function _applyFitClassical(closeup, skipZoom){
     // brightness check unreliable — the gate caused zoom to be skipped entirely,
     // leaving the unrefined ring on a full-size image and producing a Brown result
     // on blue-grey eyes with a prominent amber collarette.
-    // In close-up mode with a confident fit, skip the zoom sanity check —
-    // _applyFitClassical already confirmed the ring is on the iris, so the
-    // gradient/pupil check is redundant and rejects valid dark/glare eyes.
-    if (!skipZoom) zoomToEye(closeup && fit.ok);
+    // When iris detection was confident (fit.ok=true), skip the zoom sanity
+    // check — _applyFitClassical already confirmed the ring is on the iris, so
+    // the gradient/pupil check is redundant and rejects valid dark/glare eyes.
+    // Previously gated on (closeup && fit.ok), which excluded the full-face
+    // MediaPipe path (closeup=false) and caused zoom to abort for dark eyes.
+    if (!skipZoom) zoomToEye(fit.ok);
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
