@@ -362,8 +362,14 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // in the outer stroma. b* > −10 guards against blue eyes (which land at
   // b* ≈ −20 to −50) being incorrectly promoted to Green.
   // Only fires if outerM is still Brown or Gray after Tiers 1 & 2.
+  //
+  // Warm-inner guard: if the inner zone has b* > 6 (amber/bronze collarette),
+  // this is central-het — warm pupil ring + gray outer — not a green iris.
+  // Tier 3 must not fire in that case or it mis-labels the outer gray as Green.
+  var _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
+  var _t3InnerWarm = _t3InnerLab[2] > 6;   // b* > 6 = amber/bronze inner ring present
   if ((outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
-      outer.length >= 20) {
+      outer.length >= 20 && !_t3InnerWarm) {
     var _t3Lab    = rgbLab(outerMeanRgb[0],    outerMeanRgb[1],    outerMeanRgb[2]);
     var _t3RawLab = rgbLab(outerRawMeanRgb[0], outerRawMeanRgb[1], outerRawMeanRgb[2]);
     // Primary check: WB-corrected a* < -4 (no strong WB distortion).
