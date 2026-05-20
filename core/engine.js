@@ -212,6 +212,14 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       arr[wi][2] = Math.min(255, Math.round(arr[wi][2] * wbB));
     }
   }
+  // Save pre-WB outer mean for Tier-3 green check (WB warm-shift can erase green signal)
+  var _outerRawR=0, _outerRawG=0, _outerRawB=0;
+  for (var _orI=0; _orI<outer.length; _orI++){
+    _outerRawR+=outer[_orI][0]; _outerRawG+=outer[_orI][1]; _outerRawB+=outer[_orI][2];
+  }
+  var outerRawMeanRgb = outer.length
+    ? [Math.round(_outerRawR/outer.length), Math.round(_outerRawG/outer.length), Math.round(_outerRawB/outer.length)]
+    : [0,0,0];
   applyWB(inner); applyWB(outer); applyWB(edge); applyWB(bodyIris);
   applyWB(pupilZone); applyWB(ciliaryZone);
   for (var wbi = 0; wbi < SECT_WEDGES; wbi++) applyWB(wedgePix[wbi]);
@@ -356,8 +364,15 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Only fires if outerM is still Brown or Gray after Tiers 1 & 2.
   if ((outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
       outer.length >= 20) {
-    var _t3Lab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
-    if (_t3Lab[1] < -4 && _t3Lab[2] > -10 && outerMeanRgb[1] >= outerMeanRgb[0]) {
+    var _t3Lab    = rgbLab(outerMeanRgb[0],    outerMeanRgb[1],    outerMeanRgb[2]);
+    var _t3RawLab = rgbLab(outerRawMeanRgb[0], outerRawMeanRgb[1], outerRawMeanRgb[2]);
+    // Primary check: WB-corrected a* < -4 (no strong WB distortion).
+    // Fallback: pre-WB a* < -6 for cases where a warm WB shift (wbR > 1.05) erases
+    // the green signal — tighter threshold (-6 vs -4) guards against false positives.
+    var _t3Fire = (_t3Lab[1] < -4 && _t3Lab[2] > -10 && outerMeanRgb[1] >= outerMeanRgb[0]) ||
+                  (_t3RawLab[1] < -6 && _t3RawLab[2] > -10 &&
+                   outerRawMeanRgb[1] >= outerRawMeanRgb[0] && wbR > 1.05);
+    if (_t3Fire) {
       var _t3Best=null, _t3Bd=Infinity;
       for (var _t3I=0; _t3I<PALETTE.length; _t3I++){
         if (PALETTE[_t3I].cat!=='Green' && PALETTE[_t3I].cat!=='Hazel') continue;
