@@ -307,6 +307,32 @@ function autoDetectAndJumpToFit() {
         Left:  { ci: leftCI,  cx: L[leftCI].x  * imgW, cy: L[leftCI].y  * imgH }
       };
       var startSide = eyeResults['Right'] ? 'Left' : 'Right';
+
+      // ── Macro close-up detection ─────────────────────────────────────────────
+      // If the iris landmark radius > 10 % of image width, this is a macro
+      // close-up where MediaPipe's boundary landmarks are unreliable at this
+      // range (the iris fills too much of the frame for landmark spacing to give
+      // a meaningful radius, and the face-detection crop + cascade both misfire).
+      // Re-route to _tryCloseupFit() which is designed for single-eye macros
+      // with no sclera context: center bias OFF, full RIP/ODH/SAT cascade.
+      var _startCI = startSide === 'Right' ? rightCI : leftCI;
+      var _irMacro = 0;
+      for (var _mk = 1; _mk <= 4; _mk++) {
+        var _mp = L[_startCI + _mk];
+        var _mdx = (_mp.x - L[_startCI].x) * imgW;
+        var _mdy = (_mp.y - L[_startCI].y) * imgH;
+        _irMacro += Math.sqrt(_mdx * _mdx + _mdy * _mdy);
+      }
+      _irMacro /= 4;
+      if (_irMacro > imgW * 0.10) {
+        console.warn('Macro close-up detected — ir=' + Math.round(_irMacro) +
+                     ' imgW=' + imgW + ' — routing to closeup fit');
+        $('card-fit').style.display = 'none';
+        _tryCloseupFit();
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       jumpToEye(startSide);
     } catch(e) {
       console.warn('Eye auto-detect failed:', e);
