@@ -367,11 +367,13 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     var _t3Lab    = rgbLab(outerMeanRgb[0],    outerMeanRgb[1],    outerMeanRgb[2]);
     var _t3RawLab = rgbLab(outerRawMeanRgb[0], outerRawMeanRgb[1], outerRawMeanRgb[2]);
     // Primary check: WB-corrected a* < -4 (no strong WB distortion).
-    // Fallback: pre-WB a* < -6 for cases where a warm WB shift (wbR > 1.05) erases
-    // the green signal — tighter threshold (-6 vs -4) guards against false positives.
+    // Fallback: pre-WB a* < -8 for cases where a warm WB shift (wbR >= 1.08) erases
+    // the green signal. Threshold tightened from -6 → -8 to prevent cool-lit gray
+    // irises (raw a* ≈ -6 to -7) from false-firing. Also requires G−R ≥ 5 (not
+    // just G ≥ R by 1 pixel) to demand a real green channel dominance.
     var _t3Fire = (_t3Lab[1] < -4 && _t3Lab[2] > -10 && outerMeanRgb[1] >= outerMeanRgb[0]) ||
-                  (_t3RawLab[1] < -6 && _t3RawLab[2] > -10 &&
-                   outerRawMeanRgb[1] >= outerRawMeanRgb[0] && wbR > 1.05);
+                  (_t3RawLab[1] < -8 && _t3RawLab[2] > -10 &&
+                   (outerRawMeanRgb[1] - outerRawMeanRgb[0]) >= 5 && wbR >= 1.08);
     if (_t3Fire) {
       var _t3Best=null, _t3Bd=Infinity;
       for (var _t3I=0; _t3I<PALETTE.length; _t3I++){
