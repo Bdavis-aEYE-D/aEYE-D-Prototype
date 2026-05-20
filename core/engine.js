@@ -347,6 +347,28 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       if (_pzBest) outerM = {entry:_pzBest, distance:_pzBd};
     }
   }
+  // ── Tier 3: outer-zone Lab a* green check ────────────────────────────────
+  // For irises where ALL zones are uniformly green/olive — no inner-outer
+  // gradient, no limbal rim warmth — Tiers 1 & 2 both miss. The Lab a* axis
+  // (red–green) is the definitive last resort: a* < −4 means a real green tinge
+  // in the outer stroma. b* > −10 guards against blue eyes (which land at
+  // b* ≈ −20 to −50) being incorrectly promoted to Green.
+  // Only fires if outerM is still Brown or Gray after Tiers 1 & 2.
+  if ((outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
+      outer.length >= 20) {
+    var _t3Lab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    if (_t3Lab[1] < -4 && _t3Lab[2] > -10 && outerMeanRgb[1] >= outerMeanRgb[0]) {
+      var _t3Best=null, _t3Bd=Infinity;
+      for (var _t3I=0; _t3I<PALETTE.length; _t3I++){
+        if (PALETTE[_t3I].cat!=='Green' && PALETTE[_t3I].cat!=='Hazel') continue;
+        var _t3De = dE(_t3Lab, PALETTE[_t3I].lab);
+        if (_t3De < _t3Bd){ _t3Bd=_t3De; _t3Best=PALETTE[_t3I]; }
+      }
+      if (_t3Best) outerM = {entry:_t3Best, distance:_t3Bd};
+    }
+  }
+  // ── End green detection guards ────────────────────────────────────────────
+
   // ===== Heterochromia: combined detection =====
   // Path 1 (legacy): cross-category color shift between inner/outer halves
   //   (catches Bowie-style cross-category central hetero like brown/blue).
