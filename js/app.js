@@ -927,6 +927,26 @@ function _applyFitClassical(closeup, skipZoom){
     var ripx = cuIrisR * scaleX;
     ripx = Math.max(rpx*1.3, Math.min(ripx, Math.min(stageW,stageH)*0.48));
     rpx  = Math.max(6, Math.min(rpx, ripx*0.45));
+    // Low-confidence close-up override: when the cascade returned a barely-
+    // passing RIP (confidence ≤ 0.20, cuRadSrc 'RIP1'/'RIP2') or fell all the
+    // way back to autoFit's estimate ('AF'), the radius is unreliable — the
+    // limbus gradient is too gradual to measure precisely.  Substitute a
+    // pupil-proportional estimate (pupil × 2.7 ≈ ratio 0.37, center of the
+    // normal 0.30–0.45 range) which is far more stable for dark/blurry irises.
+    // High-confidence paths (ODH, RC, SAT, RIP3+) are left untouched.
+    // _overridedRipx=true also suppresses zoomToEye below: zoomToEye would use
+    // the overridden donut.rIris as hint, produce an oversized crop, and run its
+    // own cascade that overwrites the override — defeating the fix.
+    var _overridedRipx = false;
+    if (closeup && rpx > 8) {
+      var _cuLowConf = cuRadSrc === 'AF' ||
+                       (cuRadSrc.startsWith('RIP') && parseInt(cuRadSrc.slice(3)) <= 2);
+      if (_cuLowConf) {
+        ripx = Math.round(rpx * 2.7);
+        ripx = Math.max(rpx * 1.3, Math.min(ripx, Math.min(stageW, stageH) * 0.48));
+        _overridedRipx = true;
+      }
+    }
     donut.rIris  = ripx;
     donut.rPupil = rpx;
     draw();
@@ -935,6 +955,15 @@ function _applyFitClassical(closeup, skipZoom){
       if (hint) { hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".'; hint.style.color = ''; }
       if (st)   st.textContent = (closeup ? 'Close-up ' + cuRadSrc : 'Classical') + ': ' + (fit.ok ? 'snapped' : 'estimated');
     } else {
+      // Placement check failed.
+      // If this was a full-face pass on a jumpToEye crop (cropRegion is set),
+      // silently retry with the close-up cascade — it sizes the iris ring from
+      // local contrast rather than full-face priors, giving a tighter result for
+      // eye-crop images where the full-face model over-extends rOut.
+      if (!closeup && cropRegion != null) {
+        _applyFitClassical(true, skipZoom);
+        return;  // let the recursive call own zoomToEye and the hint
+      }
       // Placement check failed — show advisory warning but don't block.
       // draw() already ran above with the autoFit circle set; no need to overwrite.
       if (hint) { hint.textContent = 'Uncertain fit — drag the ring to adjust if needed, then tap "Analyze Iris".'; hint.style.color = '#fa0'; }
@@ -954,7 +983,10 @@ function _applyFitClassical(closeup, skipZoom){
     // the gradient/pupil check is redundant and rejects valid dark/glare eyes.
     // Previously gated on (closeup && fit.ok), which excluded the full-face
     // MediaPipe path (closeup=false) and caused zoom to abort for dark eyes.
-    if (!skipZoom) zoomToEye(fit.ok);
+    // Skip zoomToEye when the low-conf override fired: zoomToEye would re-run
+    // its own cascade using the overridden donut.rIris as hint, which produces an
+    // oversized crop and overwrites the pupil-proportional radius we just set.
+    if (!skipZoom && !_overridedRipx) zoomToEye(fit.ok);
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);

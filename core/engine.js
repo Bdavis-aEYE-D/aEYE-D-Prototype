@@ -332,6 +332,39 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       if (_limBest) outerM = {entry:_limBest, distance:_limBd};
     }
   }
+  // ── Pre-compute outer stroma mean once — shared by both guards below ────────
+  var _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
+  var _t3InnerWarm = _t3InnerLab[2] > 6;   // b* > 6 = amber/bronze inner ring
+  var _osMean = null, _osM = null;
+  if (outerStroma.length >= 15) {
+    var _osR=0, _osG=0, _osB=0;
+    for (var _osI=0; _osI<outerStroma.length; _osI++) {
+      _osR+=outerStroma[_osI][0]; _osG+=outerStroma[_osI][1]; _osB+=outerStroma[_osI][2];
+    }
+    _osMean = [Math.round(_osR/outerStroma.length),
+               Math.round(_osG/outerStroma.length),
+               Math.round(_osB/outerStroma.length)];
+    _osM = nearestPal(_osMean);
+  }
+  // ── Hazel→Brown guard: reddish outer stroma = no green component = not true Hazel ─
+  // True Hazel irises have a green/olive outer stroma (a* near 0 or negative in Lab).
+  // When outer = Hazel but outerStroma Lab a*>5 AND b*>5, there is no green signal —
+  // this is a Brown iris whose diluted outer zone crossed into Hazel territory.
+  // Lab thresholds are used instead of palette comparison because the Hazel/Brown
+  // palette boundary is unreliable for warm-reddish RGB values (both read Honey Gold).
+  // Does NOT fire for gray-base irises (a* ~ 1-2) or true Hazel (a* ≤ 0 to ~3).
+  if (outerM.entry.cat === 'Hazel' && _osMean) {
+    var _osLabH2B = rgbLab(_osMean[0], _osMean[1], _osMean[2]);
+    if (_osLabH2B[1] > 5 && _osLabH2B[2] > 5) {  // a*>5 = reddish; b*>5 = warm
+      var _h2bBest = null, _h2bDist = Infinity;
+      for (var _hbi = 0; _hbi < PALETTE.length; _hbi++) {
+        if (PALETTE[_hbi].cat !== 'Brown') continue;
+        var _hbDe = dE(_osLabH2B, PALETTE[_hbi].lab);
+        if (_hbDe < _h2bDist) { _h2bDist = _hbDe; _h2bBest = PALETTE[_hbi]; }
+      }
+      if (_h2bBest) outerM = { entry: _h2bBest, distance: _h2bDist };
+    }
+  }
   // ── Hazel/Brown→Gray/Blue guard for warm-center central-heterochromia eyes ────
   // When the inner zone is warm (b* > 6: amber/toffee/bronze collarette) and the
   // outer zone classifies as Hazel or Brown, the warm pixels just outside innerBand
@@ -340,17 +373,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Covers both Hazel (classic case) and Brown (when warm-stroma melanin tips the
   // outer mean past the Hazel/Brown boundary on a true gray/blue iris).
   // Only reclassifies to Gray or Blue — never to Green — to avoid false positives.
-  var _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
-  var _t3InnerWarm = _t3InnerLab[2] > 6;   // b* > 6 = amber/bronze inner ring
-  if ((outerM.entry.cat === 'Hazel' || outerM.entry.cat === 'Brown') && _t3InnerWarm && outerStroma.length >= 15) {
-    var _osR=0, _osG=0, _osB=0;
-    for (var _osI=0; _osI<outerStroma.length; _osI++) {
-      _osR+=outerStroma[_osI][0]; _osG+=outerStroma[_osI][1]; _osB+=outerStroma[_osI][2];
-    }
-    var _osMean = [Math.round(_osR/outerStroma.length),
-                   Math.round(_osG/outerStroma.length),
-                   Math.round(_osB/outerStroma.length)];
-    var _osM = nearestPal(_osMean);
+  if ((outerM.entry.cat === 'Hazel' || outerM.entry.cat === 'Brown') && _t3InnerWarm && _osM) {
     if (_osM.entry.cat === 'Gray' || _osM.entry.cat === 'Blue') {
       outerM = _osM;
     }
