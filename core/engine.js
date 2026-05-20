@@ -58,7 +58,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   var pupilZoneCut  = rIn + (rOut - rIn) * 0.25;
   var ciliaryZoneCut = rIn + (rOut - rIn) * 0.55;
   var inner = [], outer = [], edge = [], bodyIris = [];
-  var pupilZone = [], ciliaryZone = [];
+  var pupilZone = [], ciliaryZone = [], outerStroma = [];
   var edgeDarkSum = 0, edgeDarkCount = 0, midLumSum = 0, midLumCount = 0;
   // Sectoral heterochromia: accumulate per-wedge pixel arrays + base-band Lab sums.
   // 12 wedges of 30 deg, base band = [0.30, 0.85] of rIris (matches Python ref).
@@ -129,6 +129,12 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       // serve as an uncontaminated baseline for the limbal comparison.
       if (dist >= rOut * 0.35 && dist < rOut * 0.82) {
         bodyIris.push([r,g,b]);
+      }
+      // Pure outer stroma (0.65-0.85×rOut): tighter band that excludes the
+      // collarette spillover zone (0.62-0.65) and the dark limbal rim (0.85+).
+      // Used by the Hazel→Gray guard when central heterochromia is present.
+      if (dist >= rOut * 0.65 && dist < rOut * 0.85) {
+        outerStroma.push([r,g,b]);
       }
       // Mid band kept for backwards compatibility (no longer drives limbal label)
       if (dist > rOut * 0.40 && dist < rOut * 0.80) {
@@ -326,6 +332,29 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       if (_limBest) outerM = {entry:_limBest, distance:_limBd};
     }
   }
+  // ── Hazel/Brown→Gray/Blue guard for warm-center central-heterochromia eyes ────
+  // When the inner zone is warm (b* > 6: amber/toffee/bronze collarette) and the
+  // outer zone classifies as Hazel or Brown, the warm pixels just outside innerBand
+  // (62%) can bias the outer-zone mean. Re-evaluate using the pure outer stroma
+  // (65–85% of rIris), which is further from the warm central zone.
+  // Covers both Hazel (classic case) and Brown (when warm-stroma melanin tips the
+  // outer mean past the Hazel/Brown boundary on a true gray/blue iris).
+  // Only reclassifies to Gray or Blue — never to Green — to avoid false positives.
+  var _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
+  var _t3InnerWarm = _t3InnerLab[2] > 6;   // b* > 6 = amber/bronze inner ring
+  if ((outerM.entry.cat === 'Hazel' || outerM.entry.cat === 'Brown') && _t3InnerWarm && outerStroma.length >= 15) {
+    var _osR=0, _osG=0, _osB=0;
+    for (var _osI=0; _osI<outerStroma.length; _osI++) {
+      _osR+=outerStroma[_osI][0]; _osG+=outerStroma[_osI][1]; _osB+=outerStroma[_osI][2];
+    }
+    var _osMean = [Math.round(_osR/outerStroma.length),
+                   Math.round(_osG/outerStroma.length),
+                   Math.round(_osB/outerStroma.length)];
+    var _osM = nearestPal(_osMean);
+    if (_osM.entry.cat === 'Gray' || _osM.entry.cat === 'Blue') {
+      outerM = _osM;
+    }
+  }
   // ── Inner-outer warmth gradient (Tier 2 green detection) ───────────────────
   // Green/olive irises get LESS warm (G−R increases) from outer stroma → pupil
   // zone; brown irises get MORE warm toward center. Threshold: if the pupillary
@@ -366,8 +395,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Warm-inner guard: if the inner zone has b* > 6 (amber/bronze collarette),
   // this is central-het — warm pupil ring + gray outer — not a green iris.
   // Tier 3 must not fire in that case or it mis-labels the outer gray as Green.
-  var _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
-  var _t3InnerWarm = _t3InnerLab[2] > 6;   // b* > 6 = amber/bronze inner ring present
+  // (_t3InnerLab and _t3InnerWarm already computed by the Hazel→Gray guard above.)
   if ((outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
       outer.length >= 20 && !_t3InnerWarm) {
     var _t3Lab    = rgbLab(outerMeanRgb[0],    outerMeanRgb[1],    outerMeanRgb[2]);
