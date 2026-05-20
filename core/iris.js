@@ -460,7 +460,10 @@ function findPupilCenter(imgEl, cxHint, cyHint, searchR) {
 
 // Mean luminance of the iris annulus (innerR..outerR). Used to pick scan window:
 // dark irises need a wider maxR to reach the low-contrast limbal edge.
-function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
+// maxLum: optional — pixels brighter than this are excluded (catch-light rejection).
+// Pass 180 for the pupil zone so a catch-light doesn't inflate the dark-pupil average
+// and falsely trigger the zoom sanity abort.
+function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR, maxLum) {
   var W = imgEl.naturalWidth  || imgEl.width;
   var H = imgEl.naturalHeight || imgEl.height;
   if (!W || !H) return 128;
@@ -478,7 +481,9 @@ function estimateIrisBrightness(imgEl, cx, cy, innerR, outerR) {
       var dx = x - cx, dy = y - cy, d2 = dx*dx + dy*dy;
       if (d2 < innerR*innerR || d2 > outerR*outerR) continue;
       var idx = (y * W + x) * 4;
-      sum += 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+      var lum = 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+      if (maxLum && lum > maxLum) continue;  // skip catch-lights / specular glare
+      sum += lum;
       count++;
     }
   }

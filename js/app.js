@@ -1101,10 +1101,14 @@ function zoomToEye() {
     // gradient is absent.  Detect this and restore the pre-zoom image so the user
     // sees the full photo with the ring rather than a dark background close-up.
     var _zcCx = iCx - x0, _zcCy = iCy - y0;
-    var _zcPupilLum = estimateIrisBrightness(newImg, _zcCx, _zcCy, 0,        iR * 0.18);
+    // maxLum=180 on the pupil zone excludes catch-lights so a bright glare spot
+    // doesn't falsely push _zcPupilLum above the 100 threshold and abort the zoom.
+    var _zcPupilLum = estimateIrisBrightness(newImg, _zcCx, _zcCy, 0,        iR * 0.18, 180);
     var _zcIrisLum  = estimateIrisBrightness(newImg, _zcCx, _zcCy, iR * 0.40, iR * 0.70);
-    // Fail if: (a) centre is too bright to be a pupil, OR (b) no radial gradient
-    if (_zcPupilLum > 100 || (_zcIrisLum - _zcPupilLum) < 12) {
+    // Fail if: (a) centre is too bright to be a pupil, OR (b) no radial gradient.
+    // Gradient threshold lowered 12→8: dark irises have a smaller pupil-stroma
+    // luminance gap but still have a real gradient; 12 was aborting valid zooms.
+    if (_zcPupilLum > 100 || (_zcIrisLum - _zcPupilLum) < 8) {
       // Crop landed on background — undo zoom and restore pre-zoom state.
       imgEl      = preZoomState.imgEl;
       cropRegion = preZoomState.cropRegion
