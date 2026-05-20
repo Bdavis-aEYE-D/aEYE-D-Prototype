@@ -766,7 +766,7 @@ function _classifyEyeShape(L, side, imgW, imgH) {
   }
 }
 
-function _applyFitClassical(closeup){
+function _applyFitClassical(closeup, skipZoom){
   if (!imgEl) return false;
   var hint = $('autofit-hint');
   var st   = $('autofit-status');
@@ -912,7 +912,7 @@ function _applyFitClassical(closeup){
     // brightness check unreliable — the gate caused zoom to be skipped entirely,
     // leaving the unrefined ring on a full-size image and producing a Brown result
     // on blue-grey eyes with a prominent amber collarette.
-    zoomToEye();
+    if (!skipZoom) zoomToEye();
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
@@ -1079,15 +1079,13 @@ function zoomToEye() {
       cropRegion = preZoomState.cropRegion
                      ? Object.assign({}, preZoomState.cropRegion) : null;
       preZoomState = null;
+      isCloseupMode = true;
       layoutStage();
-      draw();
-      var _zcHint = $('autofit-hint');
-      if (_zcHint) {
-        _zcHint.textContent = 'Auto-fit uncertain — drag the ring onto your iris, then tap Analyze.';
-        _zcHint.style.color = '#f5a623';
-      }
-      var _zcRb = $('btn-quality-retake');
-      if (_zcRb) _zcRb.style.display = '';
+      // Re-fit the ring on the restored image using the full classical cascade
+      // (skipZoom=true prevents re-triggering zoomToEye and looping).
+      // This gives a properly sized ring instead of the 42%-of-stage default,
+      // which is too large for an already-cropped eye or macro close-up photo.
+      _applyFitClassical(true, true);
       return;
     }
     // ────────────────────────────────────────────────────────────────────────
