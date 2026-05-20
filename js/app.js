@@ -302,9 +302,26 @@ function autoDetectAndJumpToFit() {
         return;
       }
 
+      // Eye corner landmarks (canthus points — far more stable than iris centre on
+      // extreme close-ups where the iris landmark can misfire to eyelid/sclera).
+      // Right eye: outer corner=33, inner corner=133
+      // Left eye:  inner corner=362, outer corner=263
+      function _eyeCornerSpan(oc, ic) {
+        var dx = (oc.x - ic.x) * imgW, dy = (oc.y - ic.y) * imgH;
+        return Math.sqrt(dx*dx + dy*dy);
+      }
+      var _rOC = L[33], _rIC = L[133], _lIC = L[362], _lOC = L[263];
+      var _rEyeW = _eyeCornerSpan(_rOC, _rIC);
+      var _lEyeW = _eyeCornerSpan(_lOC, _lIC);
       mpEyes = {
-        Right: { ci: rightCI, cx: L[rightCI].x * imgW, cy: L[rightCI].y * imgH },
-        Left:  { ci: leftCI,  cx: L[leftCI].x  * imgW, cy: L[leftCI].y  * imgH }
+        Right: { ci: rightCI, cx: L[rightCI].x * imgW, cy: L[rightCI].y * imgH,
+                 eyeW: _rEyeW,
+                 eyeMidX: ((_rOC.x + _rIC.x) / 2) * imgW,
+                 eyeMidY: ((_rOC.y + _rIC.y) / 2) * imgH },
+        Left:  { ci: leftCI,  cx: L[leftCI].x  * imgW, cy: L[leftCI].y  * imgH,
+                 eyeW: _lEyeW,
+                 eyeMidX: ((_lOC.x + _lIC.x) / 2) * imgW,
+                 eyeMidY: ((_lOC.y + _lIC.y) / 2) * imgH }
       };
       var startSide = eyeResults['Right'] ? 'Left' : 'Right';
 
@@ -358,12 +375,26 @@ function jumpToEye(side) {
                  ' > 0.62 — landmark in cheek zone, falling back to manual locate');
     showLocate(); return;
   }
-  var longer = Math.max(imgW, imgH);
-  var cropR = longer * (cropPct / 100) / 2;
-  var cx0 = Math.max(0, Math.round(eye.cx - cropR));
-  var cy0 = Math.max(0, Math.round(eye.cy - cropR));
-  var cx1 = Math.min(imgW, Math.round(eye.cx + cropR));
-  var cy1 = Math.min(imgH, Math.round(eye.cy + cropR));
+  // Crop sizing: prefer corner-span × 1.5 (stable for all zoom levels) over the
+  // fixed cropPct fallback. Corner midpoint centres the crop even when the iris
+  // landmark has misfired (e.g. close-up where MP places the iris in the eyelid).
+  var _cropCx, _cropCy, cropR;
+  if (eye.eyeW && eye.eyeW > 20) {
+    cropR   = eye.eyeW * 0.75;          // half of 1.5 × eye-corner span
+    _cropCx = eye.eyeMidX;
+    _cropCy = eye.eyeMidY;
+    console.log('jumpToEye(' + side + ') corner-span=' + Math.round(eye.eyeW) +
+                ' cropR=' + Math.round(cropR));
+  } else {
+    var longer = Math.max(imgW, imgH);
+    cropR   = longer * (cropPct / 100) / 2;
+    _cropCx = eye.cx;
+    _cropCy = eye.cy;
+  }
+  var cx0 = Math.max(0, Math.round(_cropCx - cropR));
+  var cy0 = Math.max(0, Math.round(_cropCy - cropR));
+  var cx1 = Math.min(imgW, Math.round(_cropCx + cropR));
+  var cy1 = Math.min(imgH, Math.round(_cropCy + cropR));
   var cw = cx1 - cx0, ch = cy1 - cy0;
   if (cw < 40 || ch < 40) { showLocate(); return; }
 
