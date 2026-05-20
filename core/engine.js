@@ -333,8 +333,28 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     }
   }
   // ── Pre-compute outer stroma mean once — shared by both guards below ────────
-  var _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
-  var _t3InnerWarm = _t3InnerLab[2] > 6;   // b* > 6 = amber/bronze inner ring
+  // _t3InnerWarm: detect warm central-heterochromia ring (bronze/amber collarette).
+  // Uses pupilZone MEAN (innermost 25% of iris span) — narrower than the full inner
+  // zone so a thin warm ring right at the pupil border is a meaningful fraction of
+  // the sample.  Also checks innerDom b* as a fallback: if EITHER signal is warm the
+  // flag is set, because different fits/crops capture the ring at different proportions.
+  var _t3InnerLab;
+  if (pupilZone.length >= 10) {
+    var _pzR2=0, _pzG2=0, _pzB2=0;
+    for (var _pzI2=0; _pzI2<pupilZone.length; _pzI2++) {
+      _pzR2+=pupilZone[_pzI2][0]; _pzG2+=pupilZone[_pzI2][1]; _pzB2+=pupilZone[_pzI2][2];
+    }
+    _t3InnerLab = rgbLab(Math.round(_pzR2/pupilZone.length),
+                         Math.round(_pzG2/pupilZone.length),
+                         Math.round(_pzB2/pupilZone.length));
+  } else {
+    _t3InnerLab = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
+  }
+  var _innerDomLab2 = rgbLab(innerDom[0], innerDom[1], innerDom[2]);
+  // OR: warm if pupilZone mean (b*>6) OR innerDom (b*>9, stricter to avoid false positives
+  // from neutral eyes with a slight warm lighting cast — e.g. Rachel innerDom b*=6.7 ≤ 9).
+  // Illiana's genuine amber collarette has innerDom b*=13.1 > 9 even on bad fits.
+  var _t3InnerWarm = _t3InnerLab[2] > 6 || _innerDomLab2[2] > 9;   // b* thresholds
   var _osMean = null, _osM = null;
   if (outerStroma.length >= 15) {
     var _osR=0, _osG=0, _osB=0;
@@ -373,9 +393,35 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Covers both Hazel (classic case) and Brown (when warm-stroma melanin tips the
   // outer mean past the Hazel/Brown boundary on a true gray/blue iris).
   // Only reclassifies to Gray or Blue — never to Green — to avoid false positives.
-  if ((outerM.entry.cat === 'Hazel' || outerM.entry.cat === 'Brown') && _t3InnerWarm && _osM) {
-    if (_osM.entry.cat === 'Gray' || _osM.entry.cat === 'Blue') {
-      outerM = _osM;
+  //
+  // Primary test: palette says Gray or Blue — clear case.
+  // Fallback Lab test: a* < 7 AND b* < 11.
+  //   a*<7: handles warm-lit face photos that push a* up from ~1 to ~5 (Illiana: a*=5.3).
+  //   b*<11: tight enough to exclude warm-brown irises (Jeri outerStroma b*=12.5) while
+  //     still catching neutral-gray under warm WB (Illiana outerStroma b*=9.7).
+  //     Hazel typically has b* 17–25; genuine Brown 12–20; neutral gray <11 even warm-lit.
+  if ((outerM.entry.cat === 'Hazel' || outerM.entry.cat === 'Brown') && _t3InnerWarm && _osMean) {
+    var _osLabG = rgbLab(_osMean[0], _osMean[1], _osMean[2]);
+    var _osNeutral = (_osM && (_osM.entry.cat === 'Gray' || _osM.entry.cat === 'Blue'))
+                   || (_osLabG[1] < 7 && _osLabG[2] < 11);
+    // Debug export — read by QC tool via window._lastEngineDebug
+    window._lastEngineDebug = {
+      outerM_cat: outerM.entry.cat, outerM_name: outerM.entry.name,
+      _t3InnerWarm: _t3InnerWarm, osMean: _osMean,
+      osLab: [Math.round(_osLabG[0]*10)/10, Math.round(_osLabG[1]*10)/10, Math.round(_osLabG[2]*10)/10],
+      osM_cat: _osM ? _osM.entry.cat : null, osM_name: _osM ? _osM.entry.name : null,
+      osNeutral: _osNeutral, osSamples: outerStroma.length,
+      innerDomLab: [Math.round(_t3InnerLab[0]*10)/10, Math.round(_t3InnerLab[1]*10)/10, Math.round(_t3InnerLab[2]*10)/10]
+    };
+    if (_osNeutral) {
+      // Find nearest Gray/Blue entry by ΔE on outerStroma Lab
+      var _gbBest = null, _gbDist = Infinity;
+      for (var _gbI = 0; _gbI < PALETTE.length; _gbI++) {
+        if (PALETTE[_gbI].cat !== 'Gray' && PALETTE[_gbI].cat !== 'Blue') continue;
+        var _gbDe = dE(_osLabG, PALETTE[_gbI].lab);
+        if (_gbDe < _gbDist) { _gbDist = _gbDe; _gbBest = PALETTE[_gbI]; }
+      }
+      if (_gbBest) outerM = { entry: _gbBest, distance: _gbDist };
     }
   }
   // ── Inner-outer warmth gradient (Tier 2 green detection) ───────────────────
@@ -383,10 +429,12 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // zone; brown irises get MORE warm toward center. Threshold: if the pupillary
   // zone (innermost 25% of span) is >10 G-R points LESS warm than the outer
   // stroma mean, this is the iris-greening signature — redirect to Green/Hazel.
-  // Safe for hetero: a warm-brown central ring in a blue/gray iris has MORE
-  // negative inner G-R than outer, so its delta is negative and won't trigger.
+  // Guard: skip when _t3InnerWarm — a warm collarette (central heterochromia) can
+  // produce a slightly positive G−R gradient after WB correction even though it is
+  // not a green iris. Explicitly excluding warm-center eyes prevents Tier 2 from
+  // converting a correctly-guarded Gray back to Green.
   if ((outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
-      pupilZone.length >= 20) {
+      pupilZone.length >= 20 && !_t3InnerWarm) {
     var _pzR=0, _pzG=0, _pzB=0;
     for (var _pzI=0; _pzI<pupilZone.length; _pzI++){
       _pzR+=pupilZone[_pzI][0]; _pzG+=pupilZone[_pzI][1]; _pzB+=pupilZone[_pzI][2];
@@ -811,6 +859,38 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     collarette = detectCollarette(d, stageW, stageH, cx, cy, rOut, rIn);
   } catch(e) {
     console.warn('Collarette detect failed:', e);
+  }
+
+  // ── Green/Gray tiebreaker ─────────────────────────────────────────────────
+  // Gray eyes are genuinely rare (~1–3 %); eyes on the Gray/Green boundary are
+  // far more likely to be Green.  When outerM landed on Gray, check whether the
+  // nearest Green palette entry is within 6 ΔE of the current Gray distance.
+  // If so, prefer Green — it prevents borderline green irises (e.g. those where
+  // a large/imprecise iris ring samples some sclera) from being mis-labelled Gray.
+  // The margin is intentionally small so clearly neutral/steel grey eyes are unaffected.
+  //
+  // Guard: skip when _t3InnerWarm (central heterochromia — warm bronze/amber collarette).
+  // Those eyes have a genuinely neutral gray outer zone and must NOT be pulled to Green
+  // by a tiebreaker — the warm inner ring is completely unrelated to iris hue.
+  // Always export tiebreaker debug regardless of whether it fires
+  window._lastTieDebug = {
+    outerM_cat: outerM.entry.cat, outerM_name: outerM.entry.name,
+    _t3InnerWarm: _t3InnerWarm,
+    pzLab: [Math.round(_t3InnerLab[0]*10)/10, Math.round(_t3InnerLab[1]*10)/10, Math.round(_t3InnerLab[2]*10)/10],
+    innerDomLab: [Math.round(_innerDomLab2[0]*10)/10, Math.round(_innerDomLab2[1]*10)/10, Math.round(_innerDomLab2[2]*10)/10],
+    pupilZoneLen: pupilZone.length
+  };
+  if (outerM.entry.cat === 'Gray' && !_t3InnerWarm) {
+    var _tieOuterLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    var _tieGreenBest = null, _tieGreenDist = Infinity;
+    for (var _tgi = 0; _tgi < PALETTE.length; _tgi++) {
+      if (PALETTE[_tgi].cat !== 'Green') continue;
+      var _tgDe = dE(_tieOuterLab, PALETTE[_tgi].lab);
+      if (_tgDe < _tieGreenDist) { _tieGreenDist = _tgDe; _tieGreenBest = PALETTE[_tgi]; }
+    }
+    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 6) {
+      outerM = { entry: _tieGreenBest, distance: _tieGreenDist };
+    }
   }
 
   // ---- Pupil eccentricity (iris center vs pupil center offset) ----
