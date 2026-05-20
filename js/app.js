@@ -943,7 +943,10 @@ function _applyFitClassical(closeup, skipZoom){
     // brightness check unreliable — the gate caused zoom to be skipped entirely,
     // leaving the unrefined ring on a full-size image and producing a Brown result
     // on blue-grey eyes with a prominent amber collarette.
-    if (!skipZoom) zoomToEye();
+    // In close-up mode with a confident fit, skip the zoom sanity check —
+    // _applyFitClassical already confirmed the ring is on the iris, so the
+    // gradient/pupil check is redundant and rejects valid dark/glare eyes.
+    if (!skipZoom) zoomToEye(closeup && fit.ok);
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
@@ -1060,7 +1063,7 @@ function validateIrisFit() {
 
 // After auto-fit: crop imgEl to just outside the eye corners so the stage is
 // filled with the eye and adjustment is easy. Accumulates into cropRegion.
-function zoomToEye() {
+function zoomToEye(skipSanityCheck) {
   if (!imgEl || !donut.rIris) return;
   // Save pre-zoom imgEl so Auto-Fit Again can start fresh from the un-zoomed image
   preZoomState = { imgEl: imgEl, cropRegion: cropRegion ? Object.assign({}, cropRegion) : null };
@@ -1108,7 +1111,9 @@ function zoomToEye() {
     // Fail if: (a) centre is too bright to be a pupil, OR (b) no radial gradient.
     // Gradient threshold lowered 12→8: dark irises have a smaller pupil-stroma
     // luminance gap but still have a real gradient; 12 was aborting valid zooms.
-    if (_zcPupilLum > 100 || (_zcIrisLum - _zcPupilLum) < 8) {
+    // skipSanityCheck: set when _applyFitClassical already confirmed a good fit —
+    // redundant to re-check and it rejects valid dark/catch-light close-ups.
+    if (!skipSanityCheck && (_zcPupilLum > 100 || (_zcIrisLum - _zcPupilLum) < 8)) {
       // Crop landed on background — undo zoom and restore pre-zoom state.
       imgEl      = preZoomState.imgEl;
       cropRegion = preZoomState.cropRegion
