@@ -221,8 +221,10 @@ var loadOriginalFromUrl = function(url){
   var img = new Image();
   img.onload = function(){
     originalImgEl = img;
-    mpEyes = null;
-    preZoomState = null;  // clear any leftover zoom state from previous image
+    mpEyes        = null;
+    preZoomState  = null;   // clear any leftover zoom state from previous image
+    isCloseupMode = false;  // reset — previous photo's close-up state must not carry over
+    cropRegion    = null;   // reset — stale crop coords from a different image corrupt applyAutoFit
 
     // ── Early face upload ──────────────────────────────────────────────────
     // Assign a session ID and push the face photo to Supabase storage NOW,
@@ -396,7 +398,11 @@ function jumpToEye(side) {
   var cx1 = Math.min(imgW, Math.round(_cropCx + cropR));
   var cy1 = Math.min(imgH, Math.round(_cropCy + cropR));
   var cw = cx1 - cx0, ch = cy1 - cy0;
-  if (cw < 40 || ch < 40) { showLocate(); return; }
+  // Hard minimum: a crop smaller than 120px gives the colour engine too few
+  // iris pixels for reliable sampling. Fall back to the full-image close-up
+  // path which uses center-bias-off detection on the original image.
+  if (cw < 120 || ch < 120) { _tryCloseupFit(); return; }
+  if (cw < 40  || ch < 40)  { showLocate(); return; }
 
   currentSide = side;
   cropRegion  = { x: cx0, y: cy0, w: cw, h: ch };
@@ -1086,7 +1092,12 @@ function zoomToEye(skipSanityCheck) {
   var y0  = Math.max(0, Math.round(iCy - pad));
   var x1  = Math.min(imgEl.width,  Math.round(iCx + pad));
   var y1  = Math.min(imgEl.height, Math.round(iCy + pad));
-  if (x1 - x0 < 40 || y1 - y0 < 40) return;
+  // Minimum crop guard: if the zoom crop is smaller than 100px the iris has
+  // too few pixels for reliable colour sampling — skip zoom and keep the
+  // current (larger) jumpToEye crop. Floor was 150px but that blocked valid
+  // zooms for real iPhone photos where jumpToEye produced a ~430px crop with a
+  // ~38px-radius iris (→ 116px zoom crop, well above 100px but under 150px).
+  if (x1 - x0 < 100 || y1 - y0 < 100) { preZoomState = null; return; }
 
   var cw = x1 - x0, ch = y1 - y0;
   var off = document.createElement('canvas');
