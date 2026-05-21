@@ -313,7 +313,7 @@
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v1.93 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Prototype v1.94 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -495,6 +495,34 @@
           </div>
         </div>
       </div>
+      <!-- ── Dataset collection widget ─────────────────────────────────── -->
+      <div id="collect-box" class="card" style="padding:14px 18px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-dim);margin-bottom:10px">
+          Was this color right?
+          <span id="collect-count" style="float:right;opacity:.5"></span>
+        </div>
+        <div id="collect-main">
+          <div style="display:flex;gap:8px">
+            <button type="button" id="collect-yes" style="flex:1;background:var(--accent);color:#002338;font-size:13px;padding:8px 0;border:none;border-radius:8px;cursor:pointer">✓ Correct</button>
+            <button type="button" id="collect-no"  style="flex:1;background:transparent;color:var(--ink);border:1px solid var(--line);font-size:13px;padding:8px 0;border-radius:8px;cursor:pointer">✗ Fix it</button>
+          </div>
+        </div>
+        <div id="collect-fix" style="display:none">
+          <div style="font-size:12px;color:var(--ink-dim);margin-bottom:8px">Select the correct color:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <button class="cc-btn" data-c="Brown"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Brown</button>
+            <button class="cc-btn" data-c="Blue"   style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Blue</button>
+            <button class="cc-btn" data-c="Green"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Green</button>
+            <button class="cc-btn" data-c="Hazel"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Hazel</button>
+            <button class="cc-btn" data-c="Gray"   style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Gray</button>
+            <button class="cc-btn" data-c="Amber"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Amber</button>
+          </div>
+        </div>
+        <div id="collect-saved-msg" style="display:none;font-size:13px;color:var(--accent)"></div>
+        <button type="button" id="collect-export" style="margin-top:10px;background:transparent;color:var(--ink-dim);border:none;font-size:11px;text-decoration:underline;cursor:pointer;padding:0">Export dataset</button>
+      </div>
+      <!-- ─────────────────────────────────────────────────────────────── -->
+
       <div class="card">
         <h2>What&rsquo;s next</h2>
         <p id="next-text">Analyze the other eye for a complete pair, pop over to Post Maker for the cover-and-uncover reveal, or start over.</p>
@@ -643,6 +671,7 @@
 <script src="js/post.js?v=172"></script>
 <script src="js/camera.js?v=172"></script>
 <script src="js/app.js?v=193"></script>
+<script src="js/collect.js?v=193"></script>
 
 </body>
 </html>
