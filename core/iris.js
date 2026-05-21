@@ -1051,6 +1051,174 @@ function findIrisByRingContrast(imgEl, cxHint, cyHint, rHint) {
   return { cx: fCx + rx0, cy: fCy + ry0, r: fR, score: fBest };
 }
 
+// ---- Ring boundary saturation fraction ----
+// Samples N evenly-spaced points ON the ring boundary and returns the fraction
+// that fall in scleral/non-iris territory (saturation < SAT_THRESH).
+//
+// Saturation is used instead of luminance because:
+//   • Iris stroma (any colour) has sat 30–55; sclera has sat < 20.
+//   • Specular highlights (sat ≈ 4, lum ≈ 240) look like bright sclera to
+//     luminance-only checks — saturation correctly flags them as non-iris.
+//
+// The top 60° arc (eyelid zone) is excluded — eyelid skin has moderate sat
+// and is always legitimately outside the iris; excluding it avoids false fails.
+//
+// A return value > 0.15 means the ring extends substantially into sclera.
+function ringBoundarySatFraction(imgEl, cx, cy, rIris) {
+  var W = imgEl.naturalWidth || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || rIris < 5) return 0;
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  var tctx = tmp.getContext('2d', { colorSpace: 'srgb' });
+  tctx.drawImage(imgEl, 0, 0);
+  var data = tctx.getImageData(0, 0, W, H).data;
+
+  function pixInfo(x, y) {
+    var px = Math.max(0, Math.min(W-1, Math.round(x)));
+    var py = Math.max(0, Math.min(H-1, Math.round(y)));
+    var i = (py * W + px) * 4;
+    var ri = data[i], gi = data[i+1], bi = data[i+2];
+    var rf = ri/255, gf = gi/255, bf = bi/255;
+    var mx = Math.max(rf, gf, bf), mn = Math.min(rf, gf, bf);
+    return {
+      sat: mx === 0 ? 0 : (mx - mn) / mx * 100,
+      lum: 0.299 * ri + 0.587 * gi + 0.114 * bi
+    };
+  }
+
+  // A ring boundary sample is "scleral" only when it has BOTH:
+  //   • low saturation (sat < 25)  — iris stroma is colourful
+  //   • bright luminance (lum > 140) — true sclera is nearly white
+  //
+  // Requiring both avoids false positives from the dark limbal ring:
+  // the outer iris ring has sat < 25 (nearly grey) but lum ≈ 60-100
+  // (dark brown/black).  Treating it as scleral incorrectly fires
+  // VIS-FIT for dark hazel/amber irises and shrinks the ring.
+  var SAT_THRESH     = 25;
+  var SCLERA_MIN_LUM = 140;
+  var N = 24;
+  var scleral = 0, effective = 0;
+  for (var i = 0; i < N; i++) {
+    var ang = i / N * 2 * Math.PI;
+    // Exclude the eyelid zone: angles near 270° (top of ring, -y direction)
+    var deg = (i / N * 360 + 360) % 360;
+    if (deg > 240 && deg < 300) continue;   // top 60° = eyelid
+    effective++;
+    var info = pixInfo(cx + rIris * Math.cos(ang), cy + rIris * Math.sin(ang));
+    if (info.sat < SAT_THRESH && info.lum > SCLERA_MIN_LUM) scleral++;
+  }
+  return effective > 0 ? scleral / effective : 0;
+}
+
+// ---- Visible-iris horizontal fit ----
+// When the ring boundary falls in scleral territory on one side (detected via
+// ringBoundarySatFraction), this function corrects the iris x-centre and radius
+// by scanning outward from the current centre in the ±x direction until
+// saturation drops below the iris-stroma threshold (sat < 25).
+//
+// Use-case: selfie photos where the eye looks slightly to the side. The temporal
+// iris is partially occluded, so the visible iris extends further on the nasal
+// side.  MediaPipe gives the anatomical (3-D) iris centre which is correct but
+// the 2-D visible iris centre is shifted toward the nasal side.
+//
+// Returns { cx, rIris, r_left, r_right } in imgEl pixel space, or null when:
+//   • The scan cannot find either limbus (entire frame is iris or sclera), or
+//   • The eye looks symmetric (asymmetry < MIN_ASYM of rIrisHint → no correction needed).
+function fitVisibleIrisHoriz(imgEl, cx, cy, rIrisHint, pupilR) {
+  // Locate the iris horizontal span by finding the LONGEST CONTIGUOUS region of
+  // high saturation across the crop horizontal midline.
+  //
+  // Why "longest contiguous run" instead of scanning from edges or from centre:
+  //   • Outward-from-centre scan: dark iris fibres (sat<25) inside the stroma
+  //     trigger premature stops, giving false limbus positions.
+  //   • Inward-from-edge scan: periocular skin BEYOND the canthi often has
+  //     sat > 25 (nose skin, temple skin), causing the scan to stop at the
+  //     skin border rather than the true sclera→iris limbus.
+  //   • Longest-run: the iris stroma is a wide (≥ 100 px) contiguous high-sat
+  //     region.  Periocular skin patches and specular highlights are much
+  //     shorter (< 80 px).  Taking the longest run reliably isolates the iris
+  //     even when non-iris high-sat regions exist at the crop edges.
+  //
+  // Band height ±20 px: wider than the original ±4 px to smooth individual
+  // 2–4 px dark fibres so only sustained low-sat zones (sclera, skin) register.
+  //
+  // Returns { cx, rIris, r_left, r_right } or null if no reliable iris found.
+  //   cx    = midpoint of longest high-sat run  (corrected iris centre x)
+  //   rIris = half-width of the run             (visible horizontal iris radius)
+  //   r_left  = run_start → cascade-cx distance (logging)
+  //   r_right = cascade-cx → run_end distance   (logging)
+  var W = imgEl.naturalWidth || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || rIrisHint < 10) return null;
+
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  var tctx = tmp.getContext('2d', { colorSpace: 'srgb' });
+  tctx.drawImage(imgEl, 0, 0);
+  var data = tctx.getImageData(0, 0, W, H).data;
+
+  var BAND_H = 20;   // ±px vertical band — smooths individual iris fibres
+  function bandSat(x) {
+    var xpx = Math.max(0, Math.min(W - 1, Math.round(x)));
+    var sum = 0, n = 0;
+    for (var dy = -BAND_H; dy <= BAND_H; dy++) {
+      var py = Math.max(0, Math.min(H - 1, Math.round(cy + dy)));
+      var i  = (py * W + xpx) * 4;
+      var r  = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255;
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      sum += mx === 0 ? 0 : (mx - mn) / mx * 100;
+      n++;
+    }
+    return n ? sum / n : 0;
+  }
+
+  var SAT_THRESH = 25;
+  var STEP       = 3;      // scan step (px)
+  var MIN_RUN    = Math.round(rIrisHint * 0.5);   // minimum iris run length
+
+  // Find the longest contiguous high-sat run across the entire crop width
+  var best_start = -1, best_end = -1, best_len = 0;
+  var cur_start  = -1;
+  for (var xi = 0; xi < W; xi += STEP) {
+    if (bandSat(xi) >= SAT_THRESH) {
+      if (cur_start < 0) cur_start = xi;
+      var cur_len = xi - cur_start + STEP;
+      if (cur_len > best_len) {
+        best_len  = cur_len;
+        best_start = cur_start;
+        best_end   = xi;
+      }
+    } else {
+      cur_start = -1;
+    }
+  }
+
+  // Reject if run too short (no proper iris found)
+  if (best_start < 0 || best_len < MIN_RUN) return null;
+
+  // Require sclera (low-sat region) before AND after the iris run.
+  // If the run starts at x < MIN_SCLERA, the crop is clipped on the temporal side.
+  // If the run ends beyond W − MIN_SCLERA, the crop is clipped on the nasal side.
+  var MIN_SCLERA = 10;
+  if (best_start < MIN_SCLERA)         return null;   // temporal sclera not visible
+  if (best_end   > W - MIN_SCLERA)     return null;   // nasal sclera not visible
+
+  var cx_new = Math.round((best_start + best_end) / 2);
+  var r_new  = Math.round((best_end - best_start) / 2);
+
+  // Skip trivial corrections (< 5 % of iris radius)
+  if (Math.abs(cx_new - cx) < rIrisHint * 0.05 &&
+      Math.abs(r_new  - rIrisHint) < rIrisHint * 0.05) return null;
+
+  return {
+    cx:      cx_new,
+    rIris:   r_new,
+    r_left:  Math.round(cx - best_start),   // logging: temporal half from cascade cx
+    r_right: Math.round(best_end   - cx)    // logging: nasal half from cascade cx
+  };
+}
+
 // ---- Gross-error placement check ----
 // After the iris circle is set, verify that the boundary makes anatomical sense.
 // Samples small patches just outside the iris at 3 o'clock and 9 o'clock:
