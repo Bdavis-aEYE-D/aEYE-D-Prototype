@@ -1129,17 +1129,47 @@ function zoomToEye(skipSanityCheck) {
   var iR   = donut.rIris  / sx;
   var iPR  = donut.rPupil / sx;
 
-  // Pad 2.0× irisR in each direction — wide enough to capture the full iris
-  // even when the pre-zoom radius estimate (iR) is the IPD floor (~83px for
-  // Iliana-class eyes) and the true limbus is ~95–100px out.  1.5× was too
-  // tight: the left limbus fell outside the crop and the ring was fitting a
-  // clipped frame.  2.0× gives 166px clearance on all sides; out-of-bounds
-  // clamps (Math.max/min below) handle photos where the eye is near the edge.
-  var pad = Math.round(iR * 2.0);
-  var x0  = Math.max(0, Math.round(iCx - pad));
-  var y0  = Math.max(0, Math.round(iCy - pad));
-  var x1  = Math.min(imgEl.width,  Math.round(iCx + pad));
-  var y1  = Math.min(imgEl.height, Math.round(iCy + pad));
+  // ── Corner-to-corner crop (full-face mode) ─────────────────────────────────
+  // Root problem: centering on the MediaPipe iris centre fails for off-gaze
+  // selfies.  The 3-D iris centre can be 30–50 px away from the 2-D visible
+  // iris centre, pushing the nasal or temporal limbus outside the crop —
+  // making ring placement and iris ID unreliable.
+  //
+  // Solution: centre the zoom on the EYE CORNER midpoint (canthus midpoint).
+  // The canthi are eyelid landmarks; they never move with gaze direction.
+  // jumpToEye already centred imgEl on this point, so in jump-crop coords:
+  //   zCx = eyeMidX − cropRegion.x  (≈ imgEl.width/2 when no edge-clamping)
+  //
+  // Pad = 0.60 × eyeW each side → 20 % extra beyond each canthus.
+  // This captures the entire visible eye corner-to-corner as specified.
+  //
+  // Close-up mode (single-eye macros) keeps the iris-centre + 2×iR approach
+  // because canthus landmarks are unreliable on extreme close-ups.
+  var _eye_c2c = !isCloseupMode && mpEyes && mpEyes[currentSide]
+                   ? mpEyes[currentSide] : null;
+  var zCx, zCy, pad;
+  if (_eye_c2c && _eye_c2c.eyeW > 20) {
+    zCx = _eye_c2c.eyeMidX - (cropRegion ? cropRegion.x : 0);  // horiz: canthus midpoint
+    zCy = iCy;                                                   // vert:  iris centre (avoids lash bias)
+    pad = Math.round(_eye_c2c.eyeW * 0.70);                     // 20 % extra each side
+    console.log('[ZOOM-C2C] canthus-centred  eyeW=' + Math.round(_eye_c2c.eyeW) +
+                ' pad=' + pad + '  iris-Δx=' + Math.round(iCx - zCx) + 'px');
+  } else {
+    zCx = iCx;
+    zCy = iCy;
+    pad = Math.round(iR * 2.0);
+  }
+  var x0  = Math.max(0, Math.round(zCx - pad));
+  var y0  = Math.max(0, Math.round(zCy - pad));
+  var x1  = Math.min(imgEl.width,  Math.round(zCx + pad));
+  var y1  = Math.min(imgEl.height, Math.round(zCy + pad));
+  // Iris containment guard: if the iris (+ 15% buffer) extends beyond the
+  // canthus-centred crop on either side (happens for very off-axis eyes where
+  // iris-Δx > ~50% of pad), expand x0/x1 to keep the full iris in frame.
+  var _irisL = Math.round(iCx - iR * 1.15);
+  var _irisR = Math.round(iCx + iR * 1.15);
+  if (_irisL < x0) x0 = Math.max(0,             _irisL);
+  if (_irisR > x1) x1 = Math.min(imgEl.width,   _irisR);
   // Minimum crop guard: if the zoom crop is smaller than 100px the iris has
   // too few pixels for reliable colour sampling — skip zoom and keep the
   // current (larger) jumpToEye crop. Floor was 150px but that blocked valid
@@ -1328,6 +1358,25 @@ function zoomToEye(skipSanityCheck) {
           }
         }
       }
+      // ── x-Centre refinement ────────────────────────────────────────────────
+      // When RIP (primary cascade) found the radius, ODH never ran and the
+      // iris x-centre was never corrected from the MediaPipe landmark estimate.
+      // MediaPipe's iris centre can drift 15–30 % of iR away from the true
+      // geometric limbus centre (especially in selfies where gaze is off-axis).
+      // Run ODH purely for centre refinement: the horizontal limbus scan gives
+      // the most reliable x-centroid (midpoint of 3-o'clock and 9-o'clock
+      // limbus intercepts) independent of which cascade tier found the radius.
+      // Also catches residual drift when ODH was secondary but its correction
+      // was blocked by the 0.4×iR gate (threshold raised to 0.7×iR here).
+      var _zOdhCtr = findIrisODHorizontal(imgEl, _zCascCx, _zCascCy, zPR0, donut.rIris / nsx);
+      if (_zOdhCtr && _zOdhCtr.irisR > iR * 0.3 &&
+          Math.abs(_zOdhCtr.cxIris - _zCascCx) < iR * 0.7) {
+        console.log('[CX REFINE] x-centre shift ' +
+                    Math.round(_zOdhCtr.cxIris - _zCascCx) + 'px  cascade-cx=' +
+                    Math.round(_zCascCx) + ' → ' + Math.round(_zOdhCtr.cxIris));
+        donut.cx = drawInfo.dx + _zOdhCtr.cxIris * nsx;
+      }
+      // ──────────────────────────────────────────────────────────────────────
       // Collarette guard — runs from iris centre (donut.cx/cy), not pupil centre.
       var _zIrisCx = (donut.cx - drawInfo.dx) / nsx;
       var _zIrisCy = (donut.cy - drawInfo.dy) / nsy;
@@ -1391,6 +1440,60 @@ function zoomToEye(skipSanityCheck) {
         donut.rIris = Math.round(_lbR * nsx);
       }
     }
+    // ── Visible-iris inward limbus scan (centre correction) ───────────────────
+    // Quality gate: if > 15 % of the ring boundary samples are scleral
+    // (sat < 25), the cascade centre is off — typically a gaze-shifted selfie
+    // where the visible 2-D iris centre ≠ MediaPipe's 3-D anatomical centre.
+    //
+    // fitVisibleIrisHoriz now scans INWARD from the crop edges (sclera side)
+    // until saturation rises — the sclera→iris transition = true limbus.
+    // This avoids dark-fibre false stops that plagued the outward scan.
+    // Uses a ±20 px vertical band to smooth individual radial fibre crossings.
+    //
+    // Correction: centre only.  The cascade radius (from RIP/ODH) is kept;
+    // only cx is corrected so the ring is centred on the visible iris midpoint.
+    // Only runs in full-face mode (close-up has its own cascade path).
+    if (!isCloseupMode) {
+      var _visCx  = (donut.cx  - drawInfo.dx) / nsx;
+      var _visCy  = (donut.cy  - drawInfo.dy) / nsy;
+      var _visR   = donut.rIris / nsx;
+      var _visFrac = typeof ringBoundarySatFraction === 'function'
+                     ? ringBoundarySatFraction(imgEl, _visCx, _visCy, _visR) : 0;
+      // Edge guard: if the iris centre is within 0.5×rIris of either crop edge,
+      // the boundary sample on that side lands in sclera by definition — the iris
+      // is clipped.  Skip VIS-FIT here; the longest-run scan would find a tiny
+      // spurious run and return a catastrophically wrong cx/rIris.
+      var _visCropW = imgEl.naturalWidth  || imgEl.width;
+      var _visCropH = imgEl.naturalHeight || imgEl.height;
+      var _visEdgeClear = Math.min(_visCx, _visCropW - _visCx, _visCy, _visCropH - _visCy);
+      var _visEdgeGuard = _visEdgeClear < _visR * 0.5;
+      console.log('[VIS-FIT] scleral=' + Math.round(_visFrac * 100) + '%' +
+                  '  edgeClear=' + Math.round(_visEdgeClear) + 'px' +
+                  '  rIris=' + Math.round(_visR) + 'px' +
+                  (_visEdgeGuard ? '  → SKIPPED (iris at crop edge)' :
+                   _visFrac <= 0.15 ? '  → OK (below threshold)' : '  → FIRING'));
+      if (!_visEdgeGuard && _visFrac > 0.15) {
+        var _zPupilR_crop = donut.rPupil / nsx;
+        var _visFit = typeof fitVisibleIrisHoriz === 'function'
+                      ? fitVisibleIrisHoriz(imgEl, _visCx, _visCy, _visR, _zPupilR_crop) : null;
+        if (_visFit) {
+          // Apply both cx and rIris from the pixel measurement.
+          // The longest-run scan finds the true visible iris span at the midline;
+          // both the centre and the radius can differ from the cascade estimate
+          // when the eye is looking off-axis (cascade centre drifts with gaze).
+          donut.cx    = drawInfo.dx + _visFit.cx * nsx;
+          donut.rIris = Math.min(_visFit.rIris * nsx, Math.min(stageW, stageH) * 0.45);
+          console.log('[VIS-FIT] cx: ' + Math.round(_visCx) + '→' + _visFit.cx +
+                      ' (Δ=' + (_visFit.cx - Math.round(_visCx)) + 'px)' +
+                      '  rIris: ' + Math.round(_visR) + '→' + _visFit.rIris +
+                      '  limbus_L=' + _visFit.r_left + ' limbus_R=' + _visFit.r_right);
+        } else {
+          console.log('[VIS-FIT] longest-run scan returned null');
+        }
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     draw();
 
     // ── Placement check + confidence-aware advisory ─────────────────────────

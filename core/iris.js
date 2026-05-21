@@ -1175,7 +1175,7 @@ function fitVisibleIrisHoriz(imgEl, cx, cy, rIrisHint, pupilR) {
 
   var SAT_THRESH = 25;
   var STEP       = 3;      // scan step (px)
-  var MIN_RUN    = Math.round(rIrisHint * 0.5);   // minimum iris run length
+  var MIN_RUN    = Math.round(rIrisHint * 1.0);   // minimum iris run length (≥ full radius)
 
   // Find the longest contiguous high-sat run across the entire crop width
   var best_start = -1, best_end = -1, best_len = 0;
