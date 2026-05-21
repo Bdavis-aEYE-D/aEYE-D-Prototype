@@ -746,7 +746,10 @@ function applyAutoFit(){
         if (hint) hint.textContent = 'Auto-fit complete. Drag to adjust, then tap "Analyze Iris".';
         if (hint) hint.style.color = '';
         if (st)   st.textContent   = 'MP+' + radSrc + ' ri=' + Math.round(ripx) + ' rp=' + Math.round(rpx) + ' cxI=' + Math.round(cxIris_img) + ' cxP=' + Math.round(cxPupil_img);
-        zoomToEye();
+        // validateIrisFit already confirmed sclera is brighter than iris at 1.2×iR,
+        // so skipSanityCheck=true: the in-zoom luminance check is redundant and can
+        // abort valid zooms on colourful irises (amber collarette, hazel eyes).
+        zoomToEye(true);
       } else {
         // MP position failed validation — try classical CV before falling back to manual
         _applyFitClassical(isCloseupMode);
@@ -939,8 +942,11 @@ function _applyFitClassical(closeup, skipZoom){
     // own cascade that overwrites the override — defeating the fix.
     var _overridedRipx = false;
     if (closeup && rpx > 8) {
+      // RIP2 (confidence 0.15–0.24) is the expected range for portrait-resolution
+      // photos where the limbus transition is soft — do not treat this as low
+      // confidence.  Only suppress zoom for RIP1 (< 0.15) and AF (no detection).
       var _cuLowConf = cuRadSrc === 'AF' ||
-                       (cuRadSrc.startsWith('RIP') && parseInt(cuRadSrc.slice(3)) <= 2);
+                       (cuRadSrc.startsWith('RIP') && parseInt(cuRadSrc.slice(3)) <= 1);
       if (_cuLowConf) {
         ripx = Math.round(rpx * 2.7);
         ripx = Math.max(rpx * 1.3, Math.min(ripx, Math.min(stageW, stageH) * 0.48));
