@@ -725,6 +725,9 @@ function applyAutoFit(){
       // gives a reliable minimum — human iris radius ≈ 8.5% of inter-pupillary distance
       // (iris diameter ≈ 17% of IPD; divide by 2 to get the radius floor).
       if (ipdPx > 20) irisR_img = Math.max(irisR_img, ipdPx * 0.085);
+      // Collarette guard: if the cascade anchored on the inner amber ring,
+      // scan outward to find the true limbus.
+      irisR_img = findTrueLimbusOutward(imgEl, cxPupil_img, cyPupil_img, irisR_img);
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
@@ -921,6 +924,8 @@ function _applyFitClassical(closeup, skipZoom){
     // all cascade methods failed (cuRadSrc still 'AF') so confident detections
     // (RIP/ODH/RC/SAT) are never touched.
     if (closeup && cuRadSrc === 'AF') cuIrisR = Math.round(cuIrisR * 0.93);
+    // Collarette guard: applies after every cascade path.
+    cuIrisR = Math.round(findTrueLimbusOutward(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR));
 
     donut.cx     = drawInfo.dx + cuIrisCx   * scaleX;
     donut.cy     = drawInfo.dy + cuIrisCy   * scaleY;
@@ -1295,6 +1300,11 @@ function zoomToEye(skipSanityCheck) {
             // else: keep the MP estimate that was set before the refinement pass
           }
         }
+      }
+      // Collarette guard on the zoom-cascade result.
+      var _zTrueR = findTrueLimbusOutward(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
+      if (_zTrueR > (donut.rIris / nsx) * 1.05) {
+        donut.rIris = Math.min(_zTrueR * nsx, Math.min(stageW, stageH) * 0.45);
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
       // Guard: if the pupil-ray scan returns its floor (≤5px), catch-light has wiped it out.

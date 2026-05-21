@@ -1110,3 +1110,74 @@ function checkIrisPlacement(imgEl, cx, cy, rIris) {
     advisory:       ok ? null : 'Circle may be off — drag the ring to adjust'
   };
 }
+
+// ---- Collarette guard: outward limbus refinement ----
+// Amber/hazel eyes have a bright inner collarette ring at ~30–50 % of the true
+// iris radius. RIP and ODH often anchor on this boundary (bright collarette →
+// strong gradient), returning an underestimated irisR. This function detects
+// the pattern: bright collarette → dark iris stroma → bright sclera and returns
+// the radius of the dark stroma minimum (= the true limbus). If the candidate
+// is already the true limbus (luminance rises just outside it), it is returned
+// unchanged.
+//
+// Parameters:
+//   imgEl      — source image (jump crop or zoom crop, any scale)
+//   cx, cy     — iris/pupil center in imgEl pixel space
+//   candidateR — radius from the cascade (pixels in imgEl space)
+//   maxSearchR — optional upper bound (defaults to 3× candidateR, image-edge capped)
+function findTrueLimbusOutward(imgEl, cx, cy, candidateR, maxSearchR) {
+  var W = imgEl.naturalWidth || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || candidateR < 6) return candidateR;
+
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  var ctx = tmp.getContext('2d', { colorSpace: 'srgb' });
+  ctx.drawImage(imgEl, 0, 0);
+  var data = ctx.getImageData(0, 0, W, H).data;
+
+  var N = 32;
+  function ringLum(r) {
+    var s = 0, n = 0;
+    for (var i = 0; i < N; i++) {
+      var ang = (i / N) * 2 * Math.PI;
+      var px = Math.round(cx + Math.cos(ang) * r);
+      var py = Math.round(cy + Math.sin(ang) * r);
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      var idx = (py * W + px) * 4;
+      s += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+      n++;
+    }
+    return n >= Math.ceil(N * 0.5) ? s / n : null;
+  }
+
+  var candidateLum  = ringLum(candidateR);
+  var justOutside   = ringLum(candidateR * 1.12);
+  if (candidateLum === null || justOutside === null) return candidateR;
+
+  // If luminance rises just outside → candidate is already the dark limbus boundary.
+  if (justOutside >= candidateLum + 5) return candidateR;
+  // Require a meaningful drop (noise tolerance = 8 lum) to avoid false activations.
+  if (candidateLum - justOutside < 8) return candidateR;
+
+  // Drop confirmed: scan outward for the valley (dark stroma) then sclera rise.
+  // Collarette is typically 30–50 % of the true iris radius, so the true limbus
+  // can be up to 3× the candidate radius away.
+  var maxR = (maxSearchR != null) ? maxSearchR
+             : Math.min(candidateR * 3.0, Math.min(W, H) * 0.47);
+  if (maxR <= candidateR * 1.1) return candidateR;
+
+  var step = candidateR * 0.04;
+  var minLum = justOutside, minR = candidateR * 1.12;
+  for (var r = minR + step; r <= maxR; r += step) {
+    var lum = ringLum(r);
+    if (lum === null) break;
+    if (lum < minLum) { minLum = lum; minR = r; }
+    // Valley confirmed and sclera brightening: return the radius of the dark minimum.
+    if (minLum < candidateLum - 12 && lum > minLum + 20) {
+      return Math.round(minR);
+    }
+  }
+
+  return candidateR; // no collarette pattern found — original estimate was the limbus
+}
