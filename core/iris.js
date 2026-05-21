@@ -532,13 +532,14 @@ function findIrisODHorizontal(imgEl, cxHint, cyHint, pupilRHint, irisRHint) {
   var leftHit = -1, rightHit = -1;
 
   // Restrict horizontal scan to a plausible limbus zone.
-  // When an iris-radius hint is supplied (full-face path), cap search at 1.5× that hint
-  // so the scan cannot reach eyelid/skin boundaries beyond the iris zone.
+  // When an iris-radius hint is supplied (full-face path), cap search at 2.0× that hint
+  // (raised from 1.5×) so the scan can reach the true limbus even when the hint (iR)
+  // was set by the IPD floor and underestimates the actual iris by up to ~55%.
   // Without the hint (close-up path), use the pupil-based formula that ensures the
   // scan always reaches past the iris regardless of how small the pupil hint is.
   var maxSearchR;
   if (irisRHint > 0) {
-    maxSearchR = Math.round(irisRHint * 1.5);
+    maxSearchR = Math.round(irisRHint * 2.0);
   } else if (pupilRHint > 0) {
     maxSearchR = Math.min(Math.min(W, H) * 0.47, Math.max(Math.round(pupilRHint * 5.5), Math.round(Math.min(W, H) * 0.38)));
   } else {
@@ -1160,28 +1161,41 @@ function findTrueLimbusOutward(imgEl, cx, cy, candidateR, maxSearchR) {
   //     decreases moving further into sclera (which plateaus).
   // (b) BELOW LIMBUS: candidateR is on the stroma ramp; the gradient is mild here and
   //     *increases* further outward until it peaks at the true limbus.
-  // Distinguish by scanning forward: if any step beyond 1.15×candidateR shows a
-  // gradient more than 20 % steeper than the initial one, the limbus is further out.
+  // Distinguish by scanning forward.  Key fix: the initial gradient spans ~candidateR*0.12 px
+  // while the step gradient spans ~candidateR*0.04 px — comparing them directly was
+  // ~3× too strict.  Normalise both to per-pixel rates before comparing.
+  // Also add a sclera-fallback: for gradual stroma ramps (e.g. amber/hazel irises) the
+  // gradient never spikes sharply, so we fall back to the first radius that clearly
+  // enters sclera brightness territory.
   if (justOutside >= candidateLum + 5) {
-    var _initGrad = justOutside - candidateLum;          // initial rise
-    var _scanMax  = Math.min(candidateR * 1.65, Math.min(W, H) * 0.46);
+    var _initGrad = justOutside - candidateLum;          // rise over ~candidateR*0.12 px span
+    var _initGradPerPx = _initGrad / Math.max(1, candidateR * 0.12); // per-pixel rate
+    var _scanMax  = Math.min(candidateR * 2.0, Math.min(W, H) * 0.46); // wider window
     var _stepFwd  = Math.max(1, Math.round(candidateR * 0.04));
     var _prevLf   = justOutside;
     var _peakR    = 0;
+    var _firstSclR = 0;  // first radius where lum enters sclera territory (candidateLum+35)
     for (var _rf = Math.round(candidateR * 1.15); _rf <= _scanMax; _rf += _stepFwd) {
       var _lf = ringLum(_rf);
       if (_lf === null) break;
-      var _gf = _lf - _prevLf;
-      if (_gf > _initGrad * 1.2) { _peakR = _rf; break; } // gradient increased → below limbus
+      var _gfPerPx = (_lf - _prevLf) / _stepFwd;  // per-pixel gradient this step
+      if (_gfPerPx > _initGradPerPx * 1.2) { _peakR = _rf; break; } // gradient accelerated → below limbus
       _prevLf = _lf;
+      if (_firstSclR === 0 && _lf > candidateLum + 35) _firstSclR = _rf;
       if (_lf > candidateLum + 55) break; // well into sclera plateau — stop
     }
-    if (_peakR > candidateR * 1.05 && _peakR < candidateR * 1.6) {
-      console.log('[COLLARETTE GUARD] candidateR=' + Math.round(candidateR) +
-                  ' → below-limbus, expanding to ' + Math.round(_peakR));
+    // Sclera fallback: if gradient acceleration didn't trigger but the scan crossed
+    // well into sclera brightness, the candidate was in mid-stroma (gradual ramp).
+    // Use the sclera entry radius if it's ≥25% beyond the candidate.
+    if (_peakR === 0 && _firstSclR > 0 && _firstSclR > candidateR * 1.25) {
+      _peakR = _firstSclR;
+    }
+    if (_peakR > candidateR * 1.05 && _peakR < candidateR * 2.0) {
+      console.log('[LIMBUS GUARD] candidateR=' + Math.round(candidateR) +
+                  ' → expanded to ' + Math.round(_peakR));
       return Math.round(_peakR);
     }
-    console.log('[COLLARETTE GUARD] candidateR=' + Math.round(candidateR) +
+    console.log('[LIMBUS GUARD] candidateR=' + Math.round(candidateR) +
                 ' → no change (already limbus)');
     return candidateR;
   }

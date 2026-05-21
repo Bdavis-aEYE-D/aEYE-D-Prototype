@@ -1129,8 +1129,13 @@ function zoomToEye(skipSanityCheck) {
   var iR   = donut.rIris  / sx;
   var iPR  = donut.rPupil / sx;
 
-  // Pad 1.5× irisR in each direction — tight crop showing just the eye
-  var pad = Math.round(iR * 1.5);
+  // Pad 2.0× irisR in each direction — wide enough to capture the full iris
+  // even when the pre-zoom radius estimate (iR) is the IPD floor (~83px for
+  // Iliana-class eyes) and the true limbus is ~95–100px out.  1.5× was too
+  // tight: the left limbus fell outside the crop and the ring was fitting a
+  // clipped frame.  2.0× gives 166px clearance on all sides; out-of-bounds
+  // clamps (Math.max/min below) handle photos where the eye is near the edge.
+  var pad = Math.round(iR * 2.0);
   var x0  = Math.max(0, Math.round(iCx - pad));
   var y0  = Math.max(0, Math.round(iCy - pad));
   var x1  = Math.min(imgEl.width,  Math.round(iCx + pad));
@@ -1281,23 +1286,28 @@ function zoomToEye(skipSanityCheck) {
       //     because most samples fall out-of-bounds) are rejected.
       //   • Near-horizontal ray contamination from eyelashes (ODH median
       //     pulled to ~0.73×iR) is also rejected.
+      // Full-face: iR may be the IPD floor — a conservative lower-bound that can
+      // underestimate the true iris radius by up to ~55% for close-up selfies.
+      // Raise the acceptance window to 2.0×iR so the cascade can still accept the
+      // correct result; the global 45%-of-stage cap remains the hard ceiling.
       // When a cascade tier is rejected the initialised donut.rIris = iR*nsx
       // (the correct pre-zoom estimate) is preserved unchanged.
-      var _zDevMax = isCloseupMode ? 0.25 : 0.40;
+      var _zDevMax = isCloseupMode ? 0.25 : 1.50;  // full-face: allow up to 2.5×iR deviation
+      var _zUpperBound = isCloseupMode ? 1.4 : 2.0;  // full-face: accept up to 2.0×iR
       if (zRIP && zRIP.confidence >= _zRipThresh &&
-          zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * 1.4 &&
+          zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * _zUpperBound &&
           Math.abs(zRIP.irisR - iR) <= iR * _zDevMax) {
-        // Primary succeeded — hard-cap at 1.25× MP to block eyelid overshoot
-        donut.rIris = Math.min(zRIP.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
+        // Primary succeeded — cap at 2.0× MP (close-up: 1.25×); global 45% binds first
+        donut.rIris = Math.min(zRIP.irisR * nsx, iR * nsx * _zUpperBound, Math.min(stageW, stageH) * 0.45);
         _zRipConf = zRIP.confidence;
       } else {
         _zFellBack = true;
         // Secondary: horizontal gradient scan; pass iR as hint so the scan
-        // is capped at iR×1.5 (prevents far-skin false positives on tight crops).
+        // is capped at iR×2.0 (raised from 1.5× to handle IPD-floor underestimates).
         var zODH = findIrisODHorizontal(imgEl, _zCascCx, _zCascCy, zPR0, iR);
-        if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4 &&
+        if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * _zUpperBound &&
             Math.abs(zODH.irisR - iR) <= iR * _zDevMax) {
-          donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
+          donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * _zUpperBound, Math.min(stageW, stageH) * 0.45);
           // Adopt horizontal scan's x-center refinement for the iris ring
           if (Math.abs(zODH.cxIris - _zCascCx) < iR * 0.4) {
             donut.cx = drawInfo.dx + zODH.cxIris * nsx;
@@ -1306,13 +1316,13 @@ function zoomToEye(skipSanityCheck) {
         } else {
           // Tertiary: ring contrast
           var zRC = findIrisByRingContrast(imgEl, _zCascCx, _zCascCy, iR);
-          if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
+          if (zRC && zRC.score > 15 && zRC.r <= iR * _zUpperBound) {
             donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
           } else {
             // Tier 3.5: saturation ring — dark irises where all luminance methods fail
             var zSAT = findIrisODBySaturation(imgEl, _zCascCx, _zCascCy, iR);
-            if (zSAT && zSAT.confidence >= 0.25 && zSAT.irisR > iR * 0.4 && zSAT.irisR < iR * 1.5) {
-              donut.rIris = Math.min(zSAT.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
+            if (zSAT && zSAT.confidence >= 0.25 && zSAT.irisR > iR * 0.4 && zSAT.irisR < iR * _zUpperBound) {
+              donut.rIris = Math.min(zSAT.irisR * nsx, iR * nsx * _zUpperBound, Math.min(stageW, stageH) * 0.45);
             }
             // else: keep the MP estimate that was set before the refinement pass
           }
