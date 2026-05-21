@@ -1155,8 +1155,36 @@ function findTrueLimbusOutward(imgEl, cx, cy, candidateR, maxSearchR) {
   var justOutside   = ringLum(candidateR * 1.12);
   if (candidateLum === null || justOutside === null) return candidateR;
 
-  // If luminance rises just outside → candidate is already the dark limbus boundary.
-  if (justOutside >= candidateLum + 5) return candidateR;
+  // If luminance rises just outside → two possibilities:
+  // (a) TRUE LIMBUS: candidateR is the dark limbal band; the gradient here is steep and
+  //     decreases moving further into sclera (which plateaus).
+  // (b) BELOW LIMBUS: candidateR is on the stroma ramp; the gradient is mild here and
+  //     *increases* further outward until it peaks at the true limbus.
+  // Distinguish by scanning forward: if any step beyond 1.15×candidateR shows a
+  // gradient more than 20 % steeper than the initial one, the limbus is further out.
+  if (justOutside >= candidateLum + 5) {
+    var _initGrad = justOutside - candidateLum;          // initial rise
+    var _scanMax  = Math.min(candidateR * 1.65, Math.min(W, H) * 0.46);
+    var _stepFwd  = Math.max(1, Math.round(candidateR * 0.04));
+    var _prevLf   = justOutside;
+    var _peakR    = 0;
+    for (var _rf = Math.round(candidateR * 1.15); _rf <= _scanMax; _rf += _stepFwd) {
+      var _lf = ringLum(_rf);
+      if (_lf === null) break;
+      var _gf = _lf - _prevLf;
+      if (_gf > _initGrad * 1.2) { _peakR = _rf; break; } // gradient increased → below limbus
+      _prevLf = _lf;
+      if (_lf > candidateLum + 55) break; // well into sclera plateau — stop
+    }
+    if (_peakR > candidateR * 1.05 && _peakR < candidateR * 1.6) {
+      console.log('[COLLARETTE GUARD] candidateR=' + Math.round(candidateR) +
+                  ' → below-limbus, expanding to ' + Math.round(_peakR));
+      return Math.round(_peakR);
+    }
+    console.log('[COLLARETTE GUARD] candidateR=' + Math.round(candidateR) +
+                ' → no change (already limbus)');
+    return candidateR;
+  }
   // Require a meaningful drop (noise tolerance = 8 lum) to avoid false activations.
   if (candidateLum - justOutside < 8) return candidateR;
 

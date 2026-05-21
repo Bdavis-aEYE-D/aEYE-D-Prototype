@@ -5,238 +5,369 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>eyeD Prototype</title>
+<title>eyeD · Opal</title>
 <style>
   :root {
-    --bg: #0b1020;
-    --bg2: #131a30;
-    --card: #1a2240;
-    --ink: #f4f6ff;
-    --ink-dim: #aab1cc;
-    --accent: #6cc4ff;
-    --accent2: #ffd66c;
-    --line: #2a335c;
+    --bg:       #07050d;
+    --bg2:      #0d0b18;
+    --card:     #100e1c;
+    --ink:      #f0ecff;
+    --ink-dim:  #7e78a0;
+    --gem-p:    #c084fc;
+    --gem-t:    #22d3ee;
+    --gem-g:    #fbbf24;
+    --gem-r:    #fb7185;
+    --accent:   #c084fc;
+    --accent2:  #fbbf24;
+    --line:     #1e1a2e;
+    --btn-grad: linear-gradient(135deg, #7c3aed 0%, #0e7490 100%);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0;
-    background: var(--bg); color: var(--ink);
+    color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     overscroll-behavior: none;
     -webkit-text-size-adjust: 100%;
   }
-  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background:
+      radial-gradient(ellipse 70% 45% at 8% 12%,  #c084fc0d 0%, transparent 65%),
+      radial-gradient(ellipse 55% 40% at 90% 82%,  #22d3ee0a 0%, transparent 65%),
+      radial-gradient(ellipse 45% 35% at 52% 48%,  #fbbf2406 0%, transparent 65%),
+      #07050d;
+  }
 
-  /* JS-health indicator */
-  #jshealth { position: fixed; top: env(safe-area-inset-top); left: 0; right: 0;
-    background: #b9002d; color: #fff; text-align: center;
-    font-size: 12px; font-weight: 700; padding: 6px; z-index: 99; letter-spacing: 1px; }
+  /* JS health banner */
+  #jshealth {
+    position: fixed; top: env(safe-area-inset-top); left: 0; right: 0;
+    background: #5c0022; color: #ffd6e4; text-align: center;
+    font-size: 12px; font-weight: 700; padding: 6px; z-index: 99; letter-spacing: 1px;
+  }
 
-  header { padding: 14px 18px 8px; display: flex; align-items: center; justify-content: space-between; }
-  .logo { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; }
-  .logo .d { color: var(--accent); }
-  .tag { font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 1.4px; }
+  /* ── Header ─────────────────────────────────────────── */
+  header {
+    padding: 14px 20px 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-weight: 900; font-size: 24px; letter-spacing: -0.5px;
+    margin-top: 20px;
+    background: linear-gradient(135deg, #c084fc 0%, #22d3ee 55%, #fbbf24 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .logo .d { /* gradient covers whole wordmark; .d class kept for JS compat */ }
+  .tag {
+    font-size: 11px; color: var(--ink-dim);
+    text-transform: uppercase; letter-spacing: 1.6px; margin-top: 20px;
+  }
 
+  /* ── Layout ──────────────────────────────────────────── */
   main { padding: 8px 16px 140px; max-width: 520px; margin: 0 auto; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin: 12px 0; }
-  h2 { margin: 0 0 6px; font-size: 17px; color: var(--ink); }
-  p, li { color: var(--ink-dim); font-size: 14px; line-height: 1.5; }
 
+  .card {
+    background: var(--card);
+    border: 1px solid #c084fc1a;
+    border-radius: 20px; padding: 18px; margin: 12px 0;
+    box-shadow: 0 2px 20px rgba(192,132,252,0.05);
+  }
+  h2 { margin: 0 0 6px; font-size: 17px; color: var(--ink); }
+  p, li { color: var(--ink-dim); font-size: 14px; line-height: 1.55; }
+
+  /* ── Buttons ─────────────────────────────────────────── */
   button, .btn {
     -webkit-appearance: none; appearance: none;
-    border: none; background: var(--accent); color: #002338;
+    border: none; background: var(--btn-grad); color: #fff;
     font-family: inherit; font-weight: 700; font-size: 15px;
     padding: 14px 18px; border-radius: 14px; cursor: pointer;
-    width: 100%; touch-action: manipulation;
+    width: 100%; touch-action: manipulation; letter-spacing: 0.2px;
   }
-  button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
-  button:active { opacity: 0.7; }
+  button.secondary {
+    background: transparent; color: var(--ink-dim);
+    border: 1.5px solid var(--line);
+  }
+  button:active { opacity: 0.72; }
   input[type=file] { position: absolute; left: -9999px; }
 
+  /* ── Stage canvas ────────────────────────────────────── */
   .stage {
-    position: relative; background: #000; border-radius: 14px; overflow: hidden;
+    position: relative; background: #000; border-radius: 16px; overflow: hidden;
     aspect-ratio: 1; width: 100%; touch-action: none;
     user-select: none; -webkit-user-select: none;
+    border: 1px solid #c084fc18;
   }
   .stage canvas { display: block; width: 100%; height: 100%; }
 
+  /* ── Form controls ───────────────────────────────────── */
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .controls .full { grid-column: 1 / -1; }
-  .slider { width: 100%; margin: 4px 0; }
+  .slider { width: 100%; margin: 4px 0; accent-color: var(--gem-p); }
   label.tinylabel { display: block; font-size: 12px; color: var(--ink-dim); margin: 8px 0 2px; }
 
-  .circ-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1.5px solid #444;
-    background: #1a1a1a; color: #888; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .circ-tab.iris.active  { background: #0d2236; color: #6cc4ff; border-color: #6cc4ff; }
-  .circ-tab.pupil.active { background: #2a1e00; color: #ffd66c; border-color: #ffd66c; }
+  /* ── Iris / pupil ring tabs ──────────────────────────── */
+  .circ-tab {
+    flex: 1; padding: 8px; border-radius: 10px;
+    border: 1.5px solid #2a2244; background: #0c0a18;
+    color: #5a5270; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .circ-tab.iris.active  { background: #1a0a2e; color: var(--gem-p); border-color: var(--gem-p); }
+  .circ-tab.pupil.active { background: #1a1200; color: var(--gem-g); border-color: var(--gem-g); }
 
+  /* ── Swatches ────────────────────────────────────────── */
   .swatch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff2; }
+  .swatch { width: 38px; height: 38px; border-radius: 10px; border: 1.5px solid #ffffff14; box-shadow: 0 2px 8px #0006; }
 
-  .result { background: linear-gradient(140deg, #1d2856 0%, #0e1430 100%);
-    border: 1px solid var(--accent); border-radius: 18px; padding: 18px; margin: 12px 0; }
-  .result .big { font-size: 26px; font-weight: 800; color: var(--accent); margin-bottom: 6px; }
-  .result .sub { font-size: 14px; color: var(--ink); line-height: 1.4; }
-  .attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
-  .attr { background: #00000055; border-radius: 12px; padding: 10px; }
-  .attr .k { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 1px; }
+  /* ── Davis Result card — hero treatment ─────────────── */
+  .result {
+    background: linear-gradient(145deg, #0e0818 0%, #07050d 100%);
+    border: 1.5px solid #c084fc44;
+    border-radius: 20px; padding: 20px; margin: 12px 0;
+    box-shadow:
+      0 0 28px rgba(192,132,252,0.14),
+      0 0 56px rgba(34,211,238,0.06),
+      inset 0 1px 0 rgba(192,132,252,0.12);
+  }
+  .result .big {
+    font-size: 30px; font-weight: 900; margin-bottom: 6px; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--gem-p), var(--gem-t));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .result .sub { font-size: 14px; color: var(--ink); line-height: 1.45; }
+
+  /* ── Attribute grid ──────────────────────────────────── */
+  .attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .attr { background: transparent; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .attr .k { font-size: 10px; color: var(--gem-p); opacity: 0.65; text-transform: uppercase; letter-spacing: 1.2px; }
   .attr .v { font-size: 14px; color: var(--ink); margin-top: 2px; font-weight: 600; }
-  /* Highlights — featured callouts above the attribute grid */
+
+  /* ── Highlight callouts ──────────────────────────────── */
   .highlights { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-  .highlight { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-               background: linear-gradient(120deg, #00000080 0%, #00000055 100%);
-               border-radius: 12px; border-left: 3px solid var(--accent); }
-  .highlight .swatch-circle { width: 32px; height: 32px; border-radius: 50%;
-               border: 2px solid #ffffff33; flex-shrink: 0; }
+  .highlight {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    background: rgba(192,132,252,0.04);
+    border-radius: 14px;
+    border: 1px solid #c084fc18; border-left: 3px solid var(--gem-t);
+  }
+  .highlight .swatch-circle {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 2px solid #ffffff1a; flex-shrink: 0;
+  }
   .highlight .swatch-circle.split { background-image: linear-gradient(120deg, var(--c1) 50%, var(--c2) 50%); }
   .highlight .body { flex: 1; min-width: 0; }
   .highlight .title { font-size: 13px; font-weight: 700; color: var(--ink); }
-  .highlight .desc { font-size: 11px; color: var(--ink-dim); margin-top: 1px; line-height: 1.3; }
-  /* Rarity hero card */
-  .highlight.rarity-hero { border-left-color: #ffd66c; background: linear-gradient(120deg, #1a120099 0%, #00000066 100%); }
-  .highlight.rarity-hero .title { font-size: 22px; font-weight: 900; color: #ffd66c; letter-spacing: -0.5px; line-height: 1.1; }
-  .highlight.rarity-hero .desc { font-size: 11px; color: #c8b98a; margin-top: 3px; }
-  /* View toggle (Card vs Story) */
+  .highlight .desc  { font-size: 11px; color: var(--ink-dim); margin-top: 1px; line-height: 1.3; }
+
+  /* Rarity hero */
+  .highlight.rarity-hero {
+    border-left-color: var(--gem-g);
+    border-color: #fbbf2428;
+    background: linear-gradient(120deg, rgba(251,191,36,0.06) 0%, rgba(7,5,13,0.4) 100%);
+  }
+  .highlight.rarity-hero .title {
+    font-size: 24px; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1;
+    background: linear-gradient(135deg, #fbbf24, #fb7185);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .highlight.rarity-hero .desc { font-size: 11px; color: #c8b060; margin-top: 3px; }
+
+  /* ── View toggle (Card / Story) ──────────────────────── */
   .view-toggle { display: flex; gap: 6px; margin: 14px 0 0 0; }
-  .view-toggle button { flex: 1; background: #00000055; color: var(--ink-dim);
-                       border: 1px solid var(--line); border-radius: 10px;
-                       padding: 8px 10px; font-size: 12px; cursor: pointer; }
-  .view-toggle button.active { background: var(--card); color: var(--ink);
-                              border-color: var(--accent); }
-  /* Eye Story view */
+  .view-toggle button {
+    flex: 1; background: transparent; color: var(--ink-dim);
+    border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font-size: 12px; cursor: pointer;
+  }
+  .view-toggle button.active { background: #1a1530; color: var(--ink); border-color: var(--gem-p); }
+
+  /* ── Eye Story view ──────────────────────────────────── */
   .eye-story { padding-top: 8px; }
-  .eye-story p { font-size: 14px; color: var(--ink); line-height: 1.55; margin: 10px 0; }
-  .eye-story p strong { color: var(--accent); font-weight: 700; }
-  /* Share Card preview modal */
+  .eye-story p { font-size: 14px; color: var(--ink); line-height: 1.6; margin: 10px 0; }
+  .eye-story p strong { color: var(--gem-t); font-weight: 700; }
+
+  /* ── Share modal ─────────────────────────────────────── */
   .share-modal {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    position: fixed; inset: 0; background: rgba(0,0,0,0.88);
     display: none; align-items: center; justify-content: center;
     padding: 16px; z-index: 1000; overflow: auto;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   }
   .share-modal.show { display: flex; }
   .share-inner {
-    max-width: 540px; width: 100%; display: flex; flex-direction: column; gap: 12px;
-    align-items: stretch;
+    max-width: 540px; width: 100%; display: flex;
+    flex-direction: column; gap: 12px; align-items: stretch;
   }
   .share-inner img {
-    width: 100%; height: auto; border-radius: 16px; display: block;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    width: 100%; height: auto; border-radius: 20px; display: block;
+    box-shadow: 0 24px 80px rgba(192,132,252,0.3);
   }
   .share-controls { display: flex; gap: 8px; }
-  .share-controls button { flex: 1; padding: 12px; border-radius: 12px;
-    border: 1px solid var(--line); background: var(--card); color: var(--ink);
-    font-size: 14px; cursor: pointer; }
-  .share-controls button.primary { background: var(--accent); color: #0a0a14; border-color: var(--accent); font-weight: 700; }
+  .share-controls button {
+    flex: 1; padding: 12px; border-radius: 12px;
+    border: 1.5px solid var(--line); background: var(--card);
+    color: var(--ink); font-size: 14px; cursor: pointer;
+  }
+  .share-controls button.primary {
+    background: var(--btn-grad); color: #fff;
+    border-color: transparent; font-weight: 700;
+  }
 
-  /* Photo tips modal */
+  /* ── Photo tips modal ────────────────────────────────── */
   .tips-modal {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+    position: fixed; inset: 0; background: rgba(0,0,0,0.9);
     display: none; align-items: flex-end; justify-content: center;
     padding: 0; z-index: 1000;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   }
   .tips-modal.show { display: flex; }
   .tips-inner {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 24px 24px 0 0; padding: 24px 20px 40px;
-    width: 100%; max-width: 520px;
+    background: var(--bg2); border: 1px solid #c084fc22;
+    border-bottom: none; border-radius: 28px 28px 0 0;
+    padding: 26px 22px 44px; width: 100%; max-width: 520px;
   }
-  .tips-inner h3 { margin: 0 0 4px; font-size: 18px; color: var(--ink); }
-  .tips-inner .tips-sub { font-size: 13px; color: var(--ink-dim); margin: 0 0 18px; }
-  .tip-row { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .tips-inner h3 { margin: 0 0 4px; font-size: 20px; color: var(--ink); font-weight: 800; }
+  .tips-inner .tips-sub { font-size: 13px; color: var(--ink-dim); margin: 0 0 20px; }
+  .tip-row {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
   .tip-row:last-of-type { border-bottom: none; }
-  .tip-featured { background: linear-gradient(120deg,#0d2236,#1a2240); border: 1px solid var(--accent);
-    border-radius: 14px; padding: 14px; margin-bottom: 14px; }
-  .tip-featured .tip-label { font-size: 10px; font-weight: 700; color: var(--accent);
-    text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 6px; }
-  .tip-featured .tip-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
-  .tip-featured .tip-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .tip-featured .tip-steps li { font-size: 13px; color: var(--ink-dim); padding-left: 22px; position: relative; line-height: 1.4; }
-  .tip-featured .tip-steps li::before { content: attr(data-n); position: absolute; left: 0;
-    color: var(--accent); font-weight: 700; font-size: 12px; }
-  .tip-icon { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; margin-top: 1px; }
-  .tip-body .tip-title { font-size: 14px; font-weight: 700; color: var(--ink); }
-  .tip-body .tip-desc { font-size: 13px; color: var(--ink-dim); margin-top: 2px; line-height: 1.4; }
-  .eye-badge { display: inline-block; background: var(--accent); color: #002338;
-    font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
-    padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; }
-
-  .twoeye { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-  .twoeye .eye-box { background: #00000055; border-radius: 12px; padding: 10px; }
-  .twoeye .eye-box .side { font-size: 10px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; }
-  .twoeye .eye-box .name { font-size: 15px; color: var(--ink); font-weight: 700; margin-top: 3px; }
-  .twoeye .eye-box .meta { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
-  .bilateral { grid-column: 1 / -1; background: #00000055; border-radius: 12px; padding: 10px;
-               border-left: 3px solid var(--accent); }
-  .bilateral .label { font-size: 10px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; }
-  .bilateral .verdict { font-size: 14px; color: var(--ink); font-weight: 700; margin-top: 3px; }
-  .bilateral .detail { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
-  .bilateral.match { border-left-color: var(--accent2); }
-
-  nav.tabs { display: flex; gap: 6px; padding: 6px; background: var(--bg2); border-radius: 14px; margin: 10px 0; }
-  nav.tabs button {
-    background: transparent; color: var(--ink-dim); padding: 10px;
-    font-size: 13px; font-weight: 600;
+  .tip-featured {
+    background: linear-gradient(135deg, #0e0818, #100e1c);
+    border: 1.5px solid var(--gem-p); border-radius: 16px;
+    padding: 16px; margin-bottom: 16px;
   }
-  nav.tabs button.active { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  .tip-featured .tip-label {
+    font-size: 10px; font-weight: 700; color: var(--gem-p);
+    text-transform: uppercase; letter-spacing: 1.4px; margin-bottom: 6px;
+  }
+  .tip-featured .tip-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+  .tip-featured .tip-steps {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .tip-featured .tip-steps li {
+    font-size: 13px; color: var(--ink-dim);
+    padding-left: 22px; position: relative; line-height: 1.45;
+  }
+  .tip-featured .tip-steps li::before {
+    content: attr(data-n); position: absolute; left: 0;
+    color: var(--gem-t); font-weight: 700; font-size: 12px;
+  }
+  .tip-icon { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; margin-top: 2px; }
+  .tip-body .tip-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .tip-body .tip-desc  { font-size: 13px; color: var(--ink-dim); margin-top: 2px; line-height: 1.45; }
 
-  .pill { display: inline-block; background: #00000040; border: 1px solid var(--line);
-    border-radius: 999px; padding: 4px 10px; font-size: 11px; color: var(--ink-dim); margin: 2px 4px 2px 0; }
-  .step { font-size: 11px; color: var(--accent2); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+  /* ── Eye badge ───────────────────────────────────────── */
+  .eye-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #7c3aed, #0e7490);
+    color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 1px;
+    text-transform: uppercase; padding: 4px 12px; border-radius: 999px; margin-bottom: 10px;
+  }
+
+  /* ── Two-eye summary ─────────────────────────────────── */
+  .twoeye { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .twoeye .eye-box { background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .twoeye .eye-box .side { font-size: 10px; color: var(--gem-g); letter-spacing: 1.2px; text-transform: uppercase; }
+  .twoeye .eye-box .name { font-size: 15px; color: var(--ink); font-weight: 700; margin-top: 4px; }
+  .twoeye .eye-box .meta { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .bilateral {
+    grid-column: 1 / -1; background: transparent;
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+    border-left: 3px solid var(--gem-t);
+  }
+  .bilateral .label   { font-size: 10px; color: var(--gem-g); letter-spacing: 1px; text-transform: uppercase; }
+  .bilateral .verdict { font-size: 14px; color: var(--ink); font-weight: 700; margin-top: 4px; }
+  .bilateral .detail  { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .bilateral.match    { border-left-color: var(--gem-g); }
+
+  /* ── Tab navigation ──────────────────────────────────── */
+  nav.tabs {
+    display: flex; gap: 4px; padding: 5px;
+    background: var(--bg2); border-radius: 16px; margin: 10px 0;
+    border: 1px solid var(--line);
+  }
+  nav.tabs button {
+    background: transparent; color: var(--ink-dim);
+    padding: 10px 12px; font-size: 13px; font-weight: 600; border-radius: 12px;
+  }
+  nav.tabs button.active { background: #1a1530; color: var(--ink); border: 1px solid #c084fc33; }
+
+  /* ── Utility ─────────────────────────────────────────── */
+  .pill {
+    display: inline-block; background: rgba(192,132,252,0.06);
+    border: 1px solid #c084fc18; border-radius: 999px;
+    padding: 4px 10px; font-size: 11px; color: var(--ink-dim); margin: 2px 4px 2px 0;
+  }
+  .step { font-size: 11px; color: var(--gem-g); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
   .hint { font-size: 12px; color: var(--ink-dim); margin-top: 6px; text-align: center; }
   .hidden { display: none !important; }
 
-  .post-stage { aspect-ratio: 9/16; background: #060a14; position: relative; border-radius: 16px; overflow: hidden;
-    box-shadow: 0 12px 48px rgba(0,0,0,0.65); }
+  /* ── Post Maker ──────────────────────────────────────── */
+  .post-stage {
+    aspect-ratio: 9/16; background: #060408; position: relative;
+    border-radius: 20px; overflow: hidden;
+    box-shadow: 0 16px 48px rgba(192,132,252,0.15);
+    border: 1px solid #c084fc18;
+  }
   .post-stage canvas { width: 100%; height: 100%; display: block; }
-  .footer-note { font-size: 10px; color: var(--ink-dim); text-align: center; padding: 18px 0 8px; }
+  .footer-note { font-size: 10px; color: var(--ink-dim); text-align: center; padding: 20px 0 8px; opacity: 0.55; }
 
-  /* ---- Post Maker template picker ---- */
-  .pm-tmpl-row { display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 12px;
-    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .pm-tmpl-row {
+    display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 12px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
   .pm-tmpl-row::-webkit-scrollbar { display: none; }
-  .pm-tmpl-btn { flex-shrink: 0; width: 110px; background: var(--bg2);
-    border: 1.5px solid var(--line); border-radius: 14px;
+  .pm-tmpl-btn {
+    flex-shrink: 0; width: 110px; background: var(--bg2);
+    border: 1.5px solid var(--line); border-radius: 16px;
     padding: 12px 10px 10px; cursor: pointer; text-align: center;
-    color: var(--ink-dim); transition: border-color 0.15s, background 0.15s; }
-  .pm-tmpl-btn.active { background: var(--card); border-color: var(--accent); color: var(--ink); }
-  .pm-tmpl-btn.soon { opacity: 0.42; cursor: default; }
+    color: var(--ink-dim); transition: border-color 0.15s, background 0.15s;
+  }
+  .pm-tmpl-btn.active  { background: #0e0818; border-color: var(--gem-p); color: var(--ink); }
+  .pm-tmpl-btn.soon    { opacity: 0.35; cursor: default; }
   .pm-tmpl-icon  { display: block; font-size: 26px; margin-bottom: 5px; }
   .pm-tmpl-label { display: block; font-size: 12px; font-weight: 700; color: inherit; }
   .pm-tmpl-desc  { display: block; font-size: 10px; color: var(--ink-dim); margin-top: 3px; line-height: 1.3; }
   .pm-save-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 
-  .err { background: #3a0012; color: #ffdbe4; border-left: 4px solid #ff5577;
-    padding: 10px 14px; border-radius: 8px; font-size: 12px; margin: 10px 0; display: none; white-space: pre-wrap; }
-  #save-toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-    background: #1a2240; border: 1px solid var(--line); color: var(--ink-dim);
-    font-size: 12px; padding: 8px 16px; border-radius: 999px; z-index: 200;
-    transition: opacity 0.4s; opacity: 0; pointer-events: none; }
+  /* ── Error / toast ───────────────────────────────────── */
+  .err {
+    background: #2a0010; color: #ffcdd9; border-left: 4px solid var(--gem-r);
+    padding: 10px 14px; border-radius: 10px; font-size: 12px;
+    margin: 10px 0; display: none; white-space: pre-wrap;
+  }
+  #save-toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: var(--card); border: 1px solid #c084fc22; color: var(--ink-dim);
+    font-size: 12px; padding: 8px 18px; border-radius: 999px; z-index: 200;
+    transition: opacity 0.4s; opacity: 0; pointer-events: none;
+  }
 
-  /* ---- In-app camera viewfinder ---- */
+  /* ── Camera viewfinder ───────────────────────────────── */
   .viewfinder-wrap {
-    position: relative; background: #000; border-radius: 14px;
+    position: relative; background: #000; border-radius: 16px;
     overflow: hidden; aspect-ratio: 3/4; width: 100%;
+    border: 1px solid #c084fc1a;
   }
-  #eyeid-viewfinder {
-    display: block; width: 100%; height: 100%;
-    object-fit: cover; transform: scaleX(-1); /* mirror for selfie */
-  }
-  #eyeid-viewfinder.rear { transform: none; } /* rear camera — no mirror */
+  #eyeid-viewfinder { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  #eyeid-viewfinder.rear { transform: none; }
   .cam-flip-btn {
     position: absolute; top: 12px; right: 12px; z-index: 10;
-    width: 40px; height: 40px; border-radius: 50%;
-    background: rgba(0,0,0,0.45); border: 1.5px solid rgba(255,255,255,0.35);
+    width: 42px; height: 42px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); border: 1.5px solid rgba(192,132,252,0.35);
     color: #fff; font-size: 20px; display: flex; align-items: center;
     justify-content: center; cursor: pointer; line-height: 1;
     -webkit-tap-highlight-color: transparent;
   }
-  .face-guide {
-    position: absolute; inset: 0; pointer-events: none;
-    display: flex; align-items: center; justify-content: center;
-  }
+  .face-guide { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
   .face-oval {
     width: 72%; padding-top: 96%; border-radius: 50%;
-    border: 2px dashed rgba(108,196,255,0.55);
+    border: 2px dashed rgba(192,132,252,0.5);
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -52%);
   }
@@ -245,10 +376,9 @@
     text-align: center; font-size: 13px; font-weight: 600;
     color: #ffffffcc; text-shadow: 0 1px 4px #000;
   }
-  .cam-status { font-size: 13px; color: var(--accent); margin: 8px 0 4px;
-    min-height: 20px; font-weight: 600; text-align: center; }
+  .cam-status { font-size: 13px; color: var(--gem-p); margin: 8px 0 4px; min-height: 20px; font-weight: 600; text-align: center; }
 
-  /* ---- Manual Options disclosure (fit step) ---- */
+  /* ── Manual options disclosure ───────────────────────── */
   details.manual-opts { margin-top: 10px; }
   details.manual-opts summary {
     font-size: 13px; font-weight: 600; color: var(--ink-dim);
@@ -260,12 +390,12 @@
   details.manual-opts[open] summary::after { transform: rotate(-180deg); }
   details.manual-opts .opts-body {
     background: var(--bg2); border: 1px solid var(--line);
-    border-radius: 12px; padding: 14px 14px 10px; margin-top: 4px;
+    border-radius: 14px; padding: 14px 14px 10px; margin-top: 4px;
     display: flex; flex-direction: column; gap: 10px;
   }
   details.manual-opts .opt-desc { font-size: 12px; color: var(--ink-dim); margin: 0 0 4px; line-height: 1.45; }
 
-  /* Flash → black capture overlay */
+  /* ── Capture flash overlay ───────────────────────────── */
   #cam-overlay {
     position: fixed; inset: 0; background: #fff;
     opacity: 0; pointer-events: none; z-index: 1100;
@@ -279,26 +409,18 @@
     color: rgba(255,255,255,0.2); font-size: 80px; font-weight: 800;
   }
 
-  /* ── Quality advisory ─────────────────────────────── */
+  /* ── Quality advisory ────────────────────────────────── */
   #quality-advisory {
-    margin: 0 0 4px;
-    padding: 14px 16px 12px;
-    border-radius: 14px;
-    border: 1.5px solid #f5a623;
-    background: rgba(245,166,35,0.08);
+    margin: 0 0 8px; padding: 16px 18px 14px;
+    border-radius: 16px; border: 1.5px solid #fbbf2450;
+    background: rgba(251,191,36,0.05);
   }
-  #quality-advisory.qa-poor {
-    border-color: #f5623b;
-    background: rgba(245,98,59,0.08);
-  }
+  #quality-advisory.qa-poor { border-color: #fb718550; background: rgba(251,113,133,0.05); }
   .qa-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .qa-icon   { font-size: 18px; flex-shrink: 0; }
-  .qa-title  { font-size: 14px; font-weight: 700; color: #f5a623; }
-  #quality-advisory.qa-poor .qa-title { color: #f5623b; }
-  .qa-reasons {
-    font-size: 13px; color: var(--ink-dim);
-    margin: 0 0 10px; line-height: 1.45;
-  }
+  .qa-title  { font-size: 14px; font-weight: 700; color: var(--gem-g); }
+  #quality-advisory.qa-poor .qa-title { color: var(--gem-r); }
+  .qa-reasons { font-size: 13px; color: var(--ink-dim); margin: 0 0 10px; line-height: 1.5; }
   .qa-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .qa-actions button { font-size: 13px; padding: 8px 16px; }
 </style>
@@ -307,13 +429,12 @@
 
 <div id="jshealth">JAVASCRIPT NOT RUNNING &mdash; SEE TIP BELOW</div>
 <div id="save-toast"></div>
-<meta name="theme-color" content="#0b1020" id="theme-color-meta">
-<!-- Flash → black capture overlay -->
+<meta name="theme-color" content="#07050d" id="theme-color-meta">
 <div id="cam-overlay"><div class="cam-countdown" id="cam-countdown"></div></div>
 
 <header>
   <div class="logo" style="margin-top:20px">eye<span class="d">D</span></div>
-  <div class="tag" style="margin-top:20px">Prototype v1.96 &middot; Davis Scale</div>
+  <div class="tag" style="margin-top:20px">Opal v1.0 &middot; Davis Scale</div>
 </header>
 
 <main>
@@ -346,7 +467,6 @@
         <button type="button" class="secondary full" id="btn-sample">Use Sample Iris</button>
         <button type="button" class="secondary full" id="btn-tips">Photo Tips &rsaquo;</button>
       </div>
-      <!-- hidden inputs for native camera capture -->
       <input type="file" id="native-cam-rear"  accept="image/*" capture="environment" style="display:none">
       <input type="file" id="native-cam-front" accept="image/*" capture="user"        style="display:none">
       <label class="tinylabel" style="margin-top:12px">Date of birth <span style="font-weight:400;color:var(--ink-dim)">(optional &mdash; improves limbal ring scoring)</span></label>
@@ -355,9 +475,9 @@
       <p style="font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.6;border-top:1px solid var(--line);padding-top:12px;">By using eyeD, your iris photo may be used to help build and improve the Davis Iris Color System. No photos are shared publicly or sold.</p>
     </div>
 
-    <!-- Camera viewfinder (shown when in-app camera is active) -->
+    <!-- Camera viewfinder -->
     <div class="card" id="card-viewfinder" style="display:none">
-      <div class="step">Step 1 — Camera</div>
+      <div class="step">Step 1 &mdash; Camera</div>
       <h2>Position your face in the oval</h2>
       <p style="font-size:13px;color:var(--ink-dim);margin:4px 0 8px">Look directly at the camera &middot; Eyes open wide &middot; Turn brightness to max</p>
       <div class="viewfinder-wrap">
@@ -373,7 +493,7 @@
       <button type="button" class="secondary" id="btn-cam-stop" style="margin-top:6px">Cancel</button>
     </div>
 
-    <!-- ============== Step 2: Locate the eye ============== -->
+    <!-- Step 2: Locate the eye -->
     <div class="card" id="card-locate" style="display:none">
       <div class="step">Step 2</div>
       <h2 id="locate-title">Tap on the eye you want to analyze</h2>
@@ -390,10 +510,10 @@
       </div>
     </div>
 
-    <!-- ============== Step 2: Fit the donut ============== -->
+    <!-- Step 2: Fit the donut -->
     <div class="card" id="card-fit" style="display:none">
       <div class="step">Step 2 &middot; <span id="fit-side-label">&mdash;</span></div>
-      <h2>Fit the donut to the iris</h2>
+      <h2>Fit the ring to the iris</h2>
       <p>Tap to set center &middot; Pinch to resize &middot; Switch ring below</p>
       <div id="circle-tabs" style="display:flex;gap:8px;margin:0 0 10px">
         <button type="button" class="circ-tab iris active" id="tab-iris"  onclick="selectFitCircle('iris')">Iris</button>
@@ -403,20 +523,17 @@
         <canvas id="canvas-main"></canvas>
       </div>
       <div class="hint" id="autofit-hint">Auto-fit is running&hellip;</div>
-      <button type="button" id="btn-quality-retake" style="display:none;margin-top:6px;font-size:13px;padding:7px 18px;width:auto;background:transparent;border:1.5px solid #f5a623;color:#f5a623;border-radius:20px;cursor:pointer">&#x21A9;&#xFE0F; Retake Photo</button>
+      <button type="button" id="btn-quality-retake" style="display:none;margin-top:6px;font-size:13px;padding:7px 18px;width:auto;background:transparent;border:1.5px solid #fbbf24;color:#fbbf24;border-radius:20px;cursor:pointer">&#x21A9;&#xFE0F; Retake Photo</button>
 
-      <!-- Primary action — most important, appears first -->
       <button type="button" id="btn-analyze" style="margin-top:10px">Analyze Iris</button>
 
-      <!-- Secondary action -->
       <div class="controls" style="margin-top:8px">
         <button type="button" class="secondary" id="btn-switch-eye" style="display:none">Switch Eye</button>
         <button type="button" class="secondary full" id="btn-autofit">Auto-Fit Again</button>
       </div>
 
-      <!-- Manual options — collapsed by default, for edge cases only -->
       <details class="manual-opts">
-        <summary>⚙&thinsp; Manual Options</summary>
+        <summary>&#x2699;&#thinsp; Manual Options</summary>
         <div class="opts-body">
           <div>
             <label class="tinylabel">Reflection masking</label>
@@ -431,17 +548,16 @@
       <div class="hint" id="autofit-status">&nbsp;</div>
     </div>
 
-    <!-- ============== Step 4: Davis Card ============== -->
+    <!-- Step 4: Davis Card -->
     <div id="card-result" style="display:none">
-      <!-- Quality advisory — shown for Fair/Poor image quality only -->
       <div id="quality-advisory" style="display:none">
         <div class="qa-header">
-          <span class="qa-icon" id="qa-icon">⚠️</span>
+          <span class="qa-icon" id="qa-icon">&#x26A0;&#xFE0F;</span>
           <span class="qa-title" id="qa-title">Photo quality is fair</span>
         </div>
         <p class="qa-reasons" id="qa-reasons"></p>
         <div class="qa-actions">
-          <button type="button" id="btn-qa-retake">↩ Retake Photo</button>
+          <button type="button" id="btn-qa-retake">&#x21A9; Retake Photo</button>
           <button type="button" class="secondary" id="btn-qa-dismiss">Keep This Result</button>
         </div>
       </div>
@@ -451,14 +567,11 @@
         <div class="big" id="r-color">&mdash;</div>
         <div class="sub" id="r-narrative">&mdash;</div>
         <div class="swatch-row" id="r-swatches"></div>
-        <!-- View toggle: Card view (data-rich) vs Story view (prose) -->
         <div class="view-toggle">
           <button type="button" id="view-card" class="active" data-view="card">Card</button>
           <button type="button" id="view-story" data-view="story">Story</button>
         </div>
-        <!-- Highlights: featured callouts for detected features -->
         <div class="highlights" id="r-highlights"></div>
-        <!-- Card view: attribute grid -->
         <div id="view-card-content">
           <div class="attrs">
             <div class="attr"><div class="k">General Color</div><div class="v" id="r-general">&mdash;</div></div>
@@ -475,7 +588,6 @@
             <div class="attr"><div class="k">Pupil Offset</div><div class="v" id="r-pupil-ecc">&mdash;</div></div>
           </div>
         </div>
-        <!-- Story view: written description -->
         <div id="view-story-content" class="eye-story" style="display:none"></div>
         <div class="twoeye" id="twoeye-summary" style="display:none">
           <div class="eye-box" id="eye-box-left">
@@ -495,34 +607,6 @@
           </div>
         </div>
       </div>
-      <!-- ── Dataset collection widget ─────────────────────────────────── -->
-      <div id="collect-box" class="card" style="padding:14px 18px">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-dim);margin-bottom:10px">
-          Was this color right?
-          <span id="collect-count" style="float:right;opacity:.5"></span>
-        </div>
-        <div id="collect-main">
-          <div style="display:flex;gap:8px">
-            <button type="button" id="collect-yes" style="flex:1;background:var(--accent);color:#002338;font-size:13px;padding:8px 0;border:none;border-radius:8px;cursor:pointer">✓ Correct</button>
-            <button type="button" id="collect-no"  style="flex:1;background:transparent;color:var(--ink);border:1px solid var(--line);font-size:13px;padding:8px 0;border-radius:8px;cursor:pointer">✗ Fix it</button>
-          </div>
-        </div>
-        <div id="collect-fix" style="display:none">
-          <div style="font-size:12px;color:var(--ink-dim);margin-bottom:8px">Select the correct color:</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            <button class="cc-btn" data-c="Brown"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Brown</button>
-            <button class="cc-btn" data-c="Blue"   style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Blue</button>
-            <button class="cc-btn" data-c="Green"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Green</button>
-            <button class="cc-btn" data-c="Hazel"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Hazel</button>
-            <button class="cc-btn" data-c="Gray"   style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Gray</button>
-            <button class="cc-btn" data-c="Amber"  style="padding:6px 12px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:16px;font-size:13px;cursor:pointer">Amber</button>
-          </div>
-        </div>
-        <div id="collect-saved-msg" style="display:none;font-size:13px;color:var(--accent)"></div>
-        <button type="button" id="collect-export" style="margin-top:10px;background:transparent;color:var(--ink-dim);border:none;font-size:11px;text-decoration:underline;cursor:pointer;padding:0">Export dataset</button>
-      </div>
-      <!-- ─────────────────────────────────────────────────────────────── -->
-
       <div class="card">
         <h2>What&rsquo;s next</h2>
         <p id="next-text">Analyze the other eye for a complete pair, pop over to Post Maker for the cover-and-uncover reveal, or start over.</p>
@@ -530,7 +614,7 @@
           <button type="button" id="btn-other-eye">Analyze Other Eye</button>
           <button type="button" class="secondary" id="btn-portrait">Add Beauty Shot</button>
           <button type="button" class="secondary" id="btn-share">Make Share Card</button>
-          <button type="button" class="secondary full hidden" id="btn-both-eyes-card">🌟 Make Both Eyes Card</button>
+          <button type="button" class="secondary full hidden" id="btn-both-eyes-card">&#x1F31F; Make Both Eyes Card</button>
           <button type="button" class="secondary full" id="btn-again">Start Over</button>
         </div>
       </div>
@@ -542,16 +626,15 @@
         <h3>How to take a great photo</h3>
         <p class="tips-sub">Better photos mean more accurate results.</p>
 
-        <!-- Featured: Mirror Technique -->
         <div class="tip-featured">
           <div class="tip-label">&#x2B50; Best quality method</div>
           <div class="tip-title">&#x1F9F4; The Mirror Technique</div>
           <ul class="tip-steps">
             <li data-n="1.">Stand in front of a mirror near a window or in a well-lit room.</li>
-            <li data-n="2.">Use <strong>Rear Camera</strong> in eyeD — the rear lens is higher resolution than the front.</li>
+            <li data-n="2.">Use <strong>Rear Camera</strong> in eyeD &mdash; the rear lens is higher resolution than the front.</li>
             <li data-n="3.">Enable the flash to light your iris. Hold the phone 10&ndash;15 cm from your eye.</li>
             <li data-n="4.">Watch the <em>mirror reflection</em> to frame your eye in the centre of the screen.</li>
-            <li data-n="5.">Tap the volume button to shoot — steadier than tapping the screen.</li>
+            <li data-n="5.">Tap the volume button to shoot &mdash; steadier than tapping the screen.</li>
             <li data-n="6.">Focus on the iris, not the lashes. Tap the iris on screen to lock focus first.</li>
           </ul>
         </div>
@@ -560,7 +643,7 @@
           <div class="tip-icon">&#x1F4A1;</div>
           <div class="tip-body">
             <div class="tip-title">Light from the side, not behind you</div>
-            <div class="tip-desc">A window to your side gives even, natural light without harsh reflections. Avoid facing a bright window — it creates glare spots on the iris that block color.</div>
+            <div class="tip-desc">A window to your side gives even, natural light without harsh reflections. Avoid facing a bright window &mdash; it creates glare spots on the iris that block color.</div>
           </div>
         </div>
         <div class="tip-row">
@@ -580,7 +663,7 @@
         <div class="tip-row">
           <div class="tip-icon">&#x23F8;</div>
           <div class="tip-body">
-            <div class="tip-title">Hold still — brace yourself</div>
+            <div class="tip-title">Hold still &mdash; brace yourself</div>
             <div class="tip-desc">Rest your elbow on a surface or brace your hand against your face. Even a millimetre of blur softens the iris detail the app reads.</div>
           </div>
         </div>
@@ -617,24 +700,20 @@
 
   <!-- ======================== POST MAKER ======================== -->
   <section id="tab-post" class="hidden">
-
     <div class="card">
       <div class="step">Post Maker</div>
       <h2>Create your eye post</h2>
       <p>A 9:16 story card built from your analysis &mdash; color, rarity, and traits. Save it to share anywhere.</p>
       <div id="pm-template-picker" class="pm-tmpl-row"></div>
     </div>
-
     <div class="post-stage">
       <canvas id="post-canvas"></canvas>
     </div>
-
     <div class="pm-save-row">
       <button type="button" id="btn-export-post">Save Image</button>
       <button type="button" class="secondary" id="btn-copy-post">Copy to Clipboard</button>
     </div>
     <p class="hint">Tap Save Image &rarr; long-press in your camera roll to share.</p>
-
   </section>
 
   <!-- ======================== ABOUT ======================== -->
@@ -645,6 +724,10 @@
       <p><span class="pill">Full-face &rarr; locate eye</span><span class="pill">Auto-fit pupil + iris</span><span class="pill">Sclera / lash / lid masking</span><span class="pill">Iris donut sampling</span><span class="pill">Dominant cluster per zone</span><span class="pill">Curated palette</span><span class="pill">CIE Lab distance</span><span class="pill">Heterochromia (cross-cat)</span><span class="pill">Heterochromia (gradient)</span><span class="pill">Limbal ring</span><span class="pill">Sectoral hetero</span><span class="pill">Iris freckles</span><span class="pill">Bilateral heterochromia</span><span class="pill">Left / Right labeling</span></p>
     </div>
     <div class="card">
+      <h2>About the Opal skin</h2>
+      <p>Opal is an alternate visual theme for eyeD &mdash; the same Davis Scale engine and full analysis pipeline, a completely new design language. The dark iridescent palette mirrors the play-of-color in black opals and, not coincidentally, in the iris itself.</p>
+    </div>
+    <div class="card">
       <h2>Production path</h2>
       <p>This spec ports to native iOS (SwiftUI + Vision + Core Image). Native adds automatic eye detection via Vision&rsquo;s face-landmarks, real-time iris auto-centering, persistent eye-pair library, MP4 reveal export, and opted-in dataset collection for the v1.1 Core ML iris pattern classifier (Flower / Stream / Jewel / Shaker).</p>
     </div>
@@ -652,26 +735,25 @@
       <h2>Davis Scale v0.1</h2>
       <p>General color &middot; Specific named color &middot; Limbal ring strength &middot; Heterochromia &middot; Brightness &middot; Saturation &middot; Left/Right. Adds for v1.1: pattern, freckles, sclera tone, eye shape.</p>
     </div>
-    <div class="footer-note">eyeD prototype &copy; 2026 &middot; Local processing only</div>
+    <div class="footer-note">eyeD &middot; Opal v1.0 &copy; 2026 &middot; Local processing only</div>
   </section>
 
 </main>
 
-<!-- Core engine — shared across eye-D and any future product -->
-<script src="core/palette.js?v=172"></script>
+<!-- Core engine — identical to main eyeD UI -->
+<script src="core/palette.js?v=190"></script>
 <script src="core/iris.js?v=196"></script>
-<script src="core/rayid.js?v=172"></script>
-<script src="core/collarette.js?v=172"></script>
-<script src="core/iris-fill.js?v=172"></script>
-<script src="core/eye-shape.js?v=172"></script>
-<script src="core/engine.js?v=182"></script>
-<!-- eye-D UI layer -->
-<script src="js/analyze.js?v=172"></script>
-<script src="js/share.js?v=172"></script>
-<script src="js/post.js?v=172"></script>
-<script src="js/camera.js?v=172"></script>
+<script src="core/rayid.js?v=190"></script>
+<script src="core/collarette.js?v=190"></script>
+<script src="core/iris-fill.js?v=190"></script>
+<script src="core/eye-shape.js?v=190"></script>
+<script src="core/engine.js?v=190"></script>
+<!-- UI layer — shared with main eyeD UI -->
+<script src="js/analyze.js?v=190"></script>
+<script src="js/share.js?v=190"></script>
+<script src="js/post.js?v=190"></script>
+<script src="js/camera.js?v=190"></script>
 <script src="js/app.js?v=196"></script>
-<script src="js/collect.js?v=196"></script>
 
 </body>
 </html>

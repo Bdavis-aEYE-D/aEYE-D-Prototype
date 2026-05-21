@@ -1234,10 +1234,25 @@ function zoomToEye(skipSanityCheck) {
       }
     }
     if (zPupil && Math.hypot(zPupil.cx - niCx, zPupil.cy - niCy) < iR * 0.75) {
-      donut.cx      = drawInfo.dx + zPupil.cx * nsx;
-      donut.cy      = drawInfo.dy + zPupil.cy * nsy;
-      donut.cxPupil = donut.cx;
-      donut.cyPupil = donut.cy;
+      // Iris center (donut.cx/cy) stays at the pre-fit iris position (niCx/niCy),
+      // which was set by the initial donut assignment above and is the best estimate
+      // of the iris geometric centre.  Only the pupil display (donut.cxPupil/cyPupil)
+      // moves to the dark-region centroid from findPupilCenter.
+      // These are independent: pupil centre ≠ iris centre in most real eyes.
+      // Previously both were set to zPupil, which caused systematic rIris underestimation
+      // when the pupil is off-axis (e.g. amber/hazel where a large dark periocular zone
+      // pulls findPupilCenter below the true iris centre, misplacing the cascade origin
+      // and making ODH/RIP see sclera close-in on one side → smaller radius).
+      donut.cxPupil = drawInfo.dx + zPupil.cx * nsx;
+      donut.cyPupil = drawInfo.dy + zPupil.cy * nsy;
+      // donut.cx/cy already set to niCx/niCy·nsx from lines above — leave them there.
+
+      // Cascade centre: niCx/niCy (iris centre) is more accurate than zPupil for the
+      // OD cascade when the pupil is off-axis in the iris.  Exception: when the lash zone
+      // was detected above (niAboveLum < 25), niCy itself is in the lash region and
+      // zPupil is the better anchor — fall back to zPupil in that case.
+      var _zCascCx = (niAboveLum < 25) ? zPupil.cx : niCx;
+      var _zCascCy = (niAboveLum < 25) ? zPupil.cy : niCy;
 
       // Pupil radius pre-scan (needed as guard radius for secondary horizontal scan)
       var zPR0 = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, iR);
@@ -1246,6 +1261,8 @@ function zoomToEye(skipSanityCheck) {
       if (zPR0 <= 5) zPR0 = iR * 0.15;
 
       // ── Iris OD cascade (three tiers) ──────────────────────────────────────────
+      // All cascade calls use _zCascCx/_zCascCy (iris centre) not zPupil (pupil centre).
+      // This gives a symmetric radial profile that correctly finds the limbus.
       // Primary:   RIP full-circle mean intensity profile (confidence-scored)
       // Secondary: horizontal gradient scan (3/9 o'clock + ±20/30° rays)
       // Tertiary:  ring-contrast global search; then keep MP estimate as-is
@@ -1256,7 +1273,7 @@ function zoomToEye(skipSanityCheck) {
       // _applyFitClassical so the zoomed-image refinement pass also accepts
       // the correct radius rather than falling back to ODH/RC/SAT.
       var _zRipThresh = isCloseupMode ? 0.08 : 0.22;
-      var zRIP = findIrisODByRIP(imgEl, zPupil.cx, zPupil.cy, iR);
+      var zRIP = findIrisODByRIP(imgEl, _zCascCx, _zCascCy, iR);
       // In close-up mode the first cascade (in _applyFitClassical) already
       // found a reliable RIP radius; iR is that trusted estimate. Tighten
       // the zoom-cascade acceptance window to ±25 % of iR so that:
@@ -1277,23 +1294,23 @@ function zoomToEye(skipSanityCheck) {
         _zFellBack = true;
         // Secondary: horizontal gradient scan; pass iR as hint so the scan
         // is capped at iR×1.5 (prevents far-skin false positives on tight crops).
-        var zODH = findIrisODHorizontal(imgEl, zPupil.cx, zPupil.cy, zPR0, iR);
+        var zODH = findIrisODHorizontal(imgEl, _zCascCx, _zCascCy, zPR0, iR);
         if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * 1.4 &&
             Math.abs(zODH.irisR - iR) <= iR * _zDevMax) {
           donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
-          // Adopt horizontal scan's x-center refinement if it didn't drift
-          if (Math.abs(zODH.cxIris - zPupil.cx) < iR * 0.4) {
-            donut.cx      = drawInfo.dx + zODH.cxIris * nsx;
-            donut.cxPupil = donut.cx;
+          // Adopt horizontal scan's x-center refinement for the iris ring
+          if (Math.abs(zODH.cxIris - _zCascCx) < iR * 0.4) {
+            donut.cx = drawInfo.dx + zODH.cxIris * nsx;
+            // donut.cxPupil stays at zPupil position (independent of iris centre)
           }
         } else {
           // Tertiary: ring contrast
-          var zRC = findIrisByRingContrast(imgEl, zPupil.cx, zPupil.cy, iR);
+          var zRC = findIrisByRingContrast(imgEl, _zCascCx, _zCascCy, iR);
           if (zRC && zRC.score > 15 && zRC.r <= iR * 1.4) {
             donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
           } else {
             // Tier 3.5: saturation ring — dark irises where all luminance methods fail
-            var zSAT = findIrisODBySaturation(imgEl, zPupil.cx, zPupil.cy, iR);
+            var zSAT = findIrisODBySaturation(imgEl, _zCascCx, _zCascCy, iR);
             if (zSAT && zSAT.confidence >= 0.25 && zSAT.irisR > iR * 0.4 && zSAT.irisR < iR * 1.5) {
               donut.rIris = Math.min(zSAT.irisR * nsx, iR * nsx * 1.25, Math.min(stageW, stageH) * 0.45);
             }
@@ -1301,8 +1318,10 @@ function zoomToEye(skipSanityCheck) {
           }
         }
       }
-      // Collarette guard on the zoom-cascade result.
-      var _zTrueR = findTrueLimbusOutward(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
+      // Collarette guard — runs from iris centre (donut.cx/cy), not pupil centre.
+      var _zIrisCx = (donut.cx - drawInfo.dx) / nsx;
+      var _zIrisCy = (donut.cy - drawInfo.dy) / nsy;
+      var _zTrueR = findTrueLimbusOutward(imgEl, _zIrisCx, _zIrisCy, donut.rIris / nsx);
       if (_zTrueR > (donut.rIris / nsx) * 1.05) {
         donut.rIris = Math.min(_zTrueR * nsx, Math.min(stageW, stageH) * 0.45);
       }
