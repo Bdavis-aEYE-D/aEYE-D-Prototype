@@ -780,6 +780,25 @@ function applyAutoFit(){
       // scan outward to find the true limbus.
       irisR_img = findLimbusBySaturation(imgEl, cxPupil_img, cyPupil_img, irisR_img);
 
+      // Macro close-up guard: if the MediaPipe cascade returned a very small iris
+      // on a jumpToEye crop (<12% of shorter crop side), MediaPipe's `ir` hint was
+      // too small and all cascade tiers stayed in the wrong search range.
+      // Run a quick autoFit(closeup=true) for a second opinion.  Only adopt the
+      // autoFit result if it is more than 2× larger — i.e., clearly found something
+      // the cascade missed, not just minor noise.
+      if (cropRegion != null &&
+          irisR_img < Math.min(imgEl.width, imgEl.height) * 0.12) {
+        var _macroFit = autoFit(imgEl, true);
+        if (_macroFit && _macroFit.rIrisFrac > (irisR_img / imgEl.width) * 2.0) {
+          console.log('[MACRO-GUARD] cascadeR=' + Math.round(irisR_img) +
+                      ' → autoFitR=' + Math.round(_macroFit.rIrisFrac * imgEl.width) +
+                      ' (2× larger) — adopting autoFit result');
+          irisR_img  = _macroFit.rIrisFrac  * imgEl.width;
+          cxIris_img = _macroFit.cxFrac     * imgEl.width;
+          cyIris_img = _macroFit.cyFrac     * imgEl.height;
+        }
+      }
+
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
 
@@ -868,6 +887,19 @@ function _applyFitClassical(closeup, skipZoom){
     var fit = autoFit(imgEl, !!closeup);
     var scaleX = drawInfo.dw / imgEl.width;
     var scaleY = drawInfo.dh / imgEl.height;
+
+    // Macro close-up guard: if full-face autoFit found a very small iris on a
+    // jumpToEye crop (rIrisFrac < 0.08), the image is likely a macro close-up
+    // where the iris fills the frame and the full-face model cannot see the
+    // sclera boundary clearly.  Fall back to the close-up cascade immediately
+    // — it floors the RIP search at 0.28×shorter-side so the true limbus is
+    // in range even when autoFit's initial estimate is too small.
+    if (!closeup && cropRegion != null && fit.rIrisFrac > 0 && fit.rIrisFrac < 0.08) {
+      console.log('[MACRO-GUARD] rIrisFrac=' + fit.rIrisFrac.toFixed(3) +
+                  ' < 0.08 on jumpToEye crop → switching to closeup cascade');
+      _applyFitClassical(true, skipZoom);
+      return;
+    }
 
     // Close-up: refine pupil center with weighted-centroid dark-pixel scan —
     // same findPupilCenter() step the MediaPipe full-face path uses.
@@ -1351,6 +1383,14 @@ function zoomToEye(skipSanityCheck) {
     zCx = _mpCx - (cropRegion ? cropRegion.x : 0);
     zCy = _mpCy - (cropRegion ? cropRegion.y : 0);
     pad = Math.round(_eye_c2c.eyeW * 0.53);  // target: eye opening fills ~95% of frame
+    // Macro guard: if the cascade found an iris much larger than the C2C pad,
+    // MediaPipe's canthus span is too small for this image (macro close-up).
+    // Use iR×1.5 instead so the full iris fits in the zoom crop.
+    if (iR > pad * 0.7) {
+      console.log('[ZOOM-C2C] macro-guard: iR=' + Math.round(iR) +
+                  ' > pad×0.7, using iR×1.5 pad=' + Math.round(iR * 1.5));
+      pad = Math.round(iR * 1.5);
+    }
     console.log('[ZOOM-C2C] canthus-centred  zCx=' + Math.round(zCx) +
                 '  zCy=' + Math.round(zCy) + '  pad=' + pad + ' (eyeW×0.53)');
   } else if (mpZoomHint && mpZoomHint._fromBand) {
