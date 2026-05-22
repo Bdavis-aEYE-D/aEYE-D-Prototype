@@ -782,20 +782,31 @@ function applyAutoFit(){
 
       // Macro close-up guard: if the MediaPipe cascade returned a very small iris
       // on a jumpToEye crop (<12% of shorter crop side), MediaPipe's `ir` hint was
-      // too small and all cascade tiers stayed in the wrong search range.
-      // Run a quick autoFit(closeup=true) for a second opinion.  Only adopt the
-      // autoFit result if it is more than 2× larger — i.e., clearly found something
-      // the cascade missed, not just minor noise.
+      // too small and all cascade tiers searched the wrong range.
+      // Run autoFit(closeup=true) as a second opinion.  If it finds >2× larger,
+      // convert back to original-image coordinates, set mpZoomHint._fromBand
+      // (so zoomToEye uses pad = irisR×3.0 — same framing as Rachel's sclera-pair),
+      // and re-route to _tryCloseupFit() on the full original image so the crop
+      // is taken from the original rather than the tight jumpToEye sub-crop.
       if (cropRegion != null &&
           irisR_img < Math.min(imgEl.width, imgEl.height) * 0.12) {
         var _macroFit = autoFit(imgEl, true);
         if (_macroFit && _macroFit.rIrisFrac > (irisR_img / imgEl.width) * 2.0) {
+          var _mfCxOrig = cropRegion.x + _macroFit.cxFrac  * imgEl.width;
+          var _mfCyOrig = cropRegion.y + _macroFit.cyFrac  * imgEl.height;
+          var _mfROrig  = Math.round(_macroFit.rIrisFrac * imgEl.width);
           console.log('[MACRO-GUARD] cascadeR=' + Math.round(irisR_img) +
-                      ' → autoFitR=' + Math.round(_macroFit.rIrisFrac * imgEl.width) +
-                      ' (2× larger) — adopting autoFit result');
-          irisR_img  = _macroFit.rIrisFrac  * imgEl.width;
-          cxIris_img = _macroFit.cxFrac     * imgEl.width;
-          cyIris_img = _macroFit.cyFrac     * imgEl.height;
+                      ' → autoFitR=' + _mfROrig +
+                      ' cx_orig=' + Math.round(_mfCxOrig) +
+                      ' cy_orig=' + Math.round(_mfCyOrig) +
+                      ' — routing to closeup on original (irisR×3.0 zoom)');
+          mpZoomHint = { midX: Math.round(_mfCxOrig), midY: Math.round(_mfCyOrig),
+                         irisR: _mfROrig, _fromBand: true };
+          imgEl      = originalImgEl;
+          cropRegion = null;
+          isCloseupMode = true;
+          _tryCloseupFit();
+          return;
         }
       }
 
