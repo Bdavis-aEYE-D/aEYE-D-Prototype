@@ -1220,7 +1220,7 @@ function zoomToEye(skipSanityCheck) {
     pad = Math.round(mpZoomHint.eyeW * 0.53);
     console.log('[ZOOM-hint] canthus-centred zCx=' + Math.round(zCx) +
                 ' zCy=' + Math.round(zCy) + ' pad=' + pad + ' (hintEyeW×0.53)');
-    mpZoomHint = null;  // consumed — reset so it doesn't persist to next zoom call
+    mpZoomHint = { _consumed: true };  // mark consumed but keep truthy so containment guard skips below
   } else {
     zCx = iCx;
     zCy = iCy;
@@ -1230,17 +1230,20 @@ function zoomToEye(skipSanityCheck) {
   var y0  = Math.max(0, Math.round(zCy - pad));
   var x1  = Math.min(imgEl.width,  Math.round(zCx + pad));
   var y1  = Math.min(imgEl.height, Math.round(zCy + pad));
-  // Iris containment guard: DISABLED in landmark (C2C) mode.
+  // Iris containment guard: DISABLED in landmark (C2C) mode and mpZoomHint mode.
   // When eyeW landmarks are available, the pad already accounts for the full eye.
-  // The cascade's iR estimate is unreliable (can be 3-5× wrong) and was overriding
-  // the landmark-based pad, causing the crop to balloon beyond the intended framing.
-  // Guard only applies in fallback mode (no landmark data) where iR drives the crop.
-  if (!_eye_c2c || _eye_c2c.eyeW <= 20) {
+  // The cascade's iR estimate is unreliable (can be 3-5× wrong on full portrait images
+  // it returns rIrisFrac≈0.42 — completely wrong) and was overriding the
+  // landmark-based pad, causing the crop to balloon beyond the intended framing.
+  // Guard only applies in pure cascade fallback mode (no landmark data at all).
+  var _hasLandmarkZoom = (_eye_c2c && _eye_c2c.eyeW > 20) || (mpZoomHint && mpZoomHint._consumed);
+  if (!_hasLandmarkZoom) {
     var _irisL = Math.round(iCx - iR * 1.15);
     var _irisR = Math.round(iCx + iR * 1.15);
     if (_irisL < x0) x0 = Math.max(0,             _irisL);
     if (_irisR > x1) x1 = Math.min(imgEl.width,   _irisR);
   }
+  mpZoomHint = null;  // consumed — clear sentinel so it doesn't persist past this zoom call
   // Minimum crop guard: if the zoom crop is smaller than 100px the iris has
   // too few pixels for reliable colour sampling — skip zoom and keep the
   // current (larger) jumpToEye crop. Floor was 150px but that blocked valid
