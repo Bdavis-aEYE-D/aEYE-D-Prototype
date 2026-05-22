@@ -781,27 +781,92 @@ function applyAutoFit(){
       irisR_img = findLimbusBySaturation(imgEl, cxPupil_img, cyPupil_img, irisR_img);
 
       // Macro close-up guard: if the MediaPipe cascade returned a very small iris
-      // on a jumpToEye crop (<12% of shorter crop side), MediaPipe's `ir` hint was
-      // too small and all cascade tiers searched the wrong range.
-      // Run autoFit(closeup=true) as a second opinion.  If it finds >2× larger,
-      // convert back to original-image coordinates, set mpZoomHint._fromBand
-      // (so zoomToEye uses pad = irisR×3.0 — same framing as Rachel's sclera-pair),
-      // and re-route to _tryCloseupFit() on the full original image so the crop
-      // is taken from the original rather than the tight jumpToEye sub-crop.
+      // on a jumpToEye crop (<12% of shorter crop side), the MediaPipe radius hint
+      // was too small and all cascade tiers searched the wrong range.
+      //
+      // Strategy: anchor a RIP scan at the CASCADE centre (from MP iris landmark —
+      // approximately correct in position even when radius is wrong) and try
+      // increasing radius hints until we find the true limbus.  This avoids the
+      // autoFit false-positive on brow/hair/eye-socket features.
+      // Fallback if RIP fails: use autoFit for the centre, then let the sclera-pair
+      // sweep in _tryCloseupFit find the precise iris location.
+      // Either path routes back to _tryCloseupFit WITHOUT _fromBand so the
+      // sclera-pair scan (now with a sweep) refines the centre before zoom.
       if (cropRegion != null &&
           irisR_img < Math.min(imgEl.width, imgEl.height) * 0.12) {
-        var _macroFit = autoFit(imgEl, true);
-        if (_macroFit && _macroFit.rIrisFrac > (irisR_img / imgEl.width) * 2.0) {
-          var _mfCxOrig = cropRegion.x + _macroFit.cxFrac  * imgEl.width;
-          var _mfCyOrig = cropRegion.y + _macroFit.cyFrac  * imgEl.height;
-          var _mfROrig  = Math.round(_macroFit.rIrisFrac * imgEl.width);
+        // ── Step 0: Sclera-pair sweep on the jumpToEye CROP ───────────────────
+        // For full-face portraits (Bryan-type): the crop shows ONE eye, so the
+        // bilateral sclera scan reliably finds the iris without detecting the
+        // opposite eye (which would dominate on the full-original sweep).
+        // For macro close-ups (Iliana-type): the iris fills >18% of the crop width,
+        // exceeding _scleraPairScan's halfwidth ceiling — returns null, falls through
+        // to the RIP cascade below.
+        var _mgCropPair = null, _mgCropBestScore = 20;
+        var _mgCropSweepFracs = [0.35, 0.40, 0.45, 0.50, 0.55, 0.60];
+        for (var _mgCSI = 0; _mgCSI < _mgCropSweepFracs.length; _mgCSI++) {
+          var _mgCSY = Math.round(imgEl.height * _mgCropSweepFracs[_mgCSI]);
+          var _mgCSP = _scleraPairScan(imgEl, _mgCSY);
+          if (_mgCSP && _mgCSP.score > _mgCropBestScore) {
+            _mgCropPair = _mgCSP; _mgCropBestScore = _mgCSP.score;
+          }
+        }
+        if (_mgCropPair) {
+          var _mgCXO = Math.round(cropRegion.x + _mgCropPair.cx);
+          var _mgCYO = Math.round(cropRegion.y + _mgCropPair.cy);
+          // Consistency check: the crop pair's radius should be plausible given the
+          // cascade estimate. For full-face portraits (Bryan-type), the cascade found
+          // a small but roughly correct iris — the crop scan should agree (ratio ≤ 2×).
+          // For macro close-ups (Iliana-type), the iris exceeds the scan's halfwidth
+          // ceiling so a true iris pair is impossible; the scan can still find a weak
+          // false pair (e.g. eyelid/lash brightness) at 2-4× cascadeR — reject those.
+          if (_mgCropPair.r <= irisR_img * 2.0) {
+            console.log('[MACRO-GUARD] crop sclera-pair: cx=' + _mgCXO + ' cy=' + _mgCYO +
+                        ' irisR=' + Math.round(_mgCropPair.r) + ' score=' + Math.round(_mgCropBestScore));
+            mpZoomHint = { midX: _mgCXO, midY: _mgCYO, irisR: Math.round(_mgCropPair.r), _fromBand: true };
+            imgEl = originalImgEl; cropRegion = null; isCloseupMode = true;
+            _tryCloseupFit(); return;
+          } else {
+            console.log('[MACRO-GUARD] crop sclera-pair r=' + Math.round(_mgCropPair.r) +
+                        ' > cascadeR×2 (' + Math.round(irisR_img*2) + ') — likely macro close-up, using RIP');
+          }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+        var _mgRipR = null;
+        for (var _mgScale = 1.5; _mgScale <= 5.0 && !_mgRipR; _mgScale += 0.5) {
+          var _mgHint = Math.round(irisR_img * _mgScale);
+          var _mgRip  = findIrisODByRIP(imgEl, cxIris_img, cyIris_img, _mgHint);
+          if (_mgRip && _mgRip.confidence >= 0.05 && _mgRip.irisR > irisR_img * 1.5) {
+            _mgRipR = _mgRip.irisR;
+          }
+        }
+        var _mgCxOrig, _mgCyOrig;
+        if (_mgRipR) {
+          // RIP found the limbus from the cascade centre — use cascade centre coords
+          _mgCxOrig = cropRegion.x + cxIris_img;
+          _mgCyOrig = cropRegion.y + cyIris_img;
           console.log('[MACRO-GUARD] cascadeR=' + Math.round(irisR_img) +
-                      ' → autoFitR=' + _mfROrig +
-                      ' cx_orig=' + Math.round(_mfCxOrig) +
-                      ' cy_orig=' + Math.round(_mfCyOrig) +
-                      ' — routing to closeup on original (irisR×3.0 zoom)');
-          mpZoomHint = { midX: Math.round(_mfCxOrig), midY: Math.round(_mfCyOrig),
-                         irisR: _mfROrig, _fromBand: true };
+                      ' → ripR=' + Math.round(_mgRipR) +
+                      ' cx_orig=' + Math.round(_mgCxOrig) +
+                      ' cy_orig=' + Math.round(_mgCyOrig) +
+                      ' — routing via sclera-pair sweep on original');
+        } else {
+          // RIP failed — fall back to autoFit for approximate centre
+          var _macroFit = autoFit(imgEl, true);
+          if (_macroFit && _macroFit.rIrisFrac > (irisR_img / imgEl.width) * 2.0) {
+            _mgCxOrig = cropRegion.x + _macroFit.cxFrac * imgEl.width;
+            _mgCyOrig = cropRegion.y + _macroFit.cyFrac * imgEl.height;
+            console.log('[MACRO-GUARD] cascadeR=' + Math.round(irisR_img) +
+                        ' RIP failed → autoFit cx_orig=' + Math.round(_mgCxOrig) +
+                        ' cy_orig=' + Math.round(_mgCyOrig) +
+                        ' — routing via sclera-pair sweep on original');
+          }
+        }
+        if (_mgCxOrig != null) {
+          // Route to _tryCloseupFit WITHOUT _fromBand so the sclera-pair sweep
+          // can refine the centre from the approximate hint.
+          // _ripR carries the RIP radius so the sweep can validate its result.
+          mpZoomHint = { midX: Math.round(_mgCxOrig), midY: Math.round(_mgCyOrig), eyeW: 0,
+                         _ripR: _mgRipR ? Math.round(_mgRipR) : 0 };
           imgEl      = originalImgEl;
           cropRegion = null;
           isCloseupMode = true;
@@ -1091,12 +1156,118 @@ function _applyFitClassical(closeup, skipZoom){
     // Skip zoomToEye when the low-conf override fired: zoomToEye would re-run
     // its own cascade using the overridden donut.rIris as hint, which produces an
     // oversized crop and overwrites the pupil-proportional radius we just set.
-    if (!skipZoom && !_overridedRipx) zoomToEye(fit.ok);
+    // Exception: when _fromBand is true, zoomToEye uses mpZoomHint.irisR directly
+    // (not donut.rIris), so the override concern does not apply — always call
+    // zoomToEye when the band scan gave us a reliable iris center+radius.
+    var _bandZoomOk = mpZoomHint && mpZoomHint._fromBand;
+    if (!skipZoom && (!_overridedRipx || _bandZoomOk)) zoomToEye(fit.ok);
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
     return false;
   }
+}
+
+// Sclera-pair detector: find two bilateral sclera brightness peaks flanking
+// the iris at a given y-position.
+// imgEl  — image element to scan (should be the full/original image)
+// midY   — y-coordinate of the horizontal strip to analyse (original px)
+// Returns {cx, cy, r, score} or null if no valid pair found.
+function _scleraPairScan(imgEl, midY) {
+  try {
+    var _bImgH = imgEl.height, _bImgW = imgEl.width;
+    var _bHalf = Math.round(_bImgH * 0.05);
+    var _bY0 = Math.max(0,      Math.round(midY - _bHalf));
+    var _bY1 = Math.min(_bImgH, Math.round(midY + _bHalf));
+    var _bH  = _bY1 - _bY0;
+    if (_bH < 1) return null;
+    var _bW2 = Math.min(_bImgW, 800);
+    var _bSc = _bW2 / _bImgW;
+    var _bH2 = Math.max(1, Math.round(_bH * _bSc));
+    var _bOff = document.createElement('canvas');
+    _bOff.width = _bW2; _bOff.height = _bH2;
+    var _bCtx = _bOff.getContext('2d', { colorSpace: 'srgb' });
+    _bCtx.drawImage(imgEl, 0, _bY0, _bImgW, _bH, 0, 0, _bW2, _bH2);
+    var _bD = _bCtx.getImageData(0, 0, _bW2, _bH2).data;
+    // Column mean luminance
+    var _bLum = new Float32Array(_bW2);
+    for (var _by = 0; _by < _bH2; _by++) {
+      for (var _bx = 0; _bx < _bW2; _bx++) {
+        var _bi = (_by * _bW2 + _bx) * 4;
+        _bLum[_bx] += 0.299*_bD[_bi] + 0.587*_bD[_bi+1] + 0.114*_bD[_bi+2];
+      }
+    }
+    for (var _bx = 0; _bx < _bW2; _bx++) _bLum[_bx] /= _bH2;
+    // Gaussian smooth (sigma=8 px in 800-wide space)
+    var _bSm = new Float32Array(_bW2);
+    var _bSig = 8, _bKR = 24;
+    for (var _bx = 0; _bx < _bW2; _bx++) {
+      var _bws = 0, _bwt = 0;
+      for (var _bk = -_bKR; _bk <= _bKR; _bk++) {
+        var _bxi = _bx + _bk;
+        if (_bxi < 0 || _bxi >= _bW2) continue;
+        var _bwk = Math.exp(-_bk*_bk / (2*_bSig*_bSig));
+        _bws += _bLum[_bxi] * _bwk; _bwt += _bwk;
+      }
+      _bSm[_bx] = _bws / _bwt;
+    }
+    // Prefix sum for O(1) range-mean queries
+    var _bPfx = new Float64Array(_bW2 + 1);
+    for (var _bx = 0; _bx < _bW2; _bx++) _bPfx[_bx+1] = _bPfx[_bx] + _bSm[_bx];
+    function _bRM(a, b) {
+      a = Math.max(0, a|0); b = Math.min(_bW2, b|0);
+      return b > a ? (_bPfx[b] - _bPfx[a]) / (b - a) : 128;
+    }
+    // Per-pixel pupil check at original resolution
+    var _bRowC = document.createElement('canvas');
+    _bRowC.width = _bImgW; _bRowC.height = 1;
+    _bRowC.getContext('2d', { colorSpace: 'srgb' })
+          .drawImage(imgEl, 0, Math.max(0, Math.round(midY)), _bImgW, 1, 0, 0, _bImgW, 1);
+    var _bRowD = _bRowC.getContext('2d', { colorSpace: 'srgb' })
+                       .getImageData(0, 0, _bImgW, 1).data;
+    var _bHP = function(x0, x1) {
+      x0 = Math.max(0, x0|0); x1 = Math.min(_bImgW, x1|0);
+      for (var _bxi = x0; _bxi < x1; _bxi++) {
+        var _bi = _bxi * 4;
+        if (0.299*_bRowD[_bi] + 0.587*_bRowD[_bi+1] + 0.114*_bRowD[_bi+2] < 40) return true;
+      }
+      return false;
+    };
+    // Find local maxima > 130 (sclera candidates)
+    var _bPeaks = [];
+    for (var _bx = 2; _bx < _bW2 - 2; _bx++) {
+      var _bv = _bSm[_bx];
+      if (_bv < 130) continue;
+      if (_bv >= _bSm[_bx-1] && _bv >= _bSm[_bx+1] &&
+          _bv >= _bSm[_bx-2] && _bv >= _bSm[_bx+2]) {
+        _bPeaks.push({ x: _bx, lum: _bv });
+      }
+    }
+    // Pair peaks: gap 8–36% of image width AND dark pupil in gap
+    var _bMinHW = Math.round(_bW2 * 0.04);
+    var _bMaxHW = Math.round(_bW2 * 0.18);
+    var _bBScore = -1, _bBCx = -1, _bBHW = -1;
+    for (var _bpi = 0; _bpi < _bPeaks.length; _bpi++) {
+      for (var _bpj = _bpi + 1; _bpj < _bPeaks.length; _bpj++) {
+        var _bLP = _bPeaks[_bpi], _bRP = _bPeaks[_bpj];
+        var _bhw = (_bRP.x - _bLP.x) >> 1;
+        if (_bhw < _bMinHW || _bhw > _bMaxHW) continue;
+        var _bgX0 = Math.round(_bLP.x / _bSc), _bgX1 = Math.round(_bRP.x / _bSc);
+        if (!_bHP(_bgX0, _bgX1)) continue;
+        var _bgm = _bRM(_bLP.x, _bRP.x);
+        var _bsc2 = (_bLP.lum + _bRP.lum) / 2 - _bgm;
+        if (_bsc2 > _bBScore) { _bBScore = _bsc2; _bBHW = _bhw; _bBCx = (_bLP.x + _bRP.x) >> 1; }
+      }
+    }
+    if (_bBCx >= 0 && _bBScore > 20) {
+      var _bEstCx = Math.round(_bBCx / _bSc);
+      var _bEstR  = Math.round(_bBHW / _bSc);
+      if (_bEstR >= _bImgW * 0.05 && _bEstR <= _bImgW * 0.30) {
+        return { cx: _bEstCx, cy: Math.round(midY), r: _bEstR, score: _bBScore };
+      }
+    }
+    return null;
+  } catch(e) { return null; }
 }
 
 // Close-up iris model: used when no face is detected.
@@ -1105,145 +1276,59 @@ function _applyFitClassical(closeup, skipZoom){
 function _tryCloseupFit() {
   if (!originalImgEl) { showLocate(); return; }
 
-  // ── Iris X-centre scan for 1-eye gate path (v2.22) ──────────────────────
-  // When the 1-eye gate fires, mpZoomHint.midY is reliable (within ~40 px of
-  // true iris cy) but midX can be 400-500 px off.
-  //
-  // Strategy: find the TWO SCLERA CONCENTRATIONS that bracket the iris.
-  // The sclera (whites of the eye) appears as a pair of bright peaks in the
-  // horizontal luminance profile at midY, with the dark iris/pupil between
-  // them.  Key discriminator: the gap between the two sclera peaks must
-  // contain a genuinely dark pupil (lum < 50).  This eliminates every false
-  // pair — dark backgrounds vs skin, shadows vs skin — because none of those
-  // have a real pupil between them.
-  //
-  //   1. Extract thin strip midY ± 5% imgH, downsample to 800 wide.
-  //   2. Compute column-mean luminance, smooth with Gaussian.
-  //   3. Find local brightness maxima (lum > 130) → sclera candidates.
-  //   4. Pair candidates: gap must be 8–36% of image width AND contain
-  //      a dark minimum (lum < 50 = the pupil).
-  //   5. Best-scoring pair: score = (peakL + peakR)/2 − gap_mean.
-  //   6. Iris cx = pair midpoint, irisR = pair half-span.
-  if (mpZoomHint && mpZoomHint.midY > 0 && !mpZoomHint._fromBand) {
-    try {
-      var _bImgH = originalImgEl.height, _bImgW = originalImgEl.width;
-      // Thin strip at midY ± 5% imgH
-      var _bHalf = Math.round(_bImgH * 0.05);
-      var _bY0 = Math.max(0,      Math.round(mpZoomHint.midY - _bHalf));
-      var _bY1 = Math.min(_bImgH, Math.round(mpZoomHint.midY + _bHalf));
-      var _bH  = _bY1 - _bY0;
-      // Downsample to ≤800 wide for speed
-      var _bW2 = Math.min(_bImgW, 800);
-      var _bSc = _bW2 / _bImgW;
-      var _bH2 = Math.max(1, Math.round(_bH * _bSc));
-      var _bOff = document.createElement('canvas');
-      _bOff.width = _bW2; _bOff.height = _bH2;
-      var _bCtx = _bOff.getContext('2d', { colorSpace: 'srgb' });
-      _bCtx.drawImage(originalImgEl, 0, _bY0, _bImgW, _bH, 0, 0, _bW2, _bH2);
-      var _bD = _bCtx.getImageData(0, 0, _bW2, _bH2).data;
-
-      // Column mean luminance
-      var _bLum = new Float32Array(_bW2);
-      for (var _by = 0; _by < _bH2; _by++) {
-        for (var _bx = 0; _bx < _bW2; _bx++) {
-          var _bi = (_by * _bW2 + _bx) * 4;
-          _bLum[_bx] += 0.299*_bD[_bi] + 0.587*_bD[_bi+1] + 0.114*_bD[_bi+2];
-        }
-      }
-      for (var _bx = 0; _bx < _bW2; _bx++) _bLum[_bx] /= _bH2;
-
-      // Gaussian smooth (sigma=8 px in 800-wide space) so catch-lights and
-      // single-column spikes don't dominate the peak search
-      var _bSm = new Float32Array(_bW2);
-      var _bSig = 8, _bKR = 24;
-      for (var _bx = 0; _bx < _bW2; _bx++) {
-        var _bws = 0, _bwt = 0;
-        for (var _bk = -_bKR; _bk <= _bKR; _bk++) {
-          var _bxi = _bx + _bk;
-          if (_bxi < 0 || _bxi >= _bW2) continue;
-          var _bwk = Math.exp(-_bk*_bk / (2*_bSig*_bSig));
-          _bws += _bLum[_bxi] * _bwk; _bwt += _bwk;
-        }
-        _bSm[_bx] = _bws / _bwt;
-      }
-
-      // Prefix sum on smoothed profile for O(1) range-mean queries
-      var _bPfx = new Float64Array(_bW2 + 1);
-      for (var _bx = 0; _bx < _bW2; _bx++) _bPfx[_bx+1] = _bPfx[_bx] + _bSm[_bx];
-      function _bRMean(a, b) {
-        a = Math.max(0, a|0); b = Math.min(_bW2, b|0);
-        return b > a ? (_bPfx[b] - _bPfx[a]) / (b - a) : 128;
-      }
-      // Per-pixel pupil check: scan a single row at midY in the ORIGINAL image
-      // so we get true pixel darkness — column means averaged over the strip
-      // height are diluted by skin/hair rows and never read < 50 even at the pupil.
-      var _bRowCanvas = document.createElement('canvas');
-      _bRowCanvas.width = _bImgW; _bRowCanvas.height = 1;
-      _bRowCanvas.getContext('2d', { colorSpace: 'srgb' })
-                 .drawImage(originalImgEl,
-                   0, Math.max(0, Math.round(mpZoomHint.midY)), _bImgW, 1,
-                   0, 0, _bImgW, 1);
-      var _bRowData = _bRowCanvas.getContext('2d', { colorSpace: 'srgb' })
-                                 .getImageData(0, 0, _bImgW, 1).data;
-      // Returns true if ANY pixel in [x0orig, x1orig] (original coords) has lum < 40
-      function _bHasPupil(x0, x1) {
-        x0 = Math.max(0, x0|0); x1 = Math.min(_bImgW, x1|0);
-        for (var _bxi = x0; _bxi < x1; _bxi++) {
-          var _bi = _bxi * 4;
-          if (0.299*_bRowData[_bi] + 0.587*_bRowData[_bi+1] + 0.114*_bRowData[_bi+2] < 40)
-            return true;
-        }
-        return false;
-      }
-
-      // Find local maxima on smoothed profile: sclera candidates (lum > 130)
-      var _bPeaks = [];
-      for (var _bx = 2; _bx < _bW2 - 2; _bx++) {
-        var _bv = _bSm[_bx];
-        if (_bv < 130) continue;
-        if (_bv >= _bSm[_bx-1] && _bv >= _bSm[_bx+1] &&
-            _bv >= _bSm[_bx-2] && _bv >= _bSm[_bx+2]) {
-          _bPeaks.push({ x: _bx, lum: _bv });
-        }
-      }
-
-      // Pair peaks: gap must span 8–36% of image width AND contain a dark pupil
-      var _bMinHW = Math.round(_bW2 * 0.04);  // min half-gap ≈ 8% imgW / 2
-      var _bMaxHW = Math.round(_bW2 * 0.18);  // max half-gap ≈ 36% imgW / 2
-      var _bBScore = -1, _bBCx = -1, _bBHW = -1;
-      for (var _bpi = 0; _bpi < _bPeaks.length; _bpi++) {
-        for (var _bpj = _bpi + 1; _bpj < _bPeaks.length; _bpj++) {
-          var _bLP = _bPeaks[_bpi], _bRP = _bPeaks[_bpj];
-          var _bhw = (_bRP.x - _bLP.x) >> 1;
-          if (_bhw < _bMinHW || _bhw > _bMaxHW) continue;
-          // Gap must contain a genuinely dark pupil — check at original resolution
-          var _bgX0 = Math.round(_bLP.x / _bSc), _bgX1 = Math.round(_bRP.x / _bSc);
-          if (!_bHasPupil(_bgX0, _bgX1)) continue;
-          var _bgm  = _bRMean(_bLP.x, _bRP.x);
-          var _bsc2 = (_bLP.lum + _bRP.lum) / 2 - _bgm;
-          if (_bsc2 > _bBScore) {
-            _bBScore = _bsc2; _bBHW = _bhw;
-            _bBCx = (_bLP.x + _bRP.x) >> 1;
-          }
-        }
-      }
-
-      if (_bBCx >= 0 && _bBScore > 20) {
-        var _bEstCx = Math.round(_bBCx / _bSc);
-        var _bEstR  = Math.round(_bBHW / _bSc);
-        var _bEstCy = Math.round(mpZoomHint.midY);
-        console.log('[BAND] sclera-pair: cx=' + _bEstCx + ' cy=' + _bEstCy +
-                    ' irisR=' + _bEstR + ' score=' + Math.round(_bBScore));
-        if (_bEstR >= _bImgW * 0.05 && _bEstR <= _bImgW * 0.30) {
-          mpZoomHint = { midX: _bEstCx, midY: _bEstCy, irisR: _bEstR, _fromBand: true };
-        } else {
-          console.warn('[BAND] irisR out of range: ' + _bEstR);
-        }
+  // ── Sclera-pair scan to find the iris X-centre ───────────────────────────
+  // When mpZoomHint has a known y-position (1-eye gate / MACRO-GUARD path),
+  // scan there first, then fall back to ±10/20% offsets if needed.
+  // When mpZoomHint is absent (MediaPipe found no face at all — Jeri-type),
+  // sweep multiple y-positions across the image to locate the eye.
+  // Uses _scleraPairScan() — the bilateral sclera brightness detector.
+  if (!mpZoomHint || !mpZoomHint._fromBand) {
+    var _swSweep, _swH = originalImgEl.height;
+    if (mpZoomHint && mpZoomHint.midY > 0) {
+      // Start at the hint y, then try ±10% and ±20% as fallback
+      var _swY = mpZoomHint.midY;
+      _swSweep = [_swY,
+                  Math.round(_swY - _swH * 0.10), Math.round(_swY + _swH * 0.10),
+                  Math.round(_swY - _swH * 0.20), Math.round(_swY + _swH * 0.20)];
+    } else {
+      // No face hint — sweep across the frame to find the eye autonomously
+      _swSweep = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60].map(
+        function(f) { return Math.round(_swH * f); });
+    }
+    var _swBest = null, _swBestScore = 20;
+    for (var _swI = 0; _swI < _swSweep.length; _swI++) {
+      var _swY2 = _swSweep[_swI];
+      if (_swY2 < 1 || _swY2 >= _swH) continue;
+      var _swPair = _scleraPairScan(originalImgEl, _swY2);
+      if (_swPair && _swPair.score > _swBestScore) { _swBest = _swPair; _swBestScore = _swPair.score; }
+    }
+    var _swRipR = (mpZoomHint && mpZoomHint._ripR) ? mpZoomHint._ripR : 0;
+    if (_swBest) {
+      var _swIrisR = _swBest.r;
+      // When MACRO-GUARD provided a RIP radius, validate the sclera-pair result.
+      // The sweep can hit a horizontal level above/below the iris equator where the
+      // bilateral brightness peaks are 1.5-2× wider than the true limbus.
+      // RIP (anchored on the iris) is far more reliable for radius estimation.
+      // If the sclera-pair radius exceeds ripR×1.3, treat the pair as a false positive:
+      // discard sclera-pair entirely and fall back to the MACRO-GUARD centre + ripR.
+      if (_swRipR > 0 && _swIrisR > _swRipR * 1.3) {
+        console.log('[BAND] false pair: r=' + _swBest.r + ' > ripR×1.3 (' +
+                    Math.round(_swRipR * 1.3) + ') — using MACRO-GUARD cx/ripR=' + _swRipR);
+        mpZoomHint = { midX: mpZoomHint.midX, midY: mpZoomHint.midY, irisR: _swRipR, _fromBand: true };
       } else {
-        console.warn('[BAND] no sclera pair: score=' + Math.round(_bBScore) +
-                     ' peaks=' + _bPeaks.length);
+        console.log('[BAND] sclera-pair: cx=' + _swBest.cx + ' cy=' + _swBest.cy +
+                    ' irisR=' + _swIrisR + ' score=' + Math.round(_swBest.score));
+        mpZoomHint = { midX: _swBest.cx, midY: _swBest.cy, irisR: _swIrisR, _fromBand: true };
       }
-    } catch(e) { console.warn('[BAND] threw:', e); }
+    } else if (_swRipR > 0) {
+      // No sclera pair found anywhere in the sweep, but MACRO-GUARD RIP gave a
+      // reliable radius. Use it directly with the MACRO-GUARD cascade centre.
+      console.log('[BAND] no sclera pair — falling back to MACRO-GUARD cx/ripR=' + _swRipR);
+      mpZoomHint = { midX: mpZoomHint.midX, midY: mpZoomHint.midY, irisR: _swRipR, _fromBand: true };
+    } else {
+      console.warn('[BAND] no sclera pair' +
+        (mpZoomHint && mpZoomHint.midY ? (' at y=' + Math.round(mpZoomHint.midY) + ' or nearby') : ' (sweep)'));
+    }
   }
 
   try {
