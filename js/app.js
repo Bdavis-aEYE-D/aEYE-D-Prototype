@@ -174,6 +174,7 @@ var cropRegion = null;        // {x,y,w,h} of crop in originalImgEl pixels
 var mpEyes = null;            // {Right:{ci,cx,cy}, Left:{ci,cx,cy}} in natural pixels, from MP detection
 var isCloseupMode = false;    // true when no face was detected and we used close-up detection directly
 var preZoomState  = null;     // {imgEl, cropRegion} saved before zoomToEye so Auto-Fit Again can reset
+var mpZoomHint    = null;     // {eyeW, midX, midY} — canthus geometry saved by 1-eye gate for close-up zoom
 
 // ======================= MEDIAPIPE =======================
 var mpLandmarker = null;
@@ -222,6 +223,7 @@ var loadOriginalFromUrl = function(url){
   img.onload = function(){
     originalImgEl = img;
     mpEyes        = null;
+    mpZoomHint    = null;   // clear canthus geometry hint from previous image
     preZoomState  = null;   // clear any leftover zoom state from previous image
     isCloseupMode = false;  // reset — previous photo's close-up state must not carry over
     cropRegion    = null;   // reset — stale crop coords from a different image corrupt applyAutoFit
@@ -285,22 +287,64 @@ function autoDetectAndJumpToFit() {
       var rightCI = L[468].x < L[473].x ? 468 : 473;
       var leftCI  = rightCI === 468 ? 473 : 468;
 
-      // ── Sanity-check iris landmark positions ────────────────────────────────
-      // MediaPipe can misplace iris landmarks on angled/unusual photos.
-      // Guard 1: Neither iris should be in the lower 40 % of the image
-      //          (that's cheek/mouth territory for any normal face photo).
-      // Guard 2: The two irises must be horizontally separated by at least
-      //          6 % of image width — if they coincide something is very wrong.
+      // ── 1-eye vs 2-eye gate ──────────────────────────────────────────────────
+      // Determine upfront whether this is a single-eye close-up or a full-face
+      // photo, and branch immediately to the correct path.
+      //
+      // Single-eye close-ups cause MediaPipe to hallucinate a phantom "second eye"
+      // in skin, hair, or cheek texture.  Three reliable signals expose this:
+      //
+      //   badYLevel    — real two-eye photos have both eyes at ~same vertical
+      //                  position (|ry−ly| < 0.12).  A real eye + phantom in the
+      //                  cheek always differ by more than 12 % of image height.
+      //   badPlacement — either "iris" landmark sits below 60 % of image height
+      //                  (cheek / mouth territory — never a real iris position).
+      //   badIPD       — the two detected iris centres are < 6 % of image width
+      //                  apart (coincident — something is very wrong).
+      //
+      // On any hit: route directly to _tryCloseupFit() rather than showLocate().
+      // Single-eye close-ups are fully automatable via the close-up cascade;
+      // there is no need to ask the user to manually tap the eye.
       var ry = L[rightCI].y, ly = L[leftCI].y;
       var ipdFrac = Math.abs(L[468].x - L[473].x);
+      var badYLevel    = (Math.abs(ry - ly) > 0.12);
       var badPlacement = (ry > 0.60 || ly > 0.60);
       var badIPD       = (ipdFrac < 0.06);
-      if (badPlacement || badIPD) {
-        console.warn('MP iris landmark sanity fail — ry=' + ry.toFixed(3) +
+      // Guard: nose proportion — the most reliable single-eye close-up signal.
+      // On a real face the nose tip sits 35–50 % of the way from eye level to chin.
+      // When MediaPipe hallucinates a face on a single-eye close-up the phantom
+      // nose ends up barely below the phantom eyes (< 25 % of eye-to-chin span)
+      // because there is no real nose/chin structure to anchor the mesh.
+      // Landmark 1 = nose tip, landmark 152 = chin.
+      var _noseTip = L[1], _chin = L[152];
+      var _avgIrisY  = (ry + ly) / 2;
+      var _eyeToChin = _chin.y - _avgIrisY;
+      var _noseFrac  = _eyeToChin > 0.05 ? (_noseTip.y - _avgIrisY) / _eyeToChin : 1.0;
+      var badNoseProp = (_noseFrac < 0.25);
+      if (badYLevel || badPlacement || badIPD || badNoseProp) {
+        console.warn('1-eye gate → closeup: ry=' + ry.toFixed(3) +
                      ' ly=' + ly.toFixed(3) + ' ipdFrac=' + ipdFrac.toFixed(3) +
-                     ' — falling back to manual locate');
+                     ' noseFrac=' + _noseFrac.toFixed(3) +
+                     ' badYLevel=' + badYLevel + ' badPlacement=' + badPlacement +
+                     ' badIPD=' + badIPD + ' badNoseProp=' + badNoseProp);
+        // Save canthus geometry for close-up zoom calibration.
+        // The right-eye canthus landmarks (L[33]=outer, L[133]=inner) correspond to the
+        // real visible eye even when the face mesh is hallucinated — they are more stable
+        // than the iris perimeter.  zoomToEye uses this hint instead of iR×2.0.
+        // Target framing: eye opening fills ~95 % of frame width → pad = eyeW × 0.53.
+        var _hOC = L[rightCI === 468 ? 33 : 263];
+        var _hIC = L[rightCI === 468 ? 133 : 362];
+        var _hdx = (_hOC.x - _hIC.x) * imgW, _hdy = (_hOC.y - _hIC.y) * imgH;
+        mpZoomHint = {
+          eyeW: Math.sqrt(_hdx*_hdx + _hdy*_hdy),
+          midX: ((_hOC.x + _hIC.x) / 2) * imgW,
+          midY: ((_hOC.y + _hIC.y) / 2) * imgH
+        };
+        console.log('mpZoomHint: eyeW=' + Math.round(mpZoomHint.eyeW) +
+                    ' midX=' + Math.round(mpZoomHint.midX) +
+                    ' midY=' + Math.round(mpZoomHint.midY));
         $('card-fit').style.display = 'none';
-        showLocate();
+        _tryCloseupFit();
         return;
       }
 
@@ -328,12 +372,18 @@ function autoDetectAndJumpToFit() {
       var startSide = eyeResults['Right'] ? 'Left' : 'Right';
 
       // ── Macro close-up detection ─────────────────────────────────────────────
-      // If the iris landmark radius > 10 % of image width, this is a macro
-      // close-up where MediaPipe's boundary landmarks are unreliable at this
-      // range (the iris fills too much of the frame for landmark spacing to give
-      // a meaningful radius, and the face-detection crop + cascade both misfire).
-      // Re-route to _tryCloseupFit() which is designed for single-eye macros
-      // with no sclera context: center bias OFF, full RIP/ODH/SAT cascade.
+      // Two independent signals — either is sufficient to route to close-up:
+      //
+      //   _irMacro   — iris landmark perimeter radius > 10 % of image width.
+      //                Reliable when MP landmarks are accurate; can be falsely
+      //                small when landmarks are bunched at the wrong location.
+      //
+      //   _maxEyeW   — largest canthus-to-canthus span > 15 % of image width.
+      //                Canthus landmarks are more stable than iris perimeter
+      //                landmarks on close-ups.  Full-face portraits have eyeW
+      //                ≈ 8–12 % of image width; close-ups have 20–50 %.
+      //                Threshold 15 % cleanly separates the two cases without
+      //                depending on iris perimeter accuracy.
       var _startCI = startSide === 'Right' ? rightCI : leftCI;
       var _irMacro = 0;
       for (var _mk = 1; _mk <= 4; _mk++) {
@@ -345,7 +395,8 @@ function autoDetectAndJumpToFit() {
       _irMacro /= 4;
       if (_irMacro > imgW * 0.10) {
         console.warn('Macro close-up detected — ir=' + Math.round(_irMacro) +
-                     ' imgW=' + imgW + ' — routing to closeup fit');
+                     ' imgW=' + imgW +
+                     ' — routing to closeup fit');
         $('card-fit').style.display = 'none';
         _tryCloseupFit();
         return;
@@ -382,7 +433,7 @@ function jumpToEye(side) {
   // landmark has misfired (e.g. close-up where MP places the iris in the eyelid).
   var _cropCx, _cropCy, cropR;
   if (eye.eyeW && eye.eyeW > 20) {
-    cropR   = eye.eyeW * 0.75;          // half of 1.5 × eye-corner span
+    cropR   = eye.eyeW * 1.50;          // 1.50× eye-corner span — enough room for close-up iris + sclera margin on both sides
     _cropCx = eye.eyeMidX;
     _cropCy = eye.eyeMidY;
     console.log('jumpToEye(' + side + ') corner-span=' + Math.round(eye.eyeW) +
@@ -727,7 +778,7 @@ function applyAutoFit(){
       if (ipdPx > 20) irisR_img = Math.max(irisR_img, ipdPx * 0.085);
       // Collarette guard: if the cascade anchored on the inner amber ring,
       // scan outward to find the true limbus.
-      irisR_img = findTrueLimbusOutward(imgEl, cxPupil_img, cyPupil_img, irisR_img);
+      irisR_img = findLimbusBySaturation(imgEl, cxPupil_img, cyPupil_img, irisR_img);
 
       // Step 3: Pupil radius via 8-ray scan anchored on pupil center
       var pupilR_img = findPupilRadiusByRays(imgEl, cxPupil_img, cyPupil_img, irisR_img);
@@ -925,7 +976,7 @@ function _applyFitClassical(closeup, skipZoom){
     // (RIP/ODH/RC/SAT) are never touched.
     if (closeup && cuRadSrc === 'AF') cuIrisR = Math.round(cuIrisR * 0.93);
     // Collarette guard: applies after every cascade path.
-    cuIrisR = Math.round(findTrueLimbusOutward(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR));
+    cuIrisR = Math.round(findLimbusBySaturation(imgEl, cxPupil_cu, cyPupil_cu, cuIrisR));
 
     donut.cx     = drawInfo.dx + cuIrisCx   * scaleX;
     donut.cy     = drawInfo.dy + cuIrisCy   * scaleY;
@@ -1149,11 +1200,27 @@ function zoomToEye(skipSanityCheck) {
                    ? mpEyes[currentSide] : null;
   var zCx, zCy, pad;
   if (_eye_c2c && _eye_c2c.eyeW > 20) {
-    zCx = _eye_c2c.eyeMidX - (cropRegion ? cropRegion.x : 0);  // horiz: canthus midpoint
-    zCy = iCy;                                                   // vert:  iris centre (avoids lash bias)
-    pad = Math.round(_eye_c2c.eyeW * 0.70);                     // 20 % extra each side
-    console.log('[ZOOM-C2C] canthus-centred  eyeW=' + Math.round(_eye_c2c.eyeW) +
-                ' pad=' + pad + '  iris-Δx=' + Math.round(iCx - zCx) + 'px');
+    // Centre on the canthus midpoint (eyeMidX/eyeMidY), NOT the iris centre.
+    // The iris centre moves with gaze; the canthi are fixed lid landmarks.
+    // Pad = eyeW × 0.53 each side → eye opening fills ~95 % of frame width,
+    // with both canthi just visible at the edges — matches target reference images.
+    var _mpCx = _eye_c2c.eyeMidX;   // canthus midpoint — stable, gaze-independent
+    var _mpCy = _eye_c2c.eyeMidY;
+    zCx = _mpCx - (cropRegion ? cropRegion.x : 0);
+    zCy = _mpCy - (cropRegion ? cropRegion.y : 0);
+    pad = Math.round(_eye_c2c.eyeW * 0.53);  // target: eye opening fills ~95% of frame
+    console.log('[ZOOM-C2C] canthus-centred  zCx=' + Math.round(zCx) +
+                '  zCy=' + Math.round(zCy) + '  pad=' + pad + ' (eyeW×0.53)');
+  } else if (mpZoomHint && mpZoomHint.eyeW > 20) {
+    // Canthus geometry hint saved by 1-eye gate (Rachel-type single-eye close-ups).
+    // The gate detected a hallucinated face and routed to close-up, but saved the
+    // MP canthus coordinates so we can still frame on the real eye opening.
+    zCx = mpZoomHint.midX - (cropRegion ? cropRegion.x : 0);
+    zCy = mpZoomHint.midY - (cropRegion ? cropRegion.y : 0);
+    pad = Math.round(mpZoomHint.eyeW * 0.53);
+    console.log('[ZOOM-hint] canthus-centred zCx=' + Math.round(zCx) +
+                ' zCy=' + Math.round(zCy) + ' pad=' + pad + ' (hintEyeW×0.53)');
+    mpZoomHint = null;  // consumed — reset so it doesn't persist to next zoom call
   } else {
     zCx = iCx;
     zCy = iCy;
@@ -1163,13 +1230,17 @@ function zoomToEye(skipSanityCheck) {
   var y0  = Math.max(0, Math.round(zCy - pad));
   var x1  = Math.min(imgEl.width,  Math.round(zCx + pad));
   var y1  = Math.min(imgEl.height, Math.round(zCy + pad));
-  // Iris containment guard: if the iris (+ 15% buffer) extends beyond the
-  // canthus-centred crop on either side (happens for very off-axis eyes where
-  // iris-Δx > ~50% of pad), expand x0/x1 to keep the full iris in frame.
-  var _irisL = Math.round(iCx - iR * 1.15);
-  var _irisR = Math.round(iCx + iR * 1.15);
-  if (_irisL < x0) x0 = Math.max(0,             _irisL);
-  if (_irisR > x1) x1 = Math.min(imgEl.width,   _irisR);
+  // Iris containment guard: DISABLED in landmark (C2C) mode.
+  // When eyeW landmarks are available, the pad already accounts for the full eye.
+  // The cascade's iR estimate is unreliable (can be 3-5× wrong) and was overriding
+  // the landmark-based pad, causing the crop to balloon beyond the intended framing.
+  // Guard only applies in fallback mode (no landmark data) where iR drives the crop.
+  if (!_eye_c2c || _eye_c2c.eyeW <= 20) {
+    var _irisL = Math.round(iCx - iR * 1.15);
+    var _irisR = Math.round(iCx + iR * 1.15);
+    if (_irisL < x0) x0 = Math.max(0,             _irisL);
+    if (_irisR > x1) x1 = Math.min(imgEl.width,   _irisR);
+  }
   // Minimum crop guard: if the zoom crop is smaller than 100px the iris has
   // too few pixels for reliable colour sampling — skip zoom and keep the
   // current (larger) jumpToEye crop. Floor was 150px but that blocked valid
@@ -1380,7 +1451,7 @@ function zoomToEye(skipSanityCheck) {
       // Collarette guard — runs from iris centre (donut.cx/cy), not pupil centre.
       var _zIrisCx = (donut.cx - drawInfo.dx) / nsx;
       var _zIrisCy = (donut.cy - drawInfo.dy) / nsy;
-      var _zTrueR = findTrueLimbusOutward(imgEl, _zIrisCx, _zIrisCy, donut.rIris / nsx);
+      var _zTrueR = findLimbusBySaturation(imgEl, _zIrisCx, _zIrisCy, donut.rIris / nsx);
       if (_zTrueR > (donut.rIris / nsx) * 1.05) {
         donut.rIris = Math.min(_zTrueR * nsx, Math.min(stageW, stageH) * 0.45);
       }
@@ -1477,16 +1548,27 @@ function zoomToEye(skipSanityCheck) {
         var _visFit = typeof fitVisibleIrisHoriz === 'function'
                       ? fitVisibleIrisHoriz(imgEl, _visCx, _visCy, _visR, _zPupilR_crop) : null;
         if (_visFit) {
-          // Apply both cx and rIris from the pixel measurement.
-          // The longest-run scan finds the true visible iris span at the midline;
-          // both the centre and the radius can differ from the cascade estimate
-          // when the eye is looking off-axis (cascade centre drifts with gaze).
-          donut.cx    = drawInfo.dx + _visFit.cx * nsx;
-          donut.rIris = Math.min(_visFit.rIris * nsx, Math.min(stageW, stageH) * 0.45);
-          console.log('[VIS-FIT] cx: ' + Math.round(_visCx) + '→' + _visFit.cx +
-                      ' (Δ=' + (_visFit.cx - Math.round(_visCx)) + 'px)' +
-                      '  rIris: ' + Math.round(_visR) + '→' + _visFit.rIris +
-                      '  limbus_L=' + _visFit.r_left + ' limbus_R=' + _visFit.r_right);
+          // Sanity check: if one side's limbus measurement is >2.5× the other,
+          // VIS-FIT likely hit the collarette or another artifact instead of
+          // true sclera. Reject the correction and keep the SAT-LIMBUS result.
+          var _vL = _visFit.r_left, _vR = _visFit.r_right;
+          var _visSideRatio = (_vL > _vR) ? (_vL / Math.max(_vR, 1))
+                                           : (_vR / Math.max(_vL, 1));
+          if (_visSideRatio > 2.5) {
+            console.log('[VIS-FIT] REJECTED — side ratio ' + _visSideRatio.toFixed(1) +
+                        ':1 (false stop; L=' + _vL + ' R=' + _vR + ')');
+          } else {
+            // Apply both cx and rIris from the pixel measurement.
+            // The longest-run scan finds the true visible iris span at the midline;
+            // both the centre and the radius can differ from the cascade estimate
+            // when the eye is looking off-axis (cascade centre drifts with gaze).
+            donut.cx    = drawInfo.dx + _visFit.cx * nsx;
+            donut.rIris = Math.min(_visFit.rIris * nsx, Math.min(stageW, stageH) * 0.45);
+            console.log('[VIS-FIT] cx: ' + Math.round(_visCx) + '→' + _visFit.cx +
+                        ' (Δ=' + (_visFit.cx - Math.round(_visCx)) + 'px)' +
+                        '  rIris: ' + Math.round(_visR) + '→' + _visFit.rIris +
+                        '  limbus_L=' + _vL + ' limbus_R=' + _vR);
+          }
         } else {
           console.log('[VIS-FIT] longest-run scan returned null');
         }
