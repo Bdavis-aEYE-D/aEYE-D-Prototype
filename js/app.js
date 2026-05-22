@@ -1469,6 +1469,9 @@ function zoomToEye(skipSanityCheck) {
   var _eye_c2c = !isCloseupMode && mpEyes && mpEyes[currentSide]
                    ? mpEyes[currentSide] : null;
   var zCx, zCy, pad;
+  // Capture _fromBand BEFORE mpZoomHint is consumed below — used in post-cascade
+  // floor logic to decide whether to treat iR as the authoritative limbus measurement.
+  var _isFromBand = !!(mpZoomHint && mpZoomHint._fromBand);
   if (_eye_c2c && _eye_c2c.eyeW > 20) {
     // Centre on the canthus midpoint (eyeMidX/eyeMidY), NOT the iris centre.
     // The iris centre moves with gaze; the canthi are fixed lid landmarks.
@@ -1691,35 +1694,53 @@ function zoomToEye(skipSanityCheck) {
       // (the correct pre-zoom estimate) is preserved unchanged.
       var _zDevMax = isCloseupMode ? 0.25 : 1.50;  // full-face: allow up to 2.5×iR deviation
       var _zUpperBound = isCloseupMode ? 1.4 : 2.0;  // full-face: accept up to 2.0×iR
+      console.log('[CASCADE] iR=' + Math.round(iR) + ' closeup=' + isCloseupMode +
+                  ' devMax=' + _zDevMax + ' upperBound=' + _zUpperBound +
+                  ' ripThresh=' + _zRipThresh +
+                  (zRIP ? ' RIP→r=' + Math.round(zRIP.irisR) + ' conf=' + zRIP.confidence.toFixed(3) : ' RIP=null'));
       if (zRIP && zRIP.confidence >= _zRipThresh &&
           zRIP.irisR > iR * 0.4 && zRIP.irisR < iR * _zUpperBound &&
           Math.abs(zRIP.irisR - iR) <= iR * _zDevMax) {
         // Primary succeeded — cap at 2.0× MP (close-up: 1.25×); global 45% binds first
         donut.rIris = Math.min(zRIP.irisR * nsx, iR * nsx * _zUpperBound, Math.min(stageW, stageH) * 0.45);
         _zRipConf = zRIP.confidence;
+        console.log('[CASCADE] TIER-1 RIP accepted r=' + Math.round(zRIP.irisR) + ' → donut.rIris=' + Math.round(donut.rIris));
       } else {
         _zFellBack = true;
+        if (zRIP) console.log('[CASCADE] RIP REJECTED: r=' + Math.round(zRIP.irisR) + ' conf=' + zRIP.confidence.toFixed(3) +
+                              ' (needs conf≥' + _zRipThresh + ' r∈[' + Math.round(iR*0.4) + ',' + Math.round(iR*_zUpperBound) + '] dev≤' + Math.round(iR*_zDevMax) + ')');
         // Secondary: horizontal gradient scan; pass iR as hint so the scan
         // is capped at iR×2.0 (raised from 1.5× to handle IPD-floor underestimates).
         var zODH = findIrisODHorizontal(imgEl, _zCascCx, _zCascCy, zPR0, iR);
+        console.log('[CASCADE] ODH→' + (zODH ? 'r=' + Math.round(zODH.irisR) + ' cx=' + Math.round(zODH.cxIris) : 'null'));
         if (zODH && zODH.irisR > iR * 0.4 && zODH.irisR < iR * _zUpperBound &&
             Math.abs(zODH.irisR - iR) <= iR * _zDevMax) {
           donut.rIris = Math.min(zODH.irisR * nsx, iR * nsx * _zUpperBound, Math.min(stageW, stageH) * 0.45);
+          console.log('[CASCADE] TIER-2 ODH accepted r=' + Math.round(zODH.irisR) + ' → donut.rIris=' + Math.round(donut.rIris));
           // Adopt horizontal scan's x-center refinement for the iris ring
           if (Math.abs(zODH.cxIris - _zCascCx) < iR * 0.4) {
             donut.cx = drawInfo.dx + zODH.cxIris * nsx;
             // donut.cxPupil stays at zPupil position (independent of iris centre)
           }
         } else {
+          if (zODH) console.log('[CASCADE] ODH REJECTED: r=' + Math.round(zODH.irisR) +
+                                ' (needs r∈[' + Math.round(iR*0.4) + ',' + Math.round(iR*_zUpperBound) + '] dev≤' + Math.round(iR*_zDevMax) + ')');
           // Tertiary: ring contrast
           var zRC = findIrisByRingContrast(imgEl, _zCascCx, _zCascCy, iR);
+          console.log('[CASCADE] RC→' + (zRC ? 'r=' + Math.round(zRC.r) + ' score=' + Math.round(zRC.score) : 'null'));
           if (zRC && zRC.score > 15 && zRC.r <= iR * _zUpperBound) {
             donut.rIris = Math.min(zRC.r * nsx, Math.min(stageW, stageH) * 0.45);
+            console.log('[CASCADE] TIER-3 RC accepted r=' + Math.round(zRC.r) + ' → donut.rIris=' + Math.round(donut.rIris));
           } else {
+            if (zRC) console.log('[CASCADE] RC REJECTED score=' + Math.round(zRC.score));
             // Tier 3.5: saturation ring — dark irises where all luminance methods fail
             var zSAT = findIrisODBySaturation(imgEl, _zCascCx, _zCascCy, iR);
+            console.log('[CASCADE] SAT→' + (zSAT ? 'r=' + Math.round(zSAT.irisR) + ' conf=' + zSAT.confidence.toFixed(3) : 'null'));
             if (zSAT && zSAT.confidence >= 0.25 && zSAT.irisR > iR * 0.4 && zSAT.irisR < iR * _zUpperBound) {
               donut.rIris = Math.min(zSAT.irisR * nsx, iR * nsx * _zUpperBound, Math.min(stageW, stageH) * 0.45);
+              console.log('[CASCADE] TIER-3.5 SAT accepted r=' + Math.round(zSAT.irisR) + ' → donut.rIris=' + Math.round(donut.rIris));
+            } else {
+              console.log('[CASCADE] ALL TIERS FAILED → keeping iR estimate donut.rIris=' + Math.round(donut.rIris));
             }
             // else: keep the MP estimate that was set before the refinement pass
           }
@@ -1743,12 +1764,75 @@ function zoomToEye(skipSanityCheck) {
                     Math.round(_zCascCx) + ' → ' + Math.round(_zOdhCtr.cxIris));
         donut.cx = drawInfo.dx + _zOdhCtr.cxIris * nsx;
       }
+      // ── Pupil-center guard ────────────────────────────────────────────────
+      // Iris centre (donut.cx/cy) is set by the cascade + CX REFINE (ODH-based).
+      // Pupil centre (zPupil.cx/cy) is the dark-region centroid — highly reliable.
+      // If they are far apart the cascade anchored on the wrong point (e.g. CX REFINE
+      // found an off-axis ODH mid-point that doesn't match the actual iris centre).
+      // Threshold: >35% of iR offset = cascade centre is wrong → override with pupil.
+      // >60% of iR = hard fail, log for quality advisory.
+      var _xRecenterFired = false;
+      var _pgIrisCxNow = (donut.cx - drawInfo.dx) / nsx;
+      var _pgIrisCyNow = (donut.cy - drawInfo.dy) / nsy;
+      // X-only correction: cascade + CX-REFINE drifts horizontally on off-axis gaze.
+      // Y is set by MediaPipe which is reliable vertically; pupil Y sits below iris
+      // geometric centre due to upper-lid coverage — don't treat that gap as an error.
+      var _pgXOff = Math.abs(_pgIrisCxNow - zPupil.cx);
+      var _pgYOff = Math.abs(_pgIrisCyNow - zPupil.cy);
+      var _pgXPct = _pgXOff / iR;
+      var _pgYPct = _pgYOff / iR;
+      console.log('[PUPIL-GUARD] xOff=' + Math.round(_pgXOff) + 'px (' +
+                  Math.round(_pgXPct * 100) + '% iR)  yOff=' + Math.round(_pgYOff) + 'px (' +
+                  Math.round(_pgYPct * 100) + '% iR)  iris=(' +
+                  Math.round(_pgIrisCxNow) + ',' + Math.round(_pgIrisCyNow) + ')' +
+                  '  pupil=(' + Math.round(zPupil.cx) + ',' + Math.round(zPupil.cy) + ')' +
+                  (_pgXPct > 0.35 ? '  → X-RECENTER' : '  → OK'));
+      if (_pgXPct > 0.35) {
+        // Override iris X with pupil X.
+        donut.cx = drawInfo.dx + zPupil.cx * nsx;
+        _xRecenterFired = true;
+      } else if (_pgXPct > 0.05 && zPupil.cx > _pgIrisCxNow) {
+        // X-PARTIAL: small horizontal offset (5–35%) where cascade drifts left.
+        // Systematic bias — CX-REFINE tends to anchor slightly nasal of true
+        // iris centre.  Correct 80% of gap, capped at 20px to avoid over-shooting
+        // on large-ring subjects where the X offset is relatively small.
+        var _pgXShift = Math.min(_pgXOff * 0.80, 20);
+        var _pgXNew = _pgIrisCxNow + _pgXShift;
+        donut.cx = drawInfo.dx + _pgXNew * nsx;
+        console.log('[PUPIL-GUARD] X-PARTIAL: iris-x=' + Math.round(_pgIrisCxNow) +
+                    ' +' + Math.round(_pgXShift) + 'px → ' + Math.round(_pgXNew));
+      }
+      // Y-correction — only fires when pupil is BELOW the iris centre (never upward:
+      // pupil above iris centre = findPupilCenter caught lashes, not the real pupil).
+      // Two tiers:
+      //   > 40% iR : hard recenter — full override with pupil y (large MediaPipe error).
+      //   12–40% iR: partial shift — 80% toward pupil.  Catches close-up shots where
+      //              MediaPipe places the iris centre slightly too high (e.g. iris near
+      //              the top edge of the crop).  Normal upper-lid coverage is 5–10%,
+      //              so 10% is a safe lower bound that avoids over-correcting healthy eyes.
+      if (_pgYPct > 0.40 && zPupil.cy > _pgIrisCyNow) {
+        donut.cy = drawInfo.dy + zPupil.cy * nsy;
+        console.log('[PUPIL-GUARD] Y-RECENTER: iris-y=' + Math.round(_pgIrisCyNow) +
+                    ' → pupil-y=' + Math.round(zPupil.cy) + ' (gap=' + Math.round(_pgYOff) + 'px)');
+      } else if (_pgYPct > 0.10 && zPupil.cy > _pgIrisCyNow) {
+        var _pgYNew = _pgIrisCyNow + _pgYOff * 0.80;
+        donut.cy = drawInfo.dy + _pgYNew * nsy;
+        console.log('[PUPIL-GUARD] Y-PARTIAL: iris-y=' + Math.round(_pgIrisCyNow) +
+                    ' +' + Math.round(_pgYOff * 0.80) + 'px (80% of ' + Math.round(_pgYOff) + ') → ' + Math.round(_pgYNew));
+      }
+      if (_pgXPct > 0.60 || _pgYPct > 0.80) {
+        console.log('[PUPIL-GUARD] HARD-FAIL x=' + Math.round(_pgXPct*100) + '% y=' + Math.round(_pgYPct*100) + '% iR — ring confidence low');
+      }
       // ──────────────────────────────────────────────────────────────────────
       // Collarette guard — runs from iris centre (donut.cx/cy), not pupil centre.
       var _zIrisCx = (donut.cx - drawInfo.dx) / nsx;
       var _zIrisCy = (donut.cy - drawInfo.dy) / nsy;
-      var _zTrueR = findLimbusBySaturation(imgEl, _zIrisCx, _zIrisCy, donut.rIris / nsx);
-      if (_zTrueR > (donut.rIris / nsx) * 1.05) {
+      var _preCGR  = donut.rIris / nsx;
+      var _zTrueR = findLimbusBySaturation(imgEl, _zIrisCx, _zIrisCy, _preCGR);
+      // Threshold lowered from 1.05 to 1.01: SAT-LIMBUS expansions of ≥ 1% are meaningful
+      // (e.g. Jeri: 473→482 = 1.9% was previously dropped but IS the correct limbus).
+      console.log('[COLLARETTE-GUARD] pre=' + Math.round(_preCGR) + ' result=' + Math.round(_zTrueR) + ((_zTrueR > _preCGR * 1.01) ? ' → EXPANDED' : ' → no change'));
+      if (_zTrueR > _preCGR * 1.01) {
         donut.rIris = Math.min(_zTrueR * nsx, Math.min(stageW, stageH) * 0.45);
       }
       var zPR = findPupilRadiusByRays(imgEl, zPupil.cx, zPupil.cy, donut.rIris / nsx);
@@ -1764,7 +1848,27 @@ function zoomToEye(skipSanityCheck) {
     // only fires for the pure autoFit fallback; after zoomToEye reruns RIP/ODH that
     // trim is gone. Apply a 6% trim here for all close-up photos so the final circle
     // sits on the iris, not on the sclera.
-    if (isCloseupMode) donut.rIris = Math.round(donut.rIris * 0.94);
+    // Conditional trim: only apply the 6% correction when the cascade OVERSHOT iR.
+    // When cascade already undershoots (result < iR), trimming worsens placement.
+    // iR is the band-scan or C2C reference radius — the most reliable limbus estimate.
+    var _preTrimR = donut.rIris;
+    var _cascImgR = donut.rIris / nsx;
+    if (isCloseupMode && _cascImgR > iR) donut.rIris = Math.round(donut.rIris * 0.94);
+    console.log('[TRIM] closeup=' + isCloseupMode + ' cascImgR=' + Math.round(_cascImgR) + ' iR=' + Math.round(iR) + ((_cascImgR > iR) ? ' (overshoot→trimmed)' : ' (undershoot→skip)') + ' result=' + Math.round(donut.rIris) + ' (img→' + Math.round(donut.rIris/nsx) + ')');
+    // Floor: for band-path subjects (iR = sclera-pair measurement = true limbus),
+    // use iR directly (100%) as the floor — the band scan IS the authoritative radius.
+    // For all other paths, keep the conservative 90% backstop.
+    // The sclera back-off below will still trim if iR overshoots into sclera.
+    var _floorFrac = _isFromBand ? 1.00 : 0.90;
+    // _mainFloorFiredToIR: true when the cascade undershoots iR and the floor
+    // raises it to exactly iR (band-path only).  Used below to skip BACKOFF-SCLERA:
+    // the ring is already at the band-measured limbus; trimming further cuts into the iris.
+    var _mainFloorFiredToIR = false;
+    if (isCloseupMode && donut.rIris < iR * nsx * _floorFrac) {
+      donut.rIris = Math.round(iR * nsx * _floorFrac);
+      _mainFloorFiredToIR = _isFromBand;
+      console.log('[FLOOR] applied iR×' + _floorFrac.toFixed(2) + ' floor (band=' + _isFromBand + ') → donut.rIris=' + Math.round(donut.rIris) + ' (img=' + Math.round(donut.rIris/nsx) + ')');
+    }
     // ── Close-up limbal ring back-off ────────────────────────────────────────
     // The 0.94 trim above corrects the typical 5–8 % limbal-sclera anchor error.
     // On macro close-ups with a wide, prominent limbal ring the trim still leaves
@@ -1798,14 +1902,309 @@ function zoomToEye(skipSanityCheck) {
       };
       var _lbEdge = _lbRingLum(_lbR);
       var _lbMid  = _lbRingLum(_lbR * 0.55);
+      console.log('[BACKOFF] edgeLum=' + Math.round(_lbEdge) + ' midLum=' + Math.round(_lbMid) + ' rImg=' + Math.round(_lbR));
       if (_lbEdge < 90 && _lbMid > _lbEdge + 20) {
+        // Dark limbal ring back-off: ring is in the dark limbal band — scan inward until
+        // luminance rises ≥ 10 pts above the dark minimum (back into iris-stroma territory).
         var _lbMin = _lbR * 0.78;
+        var _lbRstart = _lbR;
         while (_lbR > _lbMin) {
           _lbR *= 0.97;
           if (_lbRingLum(_lbR) >= _lbEdge + 10) break;
         }
         donut.rIris = Math.round(_lbR * nsx);
+        console.log('[BACKOFF-DARK] trimmed ' + Math.round(_lbRstart) + '→' + Math.round(_lbR) + ' → donut.rIris=' + Math.round(donut.rIris));
+      } else if (_lbEdge > 135) {
+        // Sclera back-off: ring is in bright sclera territory (edgeLum > 135) — scan inward
+        // until luminance drops to ≤ edgeLum−20 (the iris-sclera limbus transition).
+        // SKIP if _mainFloorFiredToIR: the ring was just set to iR by the band-path floor,
+        // meaning it is already at the true limbus.  The sclera back-off would falsely trim
+        // into the iris because the limbal region's high luminance (bright limbal ring, e.g.
+        // gray/blue irises) triggers the >135 threshold even AT the true limbus boundary.
+        // Trusting the sclera-pair measurement is more reliable than the luminance scan here.
+        if (_mainFloorFiredToIR) {
+          console.log('[BACKOFF-SCLERA] SKIPPED — band floor just set r=iR; sclera-pair measurement is authoritative');
+        } else {
+          // Handles close-up subjects where RIP overshoots into the sclera and the
+          // 0.94× trim alone doesn't bring the ring back to the iris edge.
+          // Max trim 22% (same guard as dark back-off) to prevent over-trimming bright irises.
+          var _sbMin = _lbR * 0.78;
+          var _sbStart = _lbR;
+          // Target: edgeLum−20, but capped at 130 — ensures very bright sclera
+          // (edgeLum > 150) scans into true iris territory (lum ≤ 130) rather
+          // than stopping at a luminance that is still clearly sclera.
+          var _sbTarget = Math.min(_lbEdge - 20, 130);
+          while (_lbR > _sbMin) {
+            _lbR *= 0.97;
+            if (_lbRingLum(_lbR) <= _sbTarget) break;
+          }
+          donut.rIris = Math.round(_lbR * nsx);
+          console.log('[BACKOFF-SCLERA] edgeLum=' + Math.round(_lbEdge) + ' target≤' + Math.round(_sbTarget) + ' trimmed ' + Math.round(_sbStart) + '→' + Math.round(_lbR) + ' → donut.rIris=' + Math.round(donut.rIris));
+          // Re-apply conservative floor — 90% backstop for all subjects.
+          if (donut.rIris < iR * nsx * 0.90) {
+            donut.rIris = Math.round(iR * nsx * 0.90);
+            console.log('[FLOOR] sclera-backoff floor ×0.90 → donut.rIris=' + Math.round(donut.rIris));
+          }
+        }
       }
+    }
+    // ── ITER-REFINE: Scleral-fraction inward scan → limbus landing ───────────────
+    // Direct approach: shrink r until sclera disappears from inside the ring,
+    // then step outward to find the exact limbus position.
+    //
+    // Phase 1 SHRINK: while scleral_frac(r) > 10%, step r inward 2px.
+    //   Stops when the ring no longer clips sclera.
+    //   Bounded: floor = iR × 0.72 (never trim more than 28% below band measurement).
+    //
+    // Phase 2 FIND-LIMBUS: only fires after Phase 1 moved the ring inward.
+    //   Steps r outward 2px until scleral_frac first exceeds 10%, then steps
+    //   back 2px — places ring just inside the sclera boundary.
+    //   Ceiling = iR × 1.55 (band) or × 1.25 (other) to reach Brad-type under-measured cases.
+    //
+    // Phase 3 CENTER: moves cx/cy ±2px to minimise scleral_frac at the found r.
+    //   Bounded: ±25px from cascade result (fine-tune only).
+    //
+    // Applied whenever r changes > 2px OR centre moves > 2px.
+    if (isCloseupMode && zPupil) {
+      var _irOff = document.createElement('canvas');
+      _irOff.width = imgEl.width; _irOff.height = imgEl.height;
+      var _irCtx2 = _irOff.getContext('2d', {colorSpace:'srgb'});
+      _irCtx2.drawImage(imgEl, 0, 0);
+      var _irPx  = _irCtx2.getImageData(0, 0, imgEl.width, imgEl.height).data;
+      var _irIW  = imgEl.width, _irIH = imgEl.height;
+      // Scleral fraction: fraction of 48-point ring sample classified as scleral
+      // (sat < 25 AND lum > 140).
+      // lumThresh: 160 for Phase 2/Phase 3 (tight — avoids bright iris periphery);
+      //            130 for Phase 1b shrink-retry (catches dimmer sclera adjacent to limbus).
+      var _irSclFrac = function(cx, cy, r, lumThresh) {
+        if (lumThresh === undefined) lumThresh = 160;
+        var _sclN = 0, _sclT = 0;
+        for (var _si = 0; _si < 48; _si++) {
+          var _sa  = _si / 48 * 2 * Math.PI;
+          var _spx = Math.round(cx + Math.cos(_sa) * r);
+          var _spy = Math.round(cy + Math.sin(_sa) * r);
+          if (_spx < 0 || _spy < 0 || _spx >= _irIW || _spy >= _irIH) continue;
+          var _sbi = (_spy * _irIW + _spx) * 4;
+          var _sR  = _irPx[_sbi], _sG = _irPx[_sbi+1], _sB = _irPx[_sbi+2];
+          var _slum = 0.299*_sR + 0.587*_sG + 0.114*_sB;
+          var _smx  = Math.max(_sR, _sG, _sB);
+          var _ssat = _smx > 10 ? (_smx - Math.min(_sR, _sG, _sB)) / _smx * 255 : 0;
+          if (_ssat < 25 && _slum > lumThresh) _sclN++;
+          _sclT++;
+        }
+        return _sclT > 0 ? _sclN / _sclT : 0;
+      };
+      var _irCxI  = (donut.cx - drawInfo.dx) / nsx;
+      var _irCyI  = (donut.cy - drawInfo.dy) / nsy;
+      var _irRI   = donut.rIris / nsx;
+      var _irFlr  = iR * 0.72;
+      var _irCeil = _isFromBand ? iR * 1.55 : iR * 1.25;
+      // When X-RECENTER fired the band-path iR is unreliable (it was measured from a
+      // mis-centred position).  Override the ceiling so FIND-LIMBUS can expand freely
+      // up to half the image short-edge — enough to reach the true limbus.
+      if (_xRecenterFired) _irCeil = Math.min(_irIW, _irIH) * 0.50;
+      // ── Option C: Adaptive scleral luminance threshold ──────────────────────────
+      // Sample horizontal scleral zones (nasal + temporal at 1.4x iris radius,
+      // +-15% height band) to measure this subject's actual scleral luminance.
+      // Only low-saturation pixels (sat < 20) count -- filters iris / eyelid hits.
+      // Upper-quartile of valid samples (less sensitive to dim nasal caruncle).
+      // Falls back to legacy Hi=160 / Lo=130 if < 4 valid scleral samples found.
+      var _sclAdaptSamples = [];
+      var _sclSmpR = _irRI * 1.4;
+      var _sclBand = _irRI * 0.15;
+      for (var _sclI = 0; _sclI < 9; _sclI++) {
+        var _sclYOff = (_sclI / 8 - 0.5) * _sclBand;
+        var _sclYPos = Math.round(_irCyI + _sclYOff);
+        var _sclSides = [Math.round(_irCxI - _sclSmpR), Math.round(_irCxI + _sclSmpR)];
+        for (var _sclS = 0; _sclS < 2; _sclS++) {
+          var _sclX = _sclSides[_sclS];
+          if (_sclX < 0 || _sclYPos < 0 || _sclX >= _irIW || _sclYPos >= _irIH) continue;
+          var _sclI2 = (_sclYPos * _irIW + _sclX) * 4;
+          var _sclR2 = _irPx[_sclI2], _sclG2 = _irPx[_sclI2+1], _sclB2 = _irPx[_sclI2+2];
+          var _sclMx = Math.max(_sclR2, _sclG2, _sclB2);
+          var _sclSat = _sclMx > 10 ? (_sclMx - Math.min(_sclR2, _sclG2, _sclB2)) / _sclMx * 255 : 0;
+          if (_sclSat < 20) _sclAdaptSamples.push(0.299*_sclR2 + 0.587*_sclG2 + 0.114*_sclB2);
+        }
+      }
+      _sclAdaptSamples.sort(function(a,b){return a-b;});
+      var _sclLumRef = _sclAdaptSamples.length >= 4
+        ? _sclAdaptSamples[Math.floor(_sclAdaptSamples.length * 0.75)]
+        : 160;
+      // Hi (Phase 1/2/3): 88% of measured scleral lum -- just inside the boundary.
+      // Lo (Phase 1b): 72% -- catches dim sclera adjacent to limbus.
+      var _sclAdaptHi = Math.max(90, Math.round(_sclLumRef * 0.88));
+      var _sclAdaptLo = Math.max(75, Math.round(_sclLumRef * 0.72));
+      console.log('[ADAPT-SCL] n=' + _sclAdaptSamples.length + ' ref(p75)=' + Math.round(_sclLumRef) +
+                  ' → Hi=' + _sclAdaptHi + ' Lo=' + _sclAdaptLo + ' (was 160/130)');
+
+      var _irCxLo = _irCxI - 25, _irCxHi = _irCxI + 25;
+      var _irCyLo = _irCyI - 25, _irCyHi = _irCyI + 25;
+      var _irSCL_THRESH = 0.10;
+      var _irRB  = _irRI;
+      var _irCxB = _irCxI, _irCyB = _irCyI;
+      var _irStartFrac = _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi);
+
+      // ── Option A: Pupil-anchored radial limbus scan ──────────────────────────
+      // Cast 48 rays from the pupil center outward. For each ray find the peak
+      // luminance gradient in the expected limbus zone (iris->sclera transition).
+      // Circle fit from the inlier point cloud:
+      //   1. Median radius -> reject outliers > 28% from median (eyelid / lash hits)
+      //   2. Centroid of inlier boundary points -> new iris center
+      //   3. Mean distance from centroid to boundary points -> new iris radius
+      // >= 12 inliers: apply and skip ITER-REFINE. < 12: fall back to ITER-REFINE.
+      var _rayN    = 48;
+      var _rayPCx  = zPupil.cx;
+      var _rayPCy  = zPupil.cy;
+      var _rayPR   = Math.max(10, donut.rPupil / nsx);
+      var _rayLo   = Math.max(_rayPR + 8, iR * 0.55);
+      // X-RECENTER subjects (Brad/Bryan) have an unreliable iR — keep the full ceil.
+      // Normal subjects: cap at iR*1.20 so rays stop before reaching the eyelid edge
+      // (which sits outside the iris and creates a stronger gradient than the limbus).
+      var _rayHi   = _xRecenterFired ? _irCeil : Math.min(_irCeil, iR * 1.20);
+      var _rayCands = [];
+      for (var _rIdx = 0; _rIdx < _rayN; _rIdx++) {
+        var _rAng = (_rIdx / _rayN) * 2 * Math.PI;
+        var _rCos = Math.cos(_rAng), _rSin = Math.sin(_rAng);
+        var _rLums = [], _rSats = [], _rPoss = [];
+        for (var _rr = _rayLo; _rr <= _rayHi; _rr += 2) {
+          var _rpx = Math.round(_rayPCx + _rCos * _rr);
+          var _rpy = Math.round(_rayPCy + _rSin * _rr);
+          if (_rpx < 0 || _rpy < 0 || _rpx >= _irIW || _rpy >= _irIH) break;
+          var _rbi = (_rpy * _irIW + _rpx) * 4;
+          var _rPR = _irPx[_rbi], _rPG = _irPx[_rbi+1], _rPB = _irPx[_rbi+2];
+          var _rPMx = Math.max(_rPR, _rPG, _rPB);
+          _rLums.push(0.299*_rPR + 0.587*_rPG + 0.114*_rPB);
+          _rSats.push(_rPMx > 10 ? (_rPMx - Math.min(_rPR, _rPG, _rPB)) / _rPMx * 255 : 0);
+          _rPoss.push(_rr);
+        }
+        // Limbus detection primary (colored irises, non-X-RECENTER):
+        // Walk outward; once we have seen colored iris tissue (sat>25 = _rHadIris),
+        // find the first 3-consecutive-sample run where sat<25 AND lum>_sclAdaptLo.
+        // The _rHadIris gate blocks eyelid rays that never cross iris tissue — they
+        // produce no candidate rather than a false positive at skin.
+        // Fallback / X-RECENTER: max-gradient peak (for gray irises or iR-expand cases).
+        var _rBestR = -1;
+        if (!_xRecenterFired) {
+          var _rHadIris = false, _rSclRun = 0;
+          for (var _gi = 0; _gi < _rLums.length; _gi++) {
+            if (_rSats[_gi] > 25) _rHadIris = true;
+            if (_rHadIris && _rSats[_gi] < 25 && _rLums[_gi] > _sclAdaptLo) {
+              if (++_rSclRun >= 3) { _rBestR = _rPoss[Math.max(0, _gi - 2)]; break; }
+            } else { _rSclRun = 0; }
+          }
+        }
+        // Fallback: max gradient (also used for X-RECENTER subjects)
+        if (_rBestR < 0) {
+          var _rBestGrad = 0;
+          for (var _gi2 = 2; _gi2 < _rLums.length; _gi2++) {
+            var _rGrad = _rLums[_gi2] - _rLums[_gi2 - 2];
+            if (_rGrad > _rBestGrad) { _rBestGrad = _rGrad; _rBestR = _rPoss[_gi2 - 1]; }
+          }
+          if (_rBestGrad <= 12) _rBestR = -1;
+        }
+        if (_rBestR > 0) {
+          _rayCands.push({ r: _rBestR, x: _rayPCx + _rCos * _rBestR, y: _rayPCy + _rSin * _rBestR });
+        }
+      }
+      var _rayUsed = false;
+      if (_rayCands.length >= 12) {
+        var _rMeds = _rayCands.map(function(p){return p.r;}).slice().sort(function(a,b){return a-b;});
+        var _rMed  = _rMeds[Math.floor(_rMeds.length / 2)];
+        var _rInliers = _rayCands.filter(function(p){return Math.abs(p.r - _rMed) < _rMed * 0.28;});
+        if (_rInliers.length >= 10) {
+          var _rCx = 0, _rCy = 0;
+          for (var _ri = 0; _ri < _rInliers.length; _ri++) { _rCx += _rInliers[_ri].x; _rCy += _rInliers[_ri].y; }
+          _rCx /= _rInliers.length; _rCy /= _rInliers.length;
+          var _rR = 0;
+          for (var _ri2 = 0; _ri2 < _rInliers.length; _ri2++) {
+            var _rdx = _rInliers[_ri2].x - _rCx, _rdy = _rInliers[_ri2].y - _rCy;
+            _rR += Math.sqrt(_rdx*_rdx + _rdy*_rdy);
+          }
+          _rR /= _rInliers.length;
+          console.log('[RAY-SCAN] cands=' + _rayCands.length + ' inliers=' + _rInliers.length +
+                      ' medR=' + Math.round(_rMed) + ' → cx=' + Math.round(_rCx) +
+                      ' cy=' + Math.round(_rCy) + ' r=' + Math.round(_rR));
+          if (_rR >= _irFlr && _rR <= _irCeil * 1.15) {
+            donut.rIris = Math.round(_rR * nsx);
+            donut.cx    = drawInfo.dx + _rCx * nsx;
+            donut.cy    = drawInfo.dy + _rCy * nsy;
+            _rayUsed    = true;
+            console.log('[RAY-SCAN] APPLIED: rIris=' + donut.rIris +
+                        ' cx=' + Math.round(donut.cx) + ' cy=' + Math.round(donut.cy));
+          } else {
+            console.log('[RAY-SCAN] bounds fail r=' + Math.round(_rR) +
+                        ' flr=' + Math.round(_irFlr) + ' ceil=' + Math.round(_irCeil) + ' — fallback');
+          }
+        } else {
+          console.log('[RAY-SCAN] too few inliers after rejection (' + _rInliers.length + ') — fallback');
+        }
+      } else {
+        console.log('[RAY-SCAN] insufficient candidates (' + _rayCands.length + '/48) — fallback to ITER-REFINE');
+      }
+
+      if (!_rayUsed) {
+      // Phase 1: SHRINK — step inward while scleral fraction exceeds threshold
+      var _irP1n = 0;
+      while (_irRB > _irFlr && _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi) > _irSCL_THRESH && _irP1n < 50) {
+        _irRB -= 2; _irP1n++;
+      }
+      // Phase 3 (first pass): CENTER — correct centre BEFORE Phase 2 so that
+      // FIND-LIMBUS uses the best-aligned cx/cy.
+      var _irCurrFrac = _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi);
+      var _irDxArr = [2, -2, 0, 0], _irDyArr = [0, 0, 2, -2];
+      for (var _irC = 0; _irC < 20; _irC++) {
+        var _irCMoved = false;
+        for (var _irCI = 0; _irCI < 4; _irCI++) {
+          var _irCx3 = _irCxB + _irDxArr[_irCI], _irCy3 = _irCyB + _irDyArr[_irCI];
+          if (_irCx3 < _irCxLo || _irCx3 > _irCxHi || _irCy3 < _irCyLo || _irCy3 > _irCyHi) continue;
+          var _irF3 = _irSclFrac(_irCx3, _irCy3, _irRB, _sclAdaptHi);
+          if (_irF3 < _irCurrFrac) { _irCurrFrac = _irF3; _irCxB = _irCx3; _irCyB = _irCy3; _irCMoved = true; break; }
+        }
+        if (!_irCMoved) break;
+      }
+      // Phase 1b: SHRINK RETRY — fires when Phase 1 moved < 3 steps.
+      // Uses adaptive Lo threshold to catch dim sclera adjacent to limbus.
+      // Phase 2 does NOT run after Phase 1b fires.
+      var _irP1bFired = false;
+      if (_irP1n < 3 && !_xRecenterFired) {
+        var _irP1bN = 0;
+        while (_irRB > _irFlr && _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptLo) > _irSCL_THRESH && _irP1bN < 50) {
+          _irRB -= 2; _irP1bN++;
+        }
+        if (_irP1bN > 0) {
+          _irP1bFired = true;
+          console.log('[ITER-REFINE] P1b (Lo=' + _sclAdaptLo + '): shrunk ' + _irP1bN + ' steps → r=' + Math.round(_irRB) +
+                      ' sclLo=' + _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptLo).toFixed(3));
+        }
+      }
+      // Phase 2: FIND-LIMBUS — step outward until sclera reappears, then step back.
+      // Also fires when X-RECENTER corrected a severely mis-centred cascade.
+      // Does NOT fire after Phase 1b.
+      if ((_irP1n > 0 || (_xRecenterFired && _irCurrFrac < _irSCL_THRESH)) && !_irP1bFired) {
+        var _irP2n = 0;
+        while (_irRB < _irCeil && _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi) < _irSCL_THRESH && _irP2n < 60) {
+          _irRB += 2; _irP2n++;
+        }
+        if (_irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi) > _irSCL_THRESH) {
+          _irRB = Math.max(_irFlr, _irRB - 2);
+        }
+      }
+      var _irRChg = Math.abs(_irRB - _irRI);
+      var _irCChg = Math.sqrt(Math.pow(_irCxB-_irCxI,2) + Math.pow(_irCyB-_irCyI,2));
+      var _irFinalFrac = _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi);
+      console.log('[ITER-REFINE] scl: ' + _irStartFrac.toFixed(3) + '→' + _irFinalFrac.toFixed(3) +
+                  '  p1=' + _irP1n + 'steps  r: ' + Math.round(_irRI) + '→' + Math.round(_irRB) +
+                  '  cx: ' + Math.round(_irCxI) + '→' + Math.round(_irCxB) +
+                  '  cy: ' + Math.round(_irCyI) + '→' + Math.round(_irCyB));
+      if (_irRChg > 2 || _irCChg > 2) {
+        donut.rIris = Math.round(_irRB * nsx);
+        donut.cx    = drawInfo.dx + _irCxB * nsx;
+        donut.cy    = drawInfo.dy + _irCyB * nsy;
+        console.log('[ITER-REFINE] APPLIED: rIris=' + donut.rIris + ' (img=' + Math.round(_irRB) + ')  cx=' + Math.round(donut.cx) + '  cy=' + Math.round(donut.cy));
+      } else {
+        console.log('[ITER-REFINE] no significant change — cascade result kept');
+      }
+      } // end if (!_rayUsed)
     }
     // ── Visible-iris inward limbus scan (centre correction) ───────────────────
     // Quality gate: if > 15 % of the ring boundary samples are scleral
