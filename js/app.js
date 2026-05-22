@@ -2033,7 +2033,7 @@ function zoomToEye(skipSanityCheck) {
       // Hi (Phase 1/2/3): 88% of measured scleral lum -- just inside the boundary.
       // Lo (Phase 1b): 72% -- catches dim sclera adjacent to limbus.
       var _sclAdaptHi = Math.max(90, Math.round(_sclLumRef * 0.88));
-      var _sclAdaptLo = Math.max(75, Math.round(_sclLumRef * 0.72));
+      var _sclAdaptLo = Math.max(100, Math.round(_sclLumRef * 0.78));
       console.log('[ADAPT-SCL] n=' + _sclAdaptSamples.length + ' ref(p75)=' + Math.round(_sclLumRef) +
                   ' → Hi=' + _sclAdaptHi + ' Lo=' + _sclAdaptLo + ' (was 160/130)');
 
@@ -2089,7 +2089,7 @@ function zoomToEye(skipSanityCheck) {
           for (var _gi = 0; _gi < _rLums.length; _gi++) {
             if (_rSats[_gi] > 25) _rHadIris = true;
             if (_rHadIris && _rSats[_gi] < 25 && _rLums[_gi] > _sclAdaptLo) {
-              if (++_rSclRun >= 3) { _rBestR = _rPoss[Math.max(0, _gi - 2)]; break; }
+              if (++_rSclRun >= 3) { _rBestR = _rPoss[Math.max(0, _gi - 3)]; break; }
             } else { _rSclRun = 0; }
           }
         }
@@ -2103,43 +2103,130 @@ function zoomToEye(skipSanityCheck) {
           if (_rBestGrad <= 12) _rBestR = -1;
         }
         if (_rBestR > 0) {
-          _rayCands.push({ r: _rBestR, x: _rayPCx + _rCos * _rBestR, y: _rayPCy + _rSin * _rBestR });
+          _rayCands.push({ r: _rBestR, x: _rayPCx + _rCos * _rBestR, y: _rayPCy + _rSin * _rBestR, cos: _rCos, sin: _rSin });
         }
       }
       var _rayUsed = false;
       if (_rayCands.length >= 12) {
         var _rMeds = _rayCands.map(function(p){return p.r;}).slice().sort(function(a,b){return a-b;});
         var _rMed  = _rMeds[Math.floor(_rMeds.length / 2)];
-        var _rInliers = _rayCands.filter(function(p){return Math.abs(p.r - _rMed) < _rMed * 0.28;});
+        var _rInliers = _rayCands.filter(function(p){return Math.abs(p.r - _rMed) < _rMed * 0.18;});
         if (_rInliers.length >= 10) {
-          var _rCx = 0, _rCy = 0;
-          for (var _ri = 0; _ri < _rInliers.length; _ri++) { _rCx += _rInliers[_ri].x; _rCy += _rInliers[_ri].y; }
-          _rCx /= _rInliers.length; _rCy /= _rInliers.length;
-          var _rR = 0;
-          for (var _ri2 = 0; _ri2 < _rInliers.length; _ri2++) {
-            var _rdx = _rInliers[_ri2].x - _rCx, _rdy = _rInliers[_ri2].y - _rCy;
-            _rR += Math.sqrt(_rdx*_rdx + _rdy*_rdy);
+          // Kasa algebraic circle fit
+          function _kasaFit(pts) {
+            var n=pts.length,sx=0,sy=0,sxx=0,syy=0,sxy=0,sxxx=0,syyy=0,sxyy=0,sxxy=0;
+            for(var i=0;i<n;i++){var x=pts[i].x,y=pts[i].y;
+              sx+=x;sy+=y;sxx+=x*x;syy+=y*y;sxy+=x*y;
+              sxxx+=x*x*x;syyy+=y*y*y;sxyy+=x*y*y;sxxy+=x*x*y;}
+            var A=n*sxx-sx*sx,B=n*sxy-sx*sy,C=n*syy-sy*sy;
+            var D=0.5*(n*(sxxx+sxyy)-sx*(sxx+syy));
+            var E=0.5*(n*(syyy+sxxy)-sy*(sxx+syy));
+            var det=A*C-B*B;
+            if(Math.abs(det)<1e-4)return null;
+            var cx=(D*C-B*E)/det, cy=(A*E-B*D)/det;
+            var r2=(sxx+syy)/n+cx*cx+cy*cy-2*cx*sx/n-2*cy*sy/n;
+            return {cx:cx,cy:cy,r:Math.sqrt(Math.max(0,r2))};
           }
-          _rR /= _rInliers.length;
-          console.log('[RAY-SCAN] cands=' + _rayCands.length + ' inliers=' + _rInliers.length +
-                      ' medR=' + Math.round(_rMed) + ' → cx=' + Math.round(_rCx) +
-                      ' cy=' + Math.round(_rCy) + ' r=' + Math.round(_rR));
-          if (_rR >= _irFlr && _rR <= _irCeil * 1.15) {
-            donut.rIris = Math.round(_rR * nsx);
-            donut.cx    = drawInfo.dx + _rCx * nsx;
-            donut.cy    = drawInfo.dy + _rCy * nsy;
-            _rayUsed    = true;
-            console.log('[RAY-SCAN] APPLIED: rIris=' + donut.rIris +
-                        ' cx=' + Math.round(donut.cx) + ' cy=' + Math.round(donut.cy));
+          var _rCx, _rCy, _rR;
+          var _kFit = null;
+
+          if (!_xRecenterFired) {
+            // RANSAC circle fit — robust against eyelid contamination.
+            // Eyelid hits are 20-30% inside the true iris circle; RANSAC consensus
+            // at 10% tolerance cleanly separates them from true limbus points.
+            // Circumcircle of 3 points as the minimal sample.
+            function _circumcircle(p1,p2,p3) {
+              var ax=p1.x,ay=p1.y,bx=p2.x,by=p2.y,cx=p3.x,cy=p3.y;
+              var D=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+              if(Math.abs(D)<1e-6)return null;
+              var ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/D;
+              var uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/D;
+              return {cx:ux,cy:uy,r:Math.sqrt((ax-ux)*(ax-ux)+(ay-uy)*(ay-uy))};
+            }
+            var _rsN=_rInliers.length, _rsBest=null, _rsBestCnt=0;
+            for(var _rt=0;_rt<30;_rt++){
+              var _ri1=Math.floor(Math.random()*_rsN);
+              var _ri2=Math.floor(Math.random()*_rsN);
+              while(_ri2===_ri1)_ri2=Math.floor(Math.random()*_rsN);
+              var _ri3=Math.floor(Math.random()*_rsN);
+              while(_ri3===_ri1||_ri3===_ri2)_ri3=Math.floor(Math.random()*_rsN);
+              var _rcc=_circumcircle(_rInliers[_ri1],_rInliers[_ri2],_rInliers[_ri3]);
+              if(!_rcc||_rcc.r<_irFlr*0.9||_rcc.r>_irCeil*1.15)continue;
+              var _rcnt=0;
+              for(var _rci=0;_rci<_rsN;_rci++){
+                var _rdx=_rInliers[_rci].x-_rcc.cx,_rdy=_rInliers[_rci].y-_rcc.cy;
+                if(Math.abs(Math.sqrt(_rdx*_rdx+_rdy*_rdy)-_rcc.r)<_rcc.r*0.10)_rcnt++;
+              }
+              if(_rcnt>_rsBestCnt){_rsBestCnt=_rcnt;_rsBest=_rcc;}
+            }
+            if(_rsBest&&_rsBestCnt>=8){
+              var _rsConsensus=_rInliers.filter(function(p){
+                var dx=p.x-_rsBest.cx,dy=p.y-_rsBest.cy;
+                return Math.abs(Math.sqrt(dx*dx+dy*dy)-_rsBest.r)<_rsBest.r*0.10;
+              });
+              console.log('[RAY-SCAN] RANSAC best='+_rsBestCnt+'/'+_rsN+
+                          ' consensus='+_rsConsensus.length+
+                          ' cx='+Math.round(_rsBest.cx)+' cy='+Math.round(_rsBest.cy)+
+                          ' r='+Math.round(_rsBest.r));
+              if(_rsConsensus.length>=8)_kFit=_kasaFit(_rsConsensus);
+            }
+          }
+
+          // Fallback / X-RECENTER: simple Kasa with 12% second pass
+          if(!_kFit){
+            _kFit=_kasaFit(_rInliers);
+            if(_kFit){
+              var _rInliers2=_rInliers.filter(function(p){
+                var dx=p.x-_kFit.cx,dy=p.y-_kFit.cy;
+                return Math.abs(Math.sqrt(dx*dx+dy*dy)-_kFit.r)<_kFit.r*0.12;
+              });
+              if(_rInliers2.length>=8){var _kF2=_kasaFit(_rInliers2);if(_kF2)_kFit=_kF2;}
+            }
+          }
+
+          if(_kFit){
+            _rCx=_kFit.cx;_rCy=_kFit.cy;_rR=_kFit.r;
+            // Post-fit shrink: step inward while circumference is still in scleral zone
+            for(var _ks=0;_ks<12&&_rR-2>=_irFlr;_ks++){
+              if(_irSclFrac(_rCx,_rCy,_rR-2,_sclAdaptHi)<_irSCL_THRESH)break;
+              _rR-=2;
+            }
           } else {
-            console.log('[RAY-SCAN] bounds fail r=' + Math.round(_rR) +
-                        ' flr=' + Math.round(_irFlr) + ' ceil=' + Math.round(_irCeil) + ' — fallback');
+            _rCx=0;_rCy=0;
+            for(var _ri=0;_ri<_rInliers.length;_ri++){_rCx+=_rInliers[_ri].x;_rCy+=_rInliers[_ri].y;}
+            _rCx/=_rInliers.length;_rCy/=_rInliers.length;_rR=0;
+            for(var _ri2=0;_ri2<_rInliers.length;_ri2++){var _rdx=_rInliers[_ri2].x-_rCx,_rdy=_rInliers[_ri2].y-_rCy;_rR+=Math.sqrt(_rdx*_rdx+_rdy*_rdy);}
+            _rR/=_rInliers.length;
+          }
+          console.log('[RAY-SCAN] cands='+_rayCands.length+' inliers='+_rInliers.length+
+                      ' medR='+Math.round(_rMed)+' cx='+Math.round(_rCx)+
+                      ' cy='+Math.round(_rCy)+' r='+Math.round(_rR));
+          if(_rCx&&_rR>=_irFlr&&_rR<=_irCeil*1.15){
+            donut.rIris=Math.round(_rR*nsx);
+            // CASCADE CENTER + RAY RADIUS: ray scan Y is biased down by eyelid-hit
+            // endpoints that pass the median filter; cascade center (niCx/niCy,
+            // pre-PUPIL-GUARD) is more accurate. Use ray center only when
+            // X-RECENTER has already fired (off-axis eyes where cascade X is wrong).
+            if(!_xRecenterFired){
+              donut.cx=drawInfo.dx+niCx*nsx;
+              donut.cy=drawInfo.dy+niCy*nsy;
+            } else {
+              donut.cx=drawInfo.dx+_rCx*nsx;
+              donut.cy=drawInfo.dy+_rCy*nsy;
+            }
+            _rayUsed=true;
+            console.log('[RAY-SCAN] APPLIED: rIris='+donut.rIris+
+                        ' cx='+Math.round(donut.cx)+' cy='+Math.round(donut.cy)+
+                        ' src='+(_xRecenterFired?'ray':'cascade'));
+          } else {
+            console.log('[RAY-SCAN] bounds fail r='+Math.round(_rR)+
+                        ' flr='+Math.round(_irFlr)+' ceil='+Math.round(_irCeil)+' fallback');
           }
         } else {
-          console.log('[RAY-SCAN] too few inliers after rejection (' + _rInliers.length + ') — fallback');
+          console.log('[RAY-SCAN] too few inliers ('+_rInliers.length+') fallback');
         }
       } else {
-        console.log('[RAY-SCAN] insufficient candidates (' + _rayCands.length + '/48) — fallback to ITER-REFINE');
+        console.log('[RAY-SCAN] insufficient candidates ('+_rayCands.length+'/48) fallback');
       }
 
       if (!_rayUsed) {
