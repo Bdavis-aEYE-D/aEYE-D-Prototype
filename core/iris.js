@@ -1391,3 +1391,118 @@ function findTrueLimbusOutward(imgEl, cx, cy, candidateR, maxSearchR) {
 
   return candidateR; // no collarette pattern found — original estimate was the limbus
 }
+
+// ---- SAT-LIMBUS: saturation+luminance outward scan for true iris boundary ----
+// Replaces findTrueLimbusOutward for dark hazel/amber eyes where the dark
+// limbal ring causes luminance-only scans to stop too early.
+// Uses per-ray scleral counting rather than ring average — handles partial
+// sclera visibility (e.g. single-eye close-up where sclera only shows on one side).
+function findLimbusBySaturation(imgEl, cx, cy, candidateR) {
+  var W = imgEl.naturalWidth || imgEl.width;
+  var H = imgEl.naturalHeight || imgEl.height;
+  if (!W || !H || candidateR < 5) return candidateR;
+
+  var tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  var tctx = tmp.getContext('2d', { colorSpace: 'srgb' });
+  tctx.drawImage(imgEl, 0, 0);
+  var data = tctx.getImageData(0, 0, W, H).data;
+
+  var N = 20;
+  var SAT_SCLERA = 8;
+  var LUM_SCLERA = 150;
+
+  // Returns per-ray stats: average sat/lum AND per-ray scleral counts split by side.
+  // scleralLeft = scleral rays pointing left (deg 90-270, cos<0).
+  // scleralRight = scleral rays pointing right (deg 0-90 and 270-360, cos>0).
+  // Bilateral requirement (left≥1 AND right≥1) prevents catchlights (specular
+  // highlights confined to one side of the pupil) from triggering a false limbus.
+  function ringSample(r) {
+    var sumSat = 0, sumLum = 0, count = 0, scleralCount = 0;
+    var scleralLeft = 0, scleralRight = 0;
+    for (var i = 0; i < N; i++) {
+      var ang = (i / N) * 2 * Math.PI;
+      var deg = (i / N * 360 + 360) % 360;
+      if (deg > 240 && deg < 300) continue; // skip upper eyelid zone
+      var px = Math.max(0, Math.min(W - 1, Math.round(cx + Math.cos(ang) * r)));
+      var py = Math.max(0, Math.min(H - 1, Math.round(cy + Math.sin(ang) * r)));
+      var idx = (py * W + px) * 4;
+      var ri = data[idx], gi = data[idx + 1], bi = data[idx + 2];
+      var rf = ri / 255, gf = gi / 255, bf = bi / 255;
+      var mx = Math.max(rf, gf, bf), mn = Math.min(rf, gf, bf);
+      var sat = mx === 0 ? 0 : (mx - mn) / mx * 100;
+      var lum = 0.299 * ri + 0.587 * gi + 0.114 * bi;
+      sumSat += sat;
+      sumLum += lum;
+      count++;
+      if (sat < SAT_SCLERA && lum > LUM_SCLERA) {
+        scleralCount++;
+        if (deg > 90 && deg <= 270) scleralLeft++; else scleralRight++;
+      }
+    }
+    return count >= 4 ? { sat: sumSat / count, lum: sumLum / count,
+                          scleralCount: scleralCount,
+                          scleralLeft: scleralLeft, scleralRight: scleralRight,
+                          count: count } : null;
+  }
+
+  // 4.0× allows scan to reach the true limbus even when the classical cascade
+  // underestimates candidateR by 3× (common for hazel/amber close-up eyes where
+  // the cascade anchors on the inner collarette ring instead of the outer limbus).
+  var MAX_MULT = 4.0;
+  // 0.49 cap keeps scan inside the image while reaching the far limbus edge
+  // even when the iris fills most of the zoom crop.
+  var maxR = Math.min(candidateR * MAX_MULT, Math.min(W, H) * 0.49);
+  var step = Math.max(2, Math.round(candidateR * 0.04));
+
+  var startSample = ringSample(candidateR);
+  var startSat = startSample ? startSample.sat : 30;
+  var fallbackR = 0;
+  var prevR = candidateR;
+
+  for (var r = Math.round(candidateR) + step; r <= maxR; r += step) {
+    var s = ringSample(r);
+    if (!s) { prevR = r; continue; }
+
+    // Primary: ≥4 individual scleral rays.
+    // Threshold=4 (not 3) specifically to reject catchlights: a specular highlight
+    // in the iris (e.g. iPhone flash reflection) fires exactly 3 rays at the ring
+    // that passes through it, while true sclera fires 6–10 rays (temporal side alone
+    // covers ~9 active rays from deg 300–90). The bilateral L/R split is logged
+    // for diagnostics but NOT used as a gate — the nasal canthus has caruncular
+    // (pinkish) tissue that never reads as scleral, making bilateral unreliable.
+    if (s.scleralCount >= 4) {
+      var limbusR = Math.max(prevR, Math.round(candidateR * 1.02));
+      console.log('[SAT-LIMBUS] candidateR=' + Math.round(candidateR) +
+                  ' → limbus=' + limbusR +
+                  '  (scleralRays=' + s.scleralCount +
+                  ' L' + s.scleralLeft + '+R' + s.scleralRight +
+                  ' at r=' + Math.round(r) +
+                  '  avgSat=' + Math.round(s.sat) + ' avgLum=' + Math.round(s.lum) + ')');
+      return limbusR;
+    }
+    // Secondary: full-ring average passes (handles uniform wrap-around sclera)
+    if (s.sat < SAT_SCLERA && s.lum > LUM_SCLERA) {
+      var limbusR2 = Math.max(prevR, Math.round(candidateR * 1.02));
+      console.log('[SAT-LIMBUS] candidateR=' + Math.round(candidateR) +
+                  ' → limbus(avg)=' + limbusR2 +
+                  '  (sat=' + Math.round(s.sat) + ' lum=' + Math.round(s.lum) +
+                  ' at r=' + Math.round(r) + ')');
+      return limbusR2;
+    }
+    if (!fallbackR && s.sat < startSat * 0.40 && r > candidateR * 1.20) {
+      fallbackR = Math.round(r);
+    }
+    prevR = r;
+  }
+
+  if (fallbackR > candidateR * 1.15) {
+    console.log('[SAT-LIMBUS] candidateR=' + Math.round(candidateR) +
+                ' → fallback limbus=' + fallbackR + ' (sat-drop heuristic)');
+    return fallbackR;
+  }
+  console.log('[SAT-LIMBUS] candidateR=' + Math.round(candidateR) +
+              ' → no sclera found  maxR=' + Math.round(maxR) +
+              ' W=' + W + ' H=' + H);
+  return candidateR;
+}

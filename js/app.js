@@ -1061,6 +1061,148 @@ function _applyFitClassical(closeup, skipZoom){
 // then proceeds to the fit stage without requiring a manual locate tap.
 function _tryCloseupFit() {
   if (!originalImgEl) { showLocate(); return; }
+
+  // ── Iris X-centre scan for 1-eye gate path (v2.22) ──────────────────────
+  // When the 1-eye gate fires, mpZoomHint.midY is reliable (within ~40 px of
+  // true iris cy) but midX can be 400-500 px off.
+  //
+  // Strategy: find the TWO SCLERA CONCENTRATIONS that bracket the iris.
+  // The sclera (whites of the eye) appears as a pair of bright peaks in the
+  // horizontal luminance profile at midY, with the dark iris/pupil between
+  // them.  Key discriminator: the gap between the two sclera peaks must
+  // contain a genuinely dark pupil (lum < 50).  This eliminates every false
+  // pair — dark backgrounds vs skin, shadows vs skin — because none of those
+  // have a real pupil between them.
+  //
+  //   1. Extract thin strip midY ± 5% imgH, downsample to 800 wide.
+  //   2. Compute column-mean luminance, smooth with Gaussian.
+  //   3. Find local brightness maxima (lum > 130) → sclera candidates.
+  //   4. Pair candidates: gap must be 8–36% of image width AND contain
+  //      a dark minimum (lum < 50 = the pupil).
+  //   5. Best-scoring pair: score = (peakL + peakR)/2 − gap_mean.
+  //   6. Iris cx = pair midpoint, irisR = pair half-span.
+  if (mpZoomHint && mpZoomHint.midY > 0 && !mpZoomHint._fromBand) {
+    try {
+      var _bImgH = originalImgEl.height, _bImgW = originalImgEl.width;
+      // Thin strip at midY ± 5% imgH
+      var _bHalf = Math.round(_bImgH * 0.05);
+      var _bY0 = Math.max(0,      Math.round(mpZoomHint.midY - _bHalf));
+      var _bY1 = Math.min(_bImgH, Math.round(mpZoomHint.midY + _bHalf));
+      var _bH  = _bY1 - _bY0;
+      // Downsample to ≤800 wide for speed
+      var _bW2 = Math.min(_bImgW, 800);
+      var _bSc = _bW2 / _bImgW;
+      var _bH2 = Math.max(1, Math.round(_bH * _bSc));
+      var _bOff = document.createElement('canvas');
+      _bOff.width = _bW2; _bOff.height = _bH2;
+      var _bCtx = _bOff.getContext('2d', { colorSpace: 'srgb' });
+      _bCtx.drawImage(originalImgEl, 0, _bY0, _bImgW, _bH, 0, 0, _bW2, _bH2);
+      var _bD = _bCtx.getImageData(0, 0, _bW2, _bH2).data;
+
+      // Column mean luminance
+      var _bLum = new Float32Array(_bW2);
+      for (var _by = 0; _by < _bH2; _by++) {
+        for (var _bx = 0; _bx < _bW2; _bx++) {
+          var _bi = (_by * _bW2 + _bx) * 4;
+          _bLum[_bx] += 0.299*_bD[_bi] + 0.587*_bD[_bi+1] + 0.114*_bD[_bi+2];
+        }
+      }
+      for (var _bx = 0; _bx < _bW2; _bx++) _bLum[_bx] /= _bH2;
+
+      // Gaussian smooth (sigma=8 px in 800-wide space) so catch-lights and
+      // single-column spikes don't dominate the peak search
+      var _bSm = new Float32Array(_bW2);
+      var _bSig = 8, _bKR = 24;
+      for (var _bx = 0; _bx < _bW2; _bx++) {
+        var _bws = 0, _bwt = 0;
+        for (var _bk = -_bKR; _bk <= _bKR; _bk++) {
+          var _bxi = _bx + _bk;
+          if (_bxi < 0 || _bxi >= _bW2) continue;
+          var _bwk = Math.exp(-_bk*_bk / (2*_bSig*_bSig));
+          _bws += _bLum[_bxi] * _bwk; _bwt += _bwk;
+        }
+        _bSm[_bx] = _bws / _bwt;
+      }
+
+      // Prefix sum on smoothed profile for O(1) range-mean queries
+      var _bPfx = new Float64Array(_bW2 + 1);
+      for (var _bx = 0; _bx < _bW2; _bx++) _bPfx[_bx+1] = _bPfx[_bx] + _bSm[_bx];
+      function _bRMean(a, b) {
+        a = Math.max(0, a|0); b = Math.min(_bW2, b|0);
+        return b > a ? (_bPfx[b] - _bPfx[a]) / (b - a) : 128;
+      }
+      // Per-pixel pupil check: scan a single row at midY in the ORIGINAL image
+      // so we get true pixel darkness — column means averaged over the strip
+      // height are diluted by skin/hair rows and never read < 50 even at the pupil.
+      var _bRowCanvas = document.createElement('canvas');
+      _bRowCanvas.width = _bImgW; _bRowCanvas.height = 1;
+      _bRowCanvas.getContext('2d', { colorSpace: 'srgb' })
+                 .drawImage(originalImgEl,
+                   0, Math.max(0, Math.round(mpZoomHint.midY)), _bImgW, 1,
+                   0, 0, _bImgW, 1);
+      var _bRowData = _bRowCanvas.getContext('2d', { colorSpace: 'srgb' })
+                                 .getImageData(0, 0, _bImgW, 1).data;
+      // Returns true if ANY pixel in [x0orig, x1orig] (original coords) has lum < 40
+      function _bHasPupil(x0, x1) {
+        x0 = Math.max(0, x0|0); x1 = Math.min(_bImgW, x1|0);
+        for (var _bxi = x0; _bxi < x1; _bxi++) {
+          var _bi = _bxi * 4;
+          if (0.299*_bRowData[_bi] + 0.587*_bRowData[_bi+1] + 0.114*_bRowData[_bi+2] < 40)
+            return true;
+        }
+        return false;
+      }
+
+      // Find local maxima on smoothed profile: sclera candidates (lum > 130)
+      var _bPeaks = [];
+      for (var _bx = 2; _bx < _bW2 - 2; _bx++) {
+        var _bv = _bSm[_bx];
+        if (_bv < 130) continue;
+        if (_bv >= _bSm[_bx-1] && _bv >= _bSm[_bx+1] &&
+            _bv >= _bSm[_bx-2] && _bv >= _bSm[_bx+2]) {
+          _bPeaks.push({ x: _bx, lum: _bv });
+        }
+      }
+
+      // Pair peaks: gap must span 8–36% of image width AND contain a dark pupil
+      var _bMinHW = Math.round(_bW2 * 0.04);  // min half-gap ≈ 8% imgW / 2
+      var _bMaxHW = Math.round(_bW2 * 0.18);  // max half-gap ≈ 36% imgW / 2
+      var _bBScore = -1, _bBCx = -1, _bBHW = -1;
+      for (var _bpi = 0; _bpi < _bPeaks.length; _bpi++) {
+        for (var _bpj = _bpi + 1; _bpj < _bPeaks.length; _bpj++) {
+          var _bLP = _bPeaks[_bpi], _bRP = _bPeaks[_bpj];
+          var _bhw = (_bRP.x - _bLP.x) >> 1;
+          if (_bhw < _bMinHW || _bhw > _bMaxHW) continue;
+          // Gap must contain a genuinely dark pupil — check at original resolution
+          var _bgX0 = Math.round(_bLP.x / _bSc), _bgX1 = Math.round(_bRP.x / _bSc);
+          if (!_bHasPupil(_bgX0, _bgX1)) continue;
+          var _bgm  = _bRMean(_bLP.x, _bRP.x);
+          var _bsc2 = (_bLP.lum + _bRP.lum) / 2 - _bgm;
+          if (_bsc2 > _bBScore) {
+            _bBScore = _bsc2; _bBHW = _bhw;
+            _bBCx = (_bLP.x + _bRP.x) >> 1;
+          }
+        }
+      }
+
+      if (_bBCx >= 0 && _bBScore > 20) {
+        var _bEstCx = Math.round(_bBCx / _bSc);
+        var _bEstR  = Math.round(_bBHW / _bSc);
+        var _bEstCy = Math.round(mpZoomHint.midY);
+        console.log('[BAND] sclera-pair: cx=' + _bEstCx + ' cy=' + _bEstCy +
+                    ' irisR=' + _bEstR + ' score=' + Math.round(_bBScore));
+        if (_bEstR >= _bImgW * 0.05 && _bEstR <= _bImgW * 0.30) {
+          mpZoomHint = { midX: _bEstCx, midY: _bEstCy, irisR: _bEstR, _fromBand: true };
+        } else {
+          console.warn('[BAND] irisR out of range: ' + _bEstR);
+        }
+      } else {
+        console.warn('[BAND] no sclera pair: score=' + Math.round(_bBScore) +
+                     ' peaks=' + _bPeaks.length);
+      }
+    } catch(e) { console.warn('[BAND] threw:', e); }
+  }
+
   try {
     var probe = autoFit(originalImgEl, true);
     // Require a real iris: limbus must be detected and span at least 8% of image width.
@@ -1211,6 +1353,21 @@ function zoomToEye(skipSanityCheck) {
     pad = Math.round(_eye_c2c.eyeW * 0.53);  // target: eye opening fills ~95% of frame
     console.log('[ZOOM-C2C] canthus-centred  zCx=' + Math.round(zCx) +
                 '  zCy=' + Math.round(zCy) + '  pad=' + pad + ' (eyeW×0.53)');
+  } else if (mpZoomHint && mpZoomHint._fromBand) {
+    // Band-detected iris centre: accurate midX/midY/irisR from horizontal strip autoFit.
+    // Override iCx/iCy/iR so the post-zoom refinement cascade is anchored on the
+    // true iris position (cascade run on the full portrait is unreliable for
+    // isolated-eye images where the iris fills <10% of the frame).
+    // Pad = irisR × 3.0 — derived from ground-truth zoom measurements (Rachel/Iliana).
+    iCx  = mpZoomHint.midX - (cropRegion ? cropRegion.x : 0);
+    iCy  = mpZoomHint.midY - (cropRegion ? cropRegion.y : 0);
+    iR   = mpZoomHint.irisR;
+    iPCx = iCx; iPCy = iCy;  // pupil seed = iris centre; findPupilCenter refines later
+    zCx  = iCx;  zCy  = iCy;
+    pad  = Math.round(mpZoomHint.irisR * 3.0);
+    console.log('[ZOOM-band] iris-centred zCx=' + Math.round(zCx) +
+                ' zCy=' + Math.round(zCy) + ' pad=' + pad + ' (bandIrisR×3.0)');
+    mpZoomHint = { _consumed: true };  // keep truthy → containment guard stays disabled
   } else if (mpZoomHint && mpZoomHint.eyeW > 20) {
     // Canthus geometry hint saved by 1-eye gate (Rachel-type single-eye close-ups).
     // The gate detected a hallucinated face and routed to close-up, but saved the
