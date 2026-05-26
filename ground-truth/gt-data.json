@@ -1,0 +1,8 @@
+{
+  "_version": 2,
+  "_note": "Ground-truth iris ring placements. Keys are 'dir/filename'. Add entries via annotate.html, then save this file to git.",
+  "_sets": {
+    "test-images": "Subject photos used for algorithm development and regression testing",
+    "ubiris-check": "UBIRIS v2 close-up iris dataset samples"
+  }
+}

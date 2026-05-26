@@ -9,10 +9,18 @@ body { background: #0e0e0e; color: #ddd; font-family: monospace; display: flex;
        flex-direction: column; height: 100vh; overflow: hidden; user-select: none; }
 
 #topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
-          background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; }
+          background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; flex-wrap: wrap; }
 #topbar h1 { font-size: 15px; color: #fff; }
-#imgLabel  { font-size: 13px; color: #fa0; flex: 1; }
+#imgLabel  { font-size: 13px; color: #fa0; flex: 1; min-width: 120px; }
 #progress  { font-size: 12px; color: #888; }
+
+/* Set selector */
+#setSelector { display: flex; gap: 4px; }
+.set-btn { padding: 4px 10px; border: 1px solid #444; border-radius: 4px;
+           background: #222; color: #888; font-family: monospace; font-size: 11px;
+           cursor: pointer; }
+.set-btn:hover   { background: #2a2a2a; color: #aaa; }
+.set-btn.active-set { background: #1a3a5c; color: #4cf; border-color: #4cf; }
 
 #main { display: flex; flex: 1; overflow: hidden; }
 
@@ -71,12 +79,18 @@ canvas { image-rendering: pixelated; display: block; }
 .imgthumb.skip   { border-color: #555; opacity:.5; }
 
 #exportWrap { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+
+#saveStatus { font-size: 10px; color: #4f4; text-align: center; min-height: 14px; }
 </style>
 </head>
 <body>
 
 <div id="topbar">
-  <h1>Ground-Truth Annotator</h1>
+  <h1>GT Annotator</h1>
+  <div id="setSelector">
+    <button class="set-btn active-set" id="btn-set-test"   onclick="switchSet('test-images')">Test Images</button>
+    <button class="set-btn"            id="btn-set-ubiris" onclick="switchSet('ubiris-check')">UBIRIS v2</button>
+  </div>
   <span id="imgLabel">—</span>
   <span id="progress">0 / 0 annotated</span>
 </div>
@@ -141,11 +155,14 @@ canvas { image-rendering: pixelated; display: block; }
     </div>
 
     <div id="exportWrap">
+      <div id="saveStatus"></div>
       <button class="btn btn-red"   onclick="skipImage()">Skip Image</button>
       <button class="btn btn-green" onclick="saveAndNext()"
               style="font-size:14px;padding:10px">✓ Confirm &amp; Next →</button>
       <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">
         Export ground-truth.json</button>
+      <button class="btn btn-gray"  style="margin-top:2px" onclick="logJSON()">
+        Log JSON to Console</button>
     </div>
 
   </div>
@@ -153,17 +170,64 @@ canvas { image-rendering: pixelated; display: block; }
 
 <script src="/core/iris.js"></script>
 <script>
-// ── Config ────────────────────────────────────────────────────────────────────
-var IMG_DIR = '/ubiris-check/';
-var IMAGE_NAMES = [
-  'C11_S1_I13','C112_S1_I8','C122_S1_I7','C155_S1_I9','C204_S1_I13',
-  'C223_S1_I6','C307_S2_I11','C318_S2_I11','C326_S2_I7','C328_S1_I4',
-  'C329_S1_I13','C334_S1_I7','C338_S1_I4','C349_S1_I4','C379_S1_I13',
-  'C390_S1_I6','C394_S1_I1','C465_S1_I5','C492_S1_I11','C58_S1_I3'
-];
+// ── Image Sets ────────────────────────────────────────────────────────────────
+var IMAGE_SETS = {
+  'test-images': {
+    label: 'Test Images',
+    dir: '/test-images/',
+    files: [
+      'Bryan Left Window Reflection.png',
+      'Bryan Left.png',
+      'Bryan Right Window Reflection.png',
+      'Bryan Right.png',
+      'Bryan.JPG',
+      'Carlie_Right_Iris.jpg',
+      'IMG_0496 Blake Right.jpeg',
+      'IMG_3091 Jeri Norden.jpg',
+      'IMG_3166 Bradley N.jpg',
+      'IMG_6410 Illiana Zoom.jpg',
+      'IMG_6410 Illiana.jpg',
+      'IMG_9119 Rachel Green Zoom.jpg',
+      'IMG_9119 Rachel Green.jpg',
+      'IMG_9924 Bryan Left.JPG',
+      'SBVPI_14_green_f15.jpg',
+      'SBVPI_15_brown_f32.jpg',
+      'SBVPI_19_blue_m21.jpg',
+      'SBVPI_1_brown_m28.jpg',
+      'SBVPI_2_blue_f28.jpg',
+      'SBVPI_4_grey_f75.jpg',
+      'SBVPI_7_green_m45.jpg',
+      'SBVPI_9_blue_m75.jpg',
+      'Terri 1.jpg'
+    ]
+  },
+  'ubiris-check': {
+    label: 'UBIRIS v2',
+    dir: '/ubiris-check/',
+    files: [
+      'C11_S1_I13.jpg','C112_S1_I8.jpg','C122_S1_I7.jpg','C155_S1_I9.jpg',
+      'C204_S1_I13.jpg','C223_S1_I6.jpg','C307_S2_I11.jpg','C318_S2_I11.jpg',
+      'C326_S2_I7.jpg','C328_S1_I4.jpg','C329_S1_I13.jpg','C334_S1_I7.jpg',
+      'C338_S1_I4.jpg','C349_S1_I4.jpg','C379_S1_I13.jpg','C390_S1_I6.jpg',
+      'C394_S1_I1.jpg','C465_S1_I5.jpg','C492_S1_I11.jpg','C58_S1_I3.jpg'
+    ]
+  }
+};
+
+// Metadata from gt-data.json (populated at boot)
+var gtMeta = {
+  _version: 2,
+  _note: 'Ground-truth iris ring placements. Keys are \'dir/filename\'. Add entries via annotate.html, then save this file to git.',
+  _sets: {
+    'test-images': 'Subject photos used for algorithm development and regression testing',
+    'ubiris-check': 'UBIRIS v2 close-up iris dataset samples'
+  }
+};
 
 // ── State ─────────────────────────────────────────────────────────────────────
-var gt  = JSON.parse(localStorage.getItem('aeye_gt') || '{}');
+// gt keys: "setId/filename"  e.g. "test-images/IMG_9924 Bryan Left.JPG"
+var gt  = {};
+var currentSet = 'test-images';
 var idx = 0;
 var imgEl      = null;
 var SCALE      = 1;
@@ -176,13 +240,14 @@ var pupil = { cx: -1, cy: -1, r: -1 };
 // Which circle the user is currently working on
 var activeCircle = 'iris';   // 'iris' | 'pupil'
 
-// No separate placement state — draw/move/resize all happen via drag
-
 // Drag state — type: 'draw' | 'move' | 'resize'
-// Only ever affects the active circle. Inactive circle is never touched.
 var drag = null;
-
 var EDGE_TOL_PX = 16;   // display pixels for edge grab zone
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getCurrentFiles() { return IMAGE_SETS[currentSet].files; }
+function getImgDir()       { return IMAGE_SETS[currentSet].dir; }
+function imgKey(file)      { return currentSet + '/' + file; }
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
 var canvas = document.getElementById('c');
@@ -213,11 +278,6 @@ function activeColor()   { return activeCircle === 'iris' ? '#3cf' : '#fc4'; }
 function inactiveColor() { return activeCircle === 'iris' ? 'rgba(255,196,64,0.45)' : 'rgba(60,200,255,0.45)'; }
 
 // ── Mouse ─────────────────────────────────────────────────────────────────────
-// PowerPoint-style — no mode buttons needed:
-//   Drag inside circle   → MOVE (translate whole circle)
-//   Drag circle edge     → RESIZE (radius only, center fixed)
-//   Drag outside circle  → DRAW new circle (center = mousedown, radius = drag distance)
-
 function onDown(e) {
   if (e.button !== 0) return;
   var p   = imgPt(e);
@@ -252,13 +312,11 @@ function onMove(e) {
       obj.cx = drag.startCx + (p.x - drag.startMx);
       obj.cy = drag.startCy + (p.y - drag.startMy);
     } else {
-      // resize or draw: radius = distance from (fixed) center to mouse
       obj.r = Math.max(2, dist(drag.startCx, drag.startCy, p.x, p.y));
     }
     updateUI(); draw(); return;
   }
 
-  // Cursor feedback
   if (obj.r > 0) {
     var d  = dist(p.x, p.y, obj.cx, obj.cy);
     var et = EDGE_TOL_PX / SCALE;
@@ -281,11 +339,11 @@ function draw() {
 
   // Algorithm overlay — always dim dashed
   if (algoResult && algoResult.ok) {
-    var aCx = algoResult.cxFrac  * canvas.width;
-    var aCy = algoResult.cyFrac  * canvas.height;
+    var aCx  = algoResult.cxFrac  * canvas.width;
+    var aCy  = algoResult.cyFrac  * canvas.height;
     var aPCx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * canvas.width;
     var aPCy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * canvas.height;
-    var aRi = algoResult.rIrisFrac * canvas.width;
+    var aRi  = algoResult.rIrisFrac * canvas.width;
     drawCircle(aCx, aCy, aRi,  'rgba(80,80,200,0.35)', 1.5, [5,4]);
     if (algoResult.rPupilFrac)
       drawCircle(aPCx, aPCy, algoResult.rPupilFrac*canvas.width,
@@ -294,25 +352,20 @@ function draw() {
 
   var act = active(), inact = inactive();
 
-  // Inactive circle — drawn dimly, no handles
   if (inact.r > 0)
     drawCircle(inact.cx, inact.cy, inact.r, inactiveColor(), 0.7 / SCALE);
 
-  // Active circle — bright with handles
   if (act.r > 0) {
     drawCircle(act.cx, act.cy, act.r, activeColor(), 1 / SCALE);
     drawCross(act.cx, act.cy, activeColor());
-    // 4 edge grab handles
     ['E','W','N','S'].forEach(function(dir) {
       var hx = act.cx + (dir==='E' ? act.r : dir==='W' ? -act.r : 0);
       var hy = act.cy + (dir==='S' ? act.r : dir==='N' ? -act.r : 0);
       drawHandle(hx, hy, activeColor());
     });
   } else if (act.cx >= 0) {
-    // center placed but no radius yet
     drawCross(act.cx, act.cy, activeColor());
   }
-
 }
 
 function drawCircle(cx, cy, r, color, lw, dash) {
@@ -340,7 +393,6 @@ function drawHandle(x, y, color) {
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 function selectCircle(which) {
-  placing = null;
   activeCircle = which;
   document.getElementById('tab-iris').className  = 'circ-tab iris'  + (which==='iris'  ? ' active':'');
   document.getElementById('tab-pupil').className = 'circ-tab pupil' + (which==='pupil' ? ' active':'');
@@ -348,7 +400,6 @@ function selectCircle(which) {
 }
 
 function placeNew() {
-  // Reset the active circle so the next drag draws a fresh one
   var obj = active();
   obj.cx = -1; obj.cy = -1; obj.r = -1;
   canvas.style.cursor = 'crosshair';
@@ -367,12 +418,11 @@ function resetToAlgo() {
     pupil.cy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * ih;
     pupil.r  = algoResult.rPupilFrac ? algoResult.rPupilFrac * iw : iris.r * 0.35;
   }
-  placing = null;
   updateUI(); draw();
 }
 
 function updateUI() {
-  var box   = document.getElementById('instrBox');
+  var box = document.getElementById('instrBox');
   var label = activeCircle === 'iris' ? 'IRIS' : 'PUPIL';
   box.className = '';
   box.textContent =
@@ -380,7 +430,6 @@ function updateUI() {
     'Drag outside  → draw new circle\nDrag interior → move\nDrag edge     → resize\n\n' +
     'Switch:  I = iris   P = pupil';
 
-  // Values
   var act   = active();
   var inact = inactive();
   var iw    = imgEl ? imgEl.naturalWidth : 1;
@@ -415,8 +464,12 @@ function showAlgo() {
 function loadImage(i) {
   idx = i;
   drag = null;
+  var files = getCurrentFiles();
+  var file  = files[i];
+  var key   = imgKey(file);
+
   document.getElementById('imgLabel').textContent =
-    IMAGE_NAMES[i] + '.jpg  (' + (i+1) + '/' + IMAGE_NAMES.length + ')';
+    currentSet + '/' + file + '  (' + (i+1) + '/' + files.length + ')';
 
   imgEl = new Image();
   imgEl.onload = function() {
@@ -432,19 +485,16 @@ function loadImage(i) {
     algoResult = autoFit(imgEl, true);
     showAlgo();
 
-    var name = IMAGE_NAMES[i];
-    if (gt[name] && !gt[name]._skip) {
-      // Restore saved annotation — each circle completely independent
-      iris  = { cx: gt[name].irisCx,  cy: gt[name].irisCy,  r: gt[name].irisR  };
-      pupil = { cx: gt[name].pupilCx, cy: gt[name].pupilCy, r: gt[name].pupilR };
+    if (gt[key] && !gt[key]._skip) {
+      // Restore saved annotation
+      iris  = { cx: gt[key].irisCx,  cy: gt[key].irisCy,  r: gt[key].irisR  };
+      pupil = { cx: gt[key].pupilCx, cy: gt[key].pupilCy, r: gt[key].pupilR };
     } else {
-      // Auto-fill from algorithm — iris and pupil placed at algorithm values
+      // Auto-fill from algorithm
       var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
       if (algoResult && algoResult.ok) {
         iris  = { cx: algoResult.cxFrac*iw, cy: algoResult.cyFrac*ih,
                   r:  algoResult.rIrisFrac*iw };
-        // Pupil: use algorithm pupil if available, otherwise estimate
-        // NOTE: pupil is independent of iris — same starting center is just the algo's guess
         pupil = { cx: (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac)*iw,
                   cy: (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac)*ih,
                   r:  algoResult.rPupilFrac ? algoResult.rPupilFrac*iw : iris.r*0.35 };
@@ -454,13 +504,16 @@ function loadImage(i) {
       }
     }
 
+    // Restore note
+    document.getElementById('noteBox').value = (gt[key] && gt[key].note) ? gt[key].note : '';
+
     updateUI(); draw();
     updateThumbs(); updateProgress();
   };
   imgEl.onerror = function() {
-    document.getElementById('instrBox').textContent = 'Failed to load image.';
+    document.getElementById('instrBox').textContent = 'Failed to load image: ' + file;
   };
-  imgEl.src = IMG_DIR + IMAGE_NAMES[i] + '.jpg';
+  imgEl.src = getImgDir() + file;
 }
 
 // ── Save / navigation ─────────────────────────────────────────────────────────
@@ -468,70 +521,176 @@ function saveAndNext() {
   if (iris.r <= 0) { alert('Iris circle not placed yet. Place it or click Skip.'); return; }
   if (pupil.r <= 0) pupil.r = iris.r * 0.35;
 
-  var name = IMAGE_NAMES[idx];
+  var files = getCurrentFiles();
+  var file  = files[idx];
+  var key   = imgKey(file);
   var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
-  gt[name] = {
-    imgW: iw, imgH: ih,
+
+  gt[key] = {
+    set:     currentSet,
+    file:    file,
+    imgW:    iw, imgH: ih,
     irisCx:  Math.round(iris.cx),  irisCy:  Math.round(iris.cy),  irisR:  Math.round(iris.r),
     pupilCx: Math.round(pupil.cx), pupilCy: Math.round(pupil.cy), pupilR: Math.round(pupil.r),
-    note: document.getElementById('noteBox').value
+    // Fractional values for resolution-independent use
+    irisCxFrac:  iris.cx / iw,   irisCyFrac:  iris.cy / ih,   irisRFrac:  iris.r / iw,
+    pupilCxFrac: pupil.cx / iw,  pupilCyFrac: pupil.cy / ih,  pupilRFrac: pupil.r / iw,
+    note:    document.getElementById('noteBox').value,
+    ts:      new Date().toISOString()
   };
-  localStorage.setItem('aeye_gt', JSON.stringify(gt));
+
+  persistGT();
   document.getElementById('noteBox').value = '';
   updateThumbs(); updateProgress();
 
+  // Auto-export JSON (safety net — data never lost)
+  autoExportJSON();
+
   var next = idx + 1;
-  while (next < IMAGE_NAMES.length && gt[IMAGE_NAMES[next]] && gt[IMAGE_NAMES[next]]._skip) next++;
-  if (next < IMAGE_NAMES.length) loadImage(next);
-  else alert('All images done!');
+  while (next < files.length && gt[imgKey(files[next])] && gt[imgKey(files[next])]._skip) next++;
+  if (next < files.length) loadImage(next);
+  else alert('All images in this set done!');
 }
 
 function skipImage() {
-  gt[IMAGE_NAMES[idx]] = { _skip: true };
-  localStorage.setItem('aeye_gt', JSON.stringify(gt));
+  var files = getCurrentFiles();
+  var key   = imgKey(files[idx]);
+  gt[key] = { _skip: true };
+  persistGT();
   updateThumbs(); updateProgress();
-  if (idx + 1 < IMAGE_NAMES.length) loadImage(idx + 1);
+  if (idx + 1 < files.length) loadImage(idx + 1);
+}
+
+// ── Persist to localStorage ───────────────────────────────────────────────────
+function persistGT() {
+  try { localStorage.setItem('aeye_gt', JSON.stringify(gt)); } catch(e) {}
+}
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+function buildExportObj() {
+  // Build gt-data.json compatible object
+  var out = {
+    _version:  gtMeta._version,
+    _note:     gtMeta._note,
+    _sets:     gtMeta._sets,
+    _updated:  new Date().toISOString()
+  };
+  for (var k in gt) {
+    if (!gt[k]._skip) out[k] = gt[k];
+  }
+  return out;
+}
+
+function autoExportJSON() {
+  // Trigger download (browser allows this inside a click handler)
+  var json = JSON.stringify(buildExportObj(), null, 2);
+  try {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], {type:'application/json'}));
+    a.download = 'gt-data.json';
+    a.click();
+  } catch(e) {}
+  // Also log so Claude can capture via browser JS tool
+  console.log('[GT-EXPORT]', json);
+  // Show status
+  var s = document.getElementById('saveStatus');
+  s.textContent = '✓ Saved & downloaded gt-data.json';
+  setTimeout(function(){ s.textContent = ''; }, 3000);
 }
 
 function exportJSON() {
-  var out = {};
-  for (var k in gt) { if (!gt[k]._skip) out[k] = gt[k]; }
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], {type:'application/json'}));
-  a.download = 'ground-truth.json'; a.click();
+  autoExportJSON();
+}
+
+function logJSON() {
+  var json = JSON.stringify(buildExportObj(), null, 2);
+  console.log('[GT-EXPORT]', json);
+  alert('JSON logged to console. Open DevTools → Console to copy it.');
+}
+
+// ── Set switcher ──────────────────────────────────────────────────────────────
+function switchSet(setId) {
+  if (setId === currentSet) return;
+  currentSet = setId;
+  document.getElementById('btn-set-test').className =
+    'set-btn' + (setId === 'test-images'   ? ' active-set' : '');
+  document.getElementById('btn-set-ubiris').className =
+    'set-btn' + (setId === 'ubiris-check'  ? ' active-set' : '');
+  buildThumbs();
+  var files = getCurrentFiles();
+  var start = 0;
+  while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
+  loadImage(start);
 }
 
 // ── Thumbnails ────────────────────────────────────────────────────────────────
 function buildThumbs() {
-  var list = document.getElementById('thumbList');
-  IMAGE_NAMES.forEach(function(name, i) {
+  var list  = document.getElementById('thumbList');
+  list.innerHTML = '';
+  var files = getCurrentFiles();
+  files.forEach(function(file, i) {
     var img = document.createElement('img');
-    img.src = IMG_DIR + name + '.jpg';
-    img.className = 'imgthumb'; img.title = name;
+    img.src = getImgDir() + file;
+    img.className = 'imgthumb'; img.title = file;
     img.onclick = (function(ii){ return function(){ loadImage(ii); }; })(i);
     list.appendChild(img);
   });
 }
+
 function updateThumbs() {
   var thumbs = document.getElementById('thumbList').querySelectorAll('img');
-  IMAGE_NAMES.forEach(function(name, i) {
+  var files  = getCurrentFiles();
+  files.forEach(function(file, i) {
+    var key = imgKey(file);
     thumbs[i].className = 'imgthumb' +
-      (i === idx                        ? ' active' : '') +
-      (gt[name] && !gt[name]._skip      ? ' done'   : '') +
-      (gt[name] &&  gt[name]._skip      ? ' skip'   : '');
+      (i === idx                       ? ' active' : '') +
+      (gt[key] && !gt[key]._skip       ? ' done'   : '') +
+      (gt[key] &&  gt[key]._skip       ? ' skip'   : '');
   });
 }
+
 function updateProgress() {
-  var done = 0;
-  IMAGE_NAMES.forEach(function(n){ if (gt[n] && !gt[n]._skip) done++; });
-  document.getElementById('progress').textContent = done+' / '+IMAGE_NAMES.length+' annotated';
+  var files = getCurrentFiles();
+  var done  = 0;
+  files.forEach(function(file){ var k = imgKey(file); if (gt[k] && !gt[k]._skip) done++; });
+  document.getElementById('progress').textContent = done + ' / ' + files.length + ' annotated';
+}
+
+// ── Data merge ────────────────────────────────────────────────────────────────
+function mergeFromFetch(data) {
+  // Metadata
+  if (data._version) gtMeta._version = data._version;
+  if (data._note)    gtMeta._note    = data._note;
+  if (data._sets)    gtMeta._sets    = data._sets;
+  // Annotations — localStorage wins (it may have newer edits)
+  for (var k in data) {
+    if (k.startsWith('_')) continue;
+    if (!gt[k]) gt[k] = data[k];
+  }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-buildThumbs(); updateProgress();
-var start = 0;
-while (start < IMAGE_NAMES.length-1 && gt[IMAGE_NAMES[start]] && !gt[IMAGE_NAMES[start]]._skip) start++;
-loadImage(start);
+// 1. Load localStorage
+try { gt = JSON.parse(localStorage.getItem('aeye_gt') || '{}'); } catch(e) { gt = {}; }
+
+// 2. Fetch committed gt-data.json and merge
+fetch('ground-truth/gt-data.json')
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    mergeFromFetch(data);
+    persistGT();
+    console.log('[GT-BOOT] Loaded', Object.keys(data).filter(function(k){return !k.startsWith('_');}).length,
+                'entries from gt-data.json');
+  })
+  .catch(function(e){ console.warn('[GT-BOOT] Could not fetch gt-data.json:', e.message); })
+  .finally(function() {
+    buildThumbs();
+    updateProgress();
+    var files = getCurrentFiles();
+    var start = 0;
+    while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
+    loadImage(start);
+  });
 </script>
 </body>
 </html>
