@@ -1304,6 +1304,13 @@ function _tryCloseupFit() {
   // When mpZoomHint is absent (MediaPipe found no face at all — Jeri-type),
   // sweep multiple y-positions across the image to locate the eye.
   // Uses _scleraPairScan() — the bilateral sclera brightness detector.
+  //
+  // _mpHintHadEyeW: true when the hint came from the 1-eye gate (canthus
+  // midpoint, eyeW>0). Probe-based cx-mismatch and irisR floor must NOT fire
+  // in that case — the probe irisR reflects the true iris size in the full
+  // portrait (too large for the zoom pad) and the canthus midX is not a
+  // reliable iris-centre reference for sclera-pair validation.
+  var _mpHintHadEyeW = !!(mpZoomHint && mpZoomHint.eyeW > 0);
   if (!mpZoomHint || !mpZoomHint._fromBand) {
     var _swSweep, _swH = originalImgEl.height;
     if (mpZoomHint && mpZoomHint.midY > 0) {
@@ -1343,7 +1350,10 @@ function _tryCloseupFit() {
         // Reference radius: RIP radius if available, else autoFit probe estimate.
         // Both are more reliable for scale than the sclera-pair's own r.
         var _refR = _swRipR > 0 ? _swRipR : _probeIrisR;
-        var _swCxDelta = (_refR > 0 && mpZoomHint && mpZoomHint.midX > 0) ?
+        // cx-mismatch only validated against MACRO-GUARD centres (eyeW=0).
+        // 1-eye gate hints (eyeW>0) are canthus midpoints, not iris centres —
+        // comparing sclera-pair cx to a canthus midpoint is unreliable.
+        var _swCxDelta = (_refR > 0 && !_mpHintHadEyeW && mpZoomHint && mpZoomHint.midX > 0) ?
                          Math.abs(_swBest.cx - mpZoomHint.midX) : 0;
         if (_swCxDelta > 0 && _swCxDelta > _refR * 0.25) {
           // cx-mismatch: sclera-pair hit a false structure.
@@ -1378,7 +1388,12 @@ function _tryCloseupFit() {
   // MACRO-GUARD hint at all).  Floor = 50% of the probe's irisR estimate.
   // pad = irisR×3.0 in zoomToEye, so a tiny irisR collapses the crop to almost
   // just the iris and breaks the downstream detection cascade.
-  if (mpZoomHint && mpZoomHint._fromBand && _probeIrisR > 0 &&
+  //
+  // NOT applied for 1-eye gate paths (_mpHintHadEyeW): the probe's irisR equals
+  // the TRUE iris radius in the full close-up portrait and is correct for
+  // colour analysis, but is too large for the zoom pad — the sclera-pair's
+  // smaller r gives a tighter, useful crop for those images.
+  if (!_mpHintHadEyeW && mpZoomHint && mpZoomHint._fromBand && _probeIrisR > 0 &&
       mpZoomHint.irisR < _probeIrisR * 0.50) {
     console.log('[BAND] irisR sanity floor: hint.irisR=' + mpZoomHint.irisR +
                 ' < probeR×0.5=' + Math.round(_probeIrisR * 0.50) +
