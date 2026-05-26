@@ -2246,17 +2246,20 @@ function zoomToEye(skipSanityCheck) {
                         ' (shift='+Math.round(_tbNewCy-niCy)+'px)');
           }
         }
-        // X-correction for X-RECENTER path: T-bar asymmetry corrects any niCx error.
+        // X-correction: T-bar asymmetry corrects any niCx error.
         // Formula: iris_cx = niCx + (rightAvg − leftAvg) / 2
-        // Not applicable in band mode (X-RECENTER skipped; niCx from BAND is correct).
+        // Applied when X-RECENTER fired (pupil used as centre, niCx is off).
+        // Also applied when _probeFloorFired: sclera-pair gave a false inner-
+        // corner hit (irisR=199), meaning its CENTRE is also unreliable.
+        // The T-BAR L/R asymmetry gives the true iris geometric centre directly.
         var _tbCx = niCx;
-        if(_xRecenterFired && _tbRavg>0 && _tbLavg>0){
+        if((_xRecenterFired || _probeFloorFired) && _tbRavg>0 && _tbLavg>0){
           var _xCorr = (_tbRavg - _tbLavg) / 2;
           _tbCx = niCx + Math.max(-iR*0.30, Math.min(iR*0.30, _xCorr));
           if(Math.abs(_xCorr)>2){
             console.log('[T-BAR] X-CORRECT: niCx='+Math.round(niCx)+' R='+Math.round(_tbRavg)+
                         ' L='+Math.round(_tbLavg)+' xCorr='+Math.round(_xCorr)+
-                        ' → cx='+Math.round(_tbCx));
+                        ' → cx='+Math.round(_tbCx)+((_probeFloorFired)?' (probeFloor)':''));
           }
         }
         // Centre is always corrected (T-bar gives better centre than CASCADE).
@@ -2279,7 +2282,11 @@ function zoomToEye(skipSanityCheck) {
           _irCxB=_tbCx; _irCyB=_tbNewCy;
           _irCxLo=_tbCx-25; _irCxHi=_tbCx+25;
           _irCyLo=_tbNewCy-25; _irCyHi=_tbNewCy+25;
-          // _rayUsed stays false → ITER-REFINE runs.
+          // _rayUsed stays false → ITER-REFINE runs from corrected centre.
+          // ProbeFloor: the cascade radius (466) was measured from the wrong centre
+          // (1453). From the corrected centre (1392), 466 is well INSIDE the true
+          // limbus (525). ITER-REFINE Phase 2 will expand from 466 to ~525.
+          // BAND-FLOOR-RESCUE is gated off for probeFloorFired (see below).
           console.log('[T-BAR] BAND-CENTRE: cx='+Math.round(donut.cx)+
                       ' cy='+Math.round(donut.cy)+
                       ' rStart='+Math.round(donut.rIris/nsx)+
@@ -2349,14 +2356,21 @@ function zoomToEye(skipSanityCheck) {
       }
       // Phase 2: FIND-LIMBUS — step outward until sclera reappears, then step back.
       // Also fires when X-RECENTER corrected a severely mis-centred cascade.
+      // Also fires when _probeFloorFired: the corrected centre (1392) is inside the iris
+      // at rStart=466, so Phase 1 took 0 steps. Phase 2 must expand from 466 → ~525.
       // Does NOT fire after Phase 1b.
-      if ((_irP1n > 0 || (_xRecenterFired && _irCurrFrac < _irSCL_THRESH)) && !_irP1bFired) {
+      if ((_irP1n > 0 || _probeFloorFired || (_xRecenterFired && _irCurrFrac < _irSCL_THRESH)) && !_irP1bFired) {
+        var _irRBefore2 = _irRB;
         var _irP2n = 0;
         while (_irRB < _irCeil && _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi) < _irSCL_THRESH && _irP2n < 60) {
           _irRB += 2; _irP2n++;
         }
         if (_irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptHi) > _irSCL_THRESH) {
           _irRB = Math.max(_irFlr, _irRB - 2);
+        }
+        if (_irP2n > 0) {
+          console.log('[ITER-REFINE] P2 FIND-LIMBUS: ' + Math.round(_irRBefore2) + '→' + Math.round(_irRB) +
+                      ' (' + _irP2n + ' steps)' + (_probeFloorFired ? ' [probeFloor]' : ''));
         }
       }
       // Band-mode floor rescue: if all phases still leave the ring ≥ 20% above the
@@ -2376,7 +2390,12 @@ function zoomToEye(skipSanityCheck) {
       // When P1bN === 0: Lo threshold is ALSO completely blind far from the limbus —
       //   BAND dramatically overestimated AND thresholds can't see sclera at all.
       //   The floor (iR×0.72) is the best available limbus estimate — rescue it.
-      if (_isFromBand && _irRB > _irFlr * 1.20 &&
+      // BAND-FLOOR-RESCUE is suppressed when _probeFloorFired: the T-BAR X-correction
+      // has already placed the ring at the true iris geometric centre, and the starting
+      // radius is the cascade value (466) from that corrected centre — which is well
+      // inside the true limbus (525). ITER-REFINE will expand to the limbus from there.
+      // Rescue would incorrectly force it down to the 72% floor (380px).
+      if (_isFromBand && !_probeFloorFired && _irRB > _irFlr * 1.20 &&
           (_irP1n >= 5 || (_irStartFrac === 0 && _irP1bN === 0))) {
         console.log('[ITER-REFINE] BAND-FLOOR-RESCUE: r=' + Math.round(_irRB) +
                     ' > floor×1.20=' + Math.round(_irFlr * 1.20) +
@@ -2405,17 +2424,14 @@ function zoomToEye(skipSanityCheck) {
       // reliably-detected pupil centre, move the iris centre toward the pupil.
       // Only runs in BAND/close-up mode where zPupil is accurate.
       //
-      // When _probeFloorFired (sclera-pair gave a false inner-corner hit), the
-      // CASCADE CENTRE is also unreliable.  Use a 5% trigger and correct FULLY
-      // to the pupil anchor (frac=1.0).  The CASCADE RADIUS (from ITER-REFINE)
-      // is kept — it was measured from the CASCADE centre and approximates the
-      // true limbus radius.  Expanding from the pupil anchor is unreliable
-      // because the limbus appears at varying distances from the pupil (the
-      // limbus is a circle centred on the iris, not the pupil).
+      // NOT run when _probeFloorFired: the T-BAR X-correction already computed
+      // the true iris geometric centre from the L/R asymmetry, and promoted the
+      // T-BAR symmetric radius as the ITER-REFINE start.  PCC would incorrectly
+      // move the correctly-placed ring centre to the pupil anchor.
       //
       // Normal BAND (sclera-pair centre reliable): threshold=20%, leave 10%
       // residual, then expand the ring to sclera from the corrected centre.
-      if (_isFromBand && zPupil) {
+      if (_isFromBand && zPupil && !_probeFloorFired) {
         var _pccIrX    = (donut.cx - drawInfo.dx) / nsx;
         var _pccIrY    = (donut.cy - drawInfo.dy) / nsy;
         var _pccDx     = _pccIrX - zPupil.cx;
