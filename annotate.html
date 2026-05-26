@@ -18,6 +18,12 @@ body { background: #0e0e0e; color: #ddd; font-family: monospace; display: flex;
 #imgLabel  { font-size: 12px; color: #fa0; flex: 1; min-width: 0;
              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #progress  { font-size: 11px; color: #888; white-space: nowrap; }
+#gh-status { font-size: 11px; white-space: nowrap; cursor: pointer;
+             padding: 2px 7px; border-radius: 10px; border: 1px solid transparent; }
+#gh-status.none   { color: #fa0; border-color: #5a3a00; background: #2a1a00; }
+#gh-status.syncing{ color: #aaa; border-color: #444;    background: #222; }
+#gh-status.ok     { color: #4f4; border-color: #1a4a1a; background: #0e2a0e; }
+#gh-status.err    { color: #f88; border-color: #5c1a1a; background: #2a0e0e; }
 
 /* Set selector */
 #setSelector { display: flex; gap: 4px; }
@@ -28,7 +34,6 @@ body { background: #0e0e0e; color: #ddd; font-family: monospace; display: flex;
 
 /* ── Main layout ── */
 #main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
-
 #canvasWrap { flex: 1; display: flex; align-items: center; justify-content: center;
               background: #111; overflow: hidden; min-width: 0; min-height: 0; }
 canvas { image-rendering: pixelated; display: block;
@@ -53,85 +58,85 @@ canvas { image-rendering: pixelated; display: block;
 .section { background: #222; border-radius: 6px; padding: 10px; }
 .section h3 { font-size: 11px; color: #888; text-transform: uppercase;
               letter-spacing: 1px; margin-bottom: 8px; }
-
-#instrBox { font-size: 12px; color: #4f4; line-height: 1.6; white-space: pre-wrap; }
-#instrBox.warn { color: #fa0; }
-
+#instrBox { font-size: 11px; color: #4f4; line-height: 1.6; white-space: pre-wrap; }
 .val { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
 .val span:first-child { color: #888; }
 .val span:last-child  { color: #cfc; }
-
 .btn { width: 100%; padding: 7px; border: none; border-radius: 5px;
        font-size: 12px; font-family: monospace; cursor: pointer;
        -webkit-tap-highlight-color: transparent; }
-.btn-green  { background: #1a5c1a; color: #8f8; }
-.btn-blue   { background: #1a3a5c; color: #88f; }
-.btn-red    { background: #5c1a1a; color: #f88; }
-.btn-gray   { background: #333;    color: #aaa; }
-
-#algoBox { font-size: 11px; color: #666; line-height: 1.6; white-space: pre; }
+.btn-green { background: #1a5c1a; color: #8f8; }
+.btn-blue  { background: #1a3a5c; color: #88f; }
+.btn-red   { background: #5c1a1a; color: #f88; }
+.btn-gray  { background: #333;    color: #aaa; }
+#algoBox { font-size: 11px; color: #666; line-height: 1.5; white-space: pre; }
 #noteBox { width:100%; background:#111; color:#ccc; border:1px solid #444;
            border-radius:4px; padding:5px; font-family:monospace; font-size:11px;
            resize:vertical; height:48px; }
-
 .imglist { display: flex; flex-wrap: wrap; gap: 4px; }
 .imgthumb { width: 36px; height: 27px; border: 2px solid #444; border-radius: 3px;
-            cursor: pointer; object-fit: cover;
-            -webkit-tap-highlight-color: transparent; }
+            cursor: pointer; object-fit: cover; -webkit-tap-highlight-color: transparent; }
 .imgthumb.done   { border-color: #4a4; }
 .imgthumb.active { border-color: #fa0; }
 .imgthumb.skip   { border-color: #555; opacity: .5; }
-
 #exportWrap { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
 #saveStatus { font-size: 10px; color: #4f4; text-align: center; min-height: 14px; }
 
-/* ── Mobile layout (portrait phones) ── */
+/* ── GitHub setup overlay ── */
+#gh-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+              display: flex; align-items: center; justify-content: center;
+              z-index: 100; padding: 20px; }
+#gh-overlay.hidden { display: none; }
+#gh-panel { background: #1a1a1a; border: 1px solid #444; border-radius: 10px;
+            padding: 22px; max-width: 420px; width: 100%; }
+#gh-panel h2 { font-size: 15px; color: #fff; margin-bottom: 12px; }
+#gh-panel p  { font-size: 12px; color: #aaa; line-height: 1.6; margin-bottom: 10px; }
+#gh-panel ol { font-size: 12px; color: #aaa; padding-left: 18px; line-height: 1.8; margin-bottom: 14px; }
+#gh-panel ol li strong { color: #4cf; }
+#gh-token-input { width: 100%; background: #111; color: #cfc; border: 1px solid #444;
+                  border-radius: 5px; padding: 9px; font-family: monospace; font-size: 12px;
+                  margin-bottom: 10px; }
+#gh-token-input::placeholder { color: #555; }
+.gh-btn-row { display: flex; gap: 8px; }
+.gh-btn { flex: 1; padding: 9px; border: none; border-radius: 5px; cursor: pointer;
+          font-family: monospace; font-size: 12px; }
+.gh-btn-primary { background: #1a5c1a; color: #8f8; }
+.gh-btn-secondary { background: #333; color: #aaa; }
+#gh-panel-status { font-size: 11px; margin-top: 8px; min-height: 16px; color: #fa0; }
+.gh-link { color: #4cf; text-decoration: underline; }
+
+/* ── Mobile layout ── */
 @media (max-width: 768px) {
-  /* Compact topbar: title + sets on one row, label fills second row */
   #topbar { padding: 5px 10px; gap: 6px; }
   #topbar h1 { font-size: 13px; }
   #imgLabel  { order: 10; flex-basis: 100%; font-size: 11px; }
   #progress  { font-size: 10px; }
   .set-btn   { font-size: 10px; padding: 3px 8px; }
+  #gh-status { font-size: 10px; padding: 2px 6px; }
 
-  /* Stack canvas on top, controls below */
   #main { flex-direction: column; }
-
   #canvasWrap { flex: 1; min-height: 0; }
 
-  /* Sidebar becomes a flat bottom strip */
-  #sidebar {
-    width: 100%;
-    height: auto;
-    flex-shrink: 0;
-    border-left: none;
-    border-top: 1px solid #444;
-    padding: 7px 10px;
-    gap: 6px;
-    overflow-y: visible;
-    flex-direction: column;
-  }
+  #sidebar { width: 100%; height: auto; flex-shrink: 0;
+             border-left: none; border-top: 1px solid #444;
+             padding: 7px 10px; gap: 6px; overflow-y: visible; flex-direction: column; }
 
-  /* Hide desktop-only sections on mobile */
+  /* Hide desktop-only sections */
   .section { display: none; }
 
-  /* Always show circle tabs */
+  /* Circle tabs — always visible, large targets */
   #circleSelect { display: flex; }
   .circ-tab { padding: 11px 4px; font-size: 14px; }
 
-  /* Always show action row */
+  /* Action row — always visible */
   #exportWrap { display: flex; flex-direction: row; gap: 6px; margin-top: 0; }
-  #exportWrap .btn-red   { flex: 0 0 72px; width: auto; padding: 10px 0; font-size: 13px; }
+  #exportWrap .btn-red   { flex: 0 0 66px; width: auto; padding: 10px 0; font-size: 13px; }
   #exportWrap .btn-green { flex: 1; padding: 10px; font-size: 14px; }
-
-  /* Hide less-critical export buttons on mobile — keep only confirm+skip */
-  #exportWrap .btn-blue,
-  #exportWrap .btn-gray { display: none; }
-
+  #exportWrap .btn-blue, #exportWrap .btn-gray { display: none; }
   #saveStatus { font-size: 9px; }
 
-  /* Thumbnail strip: horizontal scroll */
-  #thumbSection { display: block !important; padding: 5px 0; }
+  /* Thumbnails: horizontal strip */
+  #thumbSection { display: block !important; padding: 4px 0; }
   #thumbSection h3 { display: none; }
   .imglist { flex-wrap: nowrap; overflow-x: auto; gap: 5px;
              -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
@@ -141,12 +146,33 @@ canvas { image-rendering: pixelated; display: block;
 </head>
 <body>
 
+<!-- GitHub setup overlay -->
+<div id="gh-overlay" class="hidden">
+  <div id="gh-panel">
+    <h2>🔗 Connect to GitHub</h2>
+    <p>Every annotation will auto-commit to the repo — no file-sending needed, works from any device.</p>
+    <ol>
+      <li>Open: <a class="gh-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank">github.com → Settings → Personal access tokens → Fine-grained</a></li>
+      <li>Repository: <strong>Bdavis-aEYE-D / aEYE-D-Prototype</strong></li>
+      <li>Permissions: <strong>Contents → Read and write</strong></li>
+      <li>Generate and paste below:</li>
+    </ol>
+    <input type="password" id="gh-token-input" placeholder="github_pat_…" autocomplete="off">
+    <div class="gh-btn-row">
+      <button class="gh-btn gh-btn-primary"    onclick="saveGhToken()">Save &amp; Connect</button>
+      <button class="gh-btn gh-btn-secondary"  onclick="closeSetup()">Skip (local only)</button>
+    </div>
+    <div id="gh-panel-status"></div>
+  </div>
+</div>
+
 <div id="topbar">
   <h1>GT Annotator</h1>
   <div id="setSelector">
     <button class="set-btn active-set" id="btn-set-test"   onclick="switchSet('test-images')">Test Images</button>
     <button class="set-btn"            id="btn-set-ubiris" onclick="switchSet('ubiris-check')">UBIRIS v2</button>
   </div>
+  <span id="gh-status" class="none" onclick="openSetup()" title="Tap to configure GitHub sync">📴 Local only</span>
   <span id="imgLabel">—</span>
   <span id="progress">0 / 0 annotated</span>
 </div>
@@ -155,23 +181,19 @@ canvas { image-rendering: pixelated; display: block;
   <div id="canvasWrap"><canvas id="c"></canvas></div>
 
   <div id="sidebar">
-
-    <!-- Circle selector — always visible -->
     <div id="circleSelect">
       <div class="circ-tab iris active" id="tab-iris"  onclick="selectCircle('iris')">🔵 IRIS</div>
       <div class="circ-tab pupil"       id="tab-pupil" onclick="selectCircle('pupil')">🟠 PUPIL</div>
     </div>
 
-    <!-- Desktop: instructions -->
     <div class="section">
       <h3>Instructions</h3>
       <div id="instrBox">—</div>
     </div>
 
-    <!-- Desktop: active circle values -->
     <div class="section">
       <h3 id="valTitle">Iris values</h3>
-      <div class="val"><span>Center</span>     <span id="vCx">—</span></div>
+      <div class="val"><span>Center</span><span id="vCx">—</span></div>
       <div class="val"><span>Radius (px)</span><span id="vR">—</span></div>
       <div style="display:flex;gap:4px;margin-top:6px">
         <button class="btn btn-gray" style="flex:1" onclick="placeNew()">Place New</button>
@@ -179,80 +201,179 @@ canvas { image-rendering: pixelated; display: block;
       </div>
     </div>
 
-    <!-- Desktop: other circle (read-only) -->
     <div class="section" style="opacity:0.55">
       <h3 id="otherTitle">Pupil values</h3>
-      <div class="val"><span>Center</span>     <span id="vOtherCx">—</span></div>
+      <div class="val"><span>Center</span><span id="vOtherCx">—</span></div>
       <div class="val"><span>Radius (px)</span><span id="vOtherR">—</span></div>
     </div>
 
-    <!-- Desktop: algorithm result -->
     <div class="section">
       <h3>Algorithm result</h3>
       <div id="algoBox">—</div>
     </div>
 
-    <!-- Desktop: notes -->
     <div class="section">
       <h3>Notes</h3>
       <textarea id="noteBox" placeholder="Optional: occlusion, poor quality…"></textarea>
     </div>
 
-    <!-- Thumbnails — always shown (horizontal on mobile) -->
     <div class="section" id="thumbSection">
       <h3>Images</h3>
       <div class="imglist" id="thumbList"></div>
     </div>
 
-    <!-- Action buttons — always visible -->
     <div id="exportWrap">
       <div id="saveStatus"></div>
       <button class="btn btn-red"   onclick="skipImage()">Skip</button>
-      <button class="btn btn-green" onclick="saveAndNext()"
-              style="font-size:14px;padding:10px">✓ Confirm &amp; Next →</button>
-      <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">Export ground-truth.json</button>
-      <button class="btn btn-gray"  style="margin-top:2px" onclick="logJSON()">Log JSON to Console</button>
+      <button class="btn btn-green" onclick="saveAndNext()" style="font-size:14px;padding:10px">✓ Confirm &amp; Next →</button>
+      <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">Export gt-data.json</button>
+      <button class="btn btn-gray"  style="margin-top:2px" onclick="openSetup()">⚙ GitHub Settings</button>
     </div>
-
   </div>
 </div>
 
 <script src="/core/iris.js"></script>
 <script>
+// ── GitHub API config ─────────────────────────────────────────────────────────
+var GH_OWNER  = 'Bdavis-aEYE-D';
+var GH_REPO   = 'aEYE-D-Prototype';
+var GH_FILE   = 'ground-truth/gt-data.json';
+var GH_API    = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + '/contents/' + GH_FILE;
+var GH_BRANCH = 'main';
+
+var _ghSha    = null;  // current file SHA for conflict-free PUT
+var _ghReady  = false; // token present and verified
+
+function _ghToken() { return localStorage.getItem('aeyed_gh_token') || ''; }
+
+function _ghHeaders() {
+  var h = { 'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28' };
+  var t = _ghToken();
+  if (t) h['Authorization'] = 'Bearer ' + t;
+  return h;
+}
+
+// Safe base64 encode/decode for UTF-8 strings
+function _b64Enc(str) { return btoa(unescape(encodeURIComponent(str))); }
+function _b64Dec(b64) { return decodeURIComponent(escape(atob(b64.replace(/\s/g, '')))); }
+
+// ── GitHub: fetch remote gt-data.json and merge ───────────────────────────────
+function ghFetch() {
+  if (!_ghToken()) return Promise.resolve(null);
+  return fetch(GH_API + '?ref=' + GH_BRANCH + '&t=' + Date.now(), { headers: _ghHeaders() })
+    .then(function(r) {
+      if (r.status === 404) { _ghSha = null; return null; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      if (!data) return null;
+      _ghSha = data.sha;
+      var remote = JSON.parse(_b64Dec(data.content));
+      mergeFromFetch(remote);
+      persistGT();
+      return remote;
+    });
+}
+
+// ── GitHub: commit updated gt-data.json ──────────────────────────────────────
+function ghPush(commitMsg) {
+  if (!_ghToken()) return Promise.resolve({ ok: false, reason: 'no-token' });
+  var json    = JSON.stringify(buildExportObj(), null, 2);
+  var content = _b64Enc(json);
+  var body    = { message: commitMsg || 'GT annotation update',
+                  content: content, branch: GH_BRANCH };
+  if (_ghSha) body.sha = _ghSha;
+
+  return fetch(GH_API, {
+    method: 'PUT', headers: Object.assign({}, _ghHeaders(), { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  })
+  .then(function(r) {
+    if (r.status === 409) {
+      // Conflict — fetch latest SHA and retry once
+      return ghFetch().then(function() { return ghPush(commitMsg); });
+    }
+    if (!r.ok) return r.text().then(function(t) { throw new Error('HTTP ' + r.status + ': ' + t); });
+    return r.json();
+  })
+  .then(function(data) {
+    if (data && data.content) _ghSha = data.content.sha;
+    return { ok: true };
+  });
+}
+
+// ── GitHub status indicator ───────────────────────────────────────────────────
+function _setGhStatus(state, text) {
+  var el = document.getElementById('gh-status');
+  el.className = state; el.textContent = text;
+}
+
+// ── GitHub setup overlay ──────────────────────────────────────────────────────
+function openSetup() {
+  var el = document.getElementById('gh-overlay');
+  el.classList.remove('hidden');
+  var inp = document.getElementById('gh-token-input');
+  inp.value = _ghToken();
+  inp.focus();
+}
+function closeSetup() {
+  document.getElementById('gh-overlay').classList.add('hidden');
+  document.getElementById('gh-panel-status').textContent = '';
+}
+
+function saveGhToken() {
+  var token = document.getElementById('gh-token-input').value.trim();
+  if (!token) { document.getElementById('gh-panel-status').textContent = 'Paste your token first.'; return; }
+  var st = document.getElementById('gh-panel-status');
+  st.style.color = '#fa0'; st.textContent = '⟳ Verifying token…';
+  localStorage.setItem('aeyed_gh_token', token);
+
+  // Test the token by fetching the file
+  ghFetch()
+    .then(function(data) {
+      st.style.color = '#4f4';
+      st.textContent = '✓ Connected! Token saved.';
+      _ghReady = true;
+      _setGhStatus('ok', '✓ GitHub');
+      setTimeout(closeSetup, 1200);
+      buildThumbs(); updateProgress();
+      var files = getCurrentFiles(), start = 0;
+      while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
+      loadImage(start);
+    })
+    .catch(function(e) {
+      st.style.color = '#f88';
+      st.textContent = '✗ Failed: ' + e.message + '. Check token & permissions.';
+      localStorage.removeItem('aeyed_gh_token');
+    });
+}
+
+// Dismiss overlay on background click
+document.getElementById('gh-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSetup();
+});
+
 // ── Image Sets ────────────────────────────────────────────────────────────────
 var IMAGE_SETS = {
   'test-images': {
-    label: 'Test Images',
-    dir: '/test-images/',
+    label: 'Test Images', dir: '/test-images/',
     files: [
-      'Bryan Left Window Reflection.png',
-      'Bryan Left.png',
-      'Bryan Right Window Reflection.png',
-      'Bryan Right.png',
-      'Bryan.JPG',
-      'Carlie_Right_Iris.jpg',
-      'IMG_0496 Blake Right.jpeg',
-      'IMG_3091 Jeri Norden.jpg',
-      'IMG_3166 Bradley N.jpg',
-      'IMG_6410 Illiana Zoom.jpg',
-      'IMG_6410 Illiana.jpg',
-      'IMG_9119 Rachel Green Zoom.jpg',
-      'IMG_9119 Rachel Green.jpg',
+      'Bryan Left Window Reflection.png','Bryan Left.png',
+      'Bryan Right Window Reflection.png','Bryan Right.png',
+      'Bryan.JPG','Carlie_Right_Iris.jpg','IMG_0496 Blake Right.jpeg',
+      'IMG_3091 Jeri Norden.jpg','IMG_3166 Bradley N.jpg',
+      'IMG_6410 Illiana Zoom.jpg','IMG_6410 Illiana.jpg',
+      'IMG_9119 Rachel Green Zoom.jpg','IMG_9119 Rachel Green.jpg',
       'IMG_9924 Bryan Left.JPG',
-      'SBVPI_14_green_f15.jpg',
-      'SBVPI_15_brown_f32.jpg',
-      'SBVPI_19_blue_m21.jpg',
-      'SBVPI_1_brown_m28.jpg',
-      'SBVPI_2_blue_f28.jpg',
-      'SBVPI_4_grey_f75.jpg',
-      'SBVPI_7_green_m45.jpg',
-      'SBVPI_9_blue_m75.jpg',
-      'Terri 1.jpg'
+      'SBVPI_14_green_f15.jpg','SBVPI_15_brown_f32.jpg','SBVPI_19_blue_m21.jpg',
+      'SBVPI_1_brown_m28.jpg','SBVPI_2_blue_f28.jpg','SBVPI_4_grey_f75.jpg',
+      'SBVPI_7_green_m45.jpg','SBVPI_9_blue_m75.jpg','Terri 1.jpg'
     ]
   },
   'ubiris-check': {
-    label: 'UBIRIS v2',
-    dir: '/ubiris-check/',
+    label: 'UBIRIS v2', dir: '/ubiris-check/',
     files: [
       'C11_S1_I13.jpg','C112_S1_I8.jpg','C122_S1_I7.jpg','C155_S1_I9.jpg',
       'C204_S1_I13.jpg','C223_S1_I6.jpg','C307_S2_I11.jpg','C318_S2_I11.jpg',
@@ -265,162 +386,95 @@ var IMAGE_SETS = {
 
 var gtMeta = {
   _version: 2,
-  _note: 'Ground-truth iris ring placements. Keys are \'dir/filename\'. Add entries via annotate.html, then save this file to git.',
-  _sets: {
-    'test-images': 'Subject photos used for algorithm development and regression testing',
-    'ubiris-check': 'UBIRIS v2 close-up iris dataset samples'
-  }
+  _note: 'Ground-truth iris ring placements. Keys are \'dir/filename\'. Add entries via annotate.html.',
+  _sets: { 'test-images': 'Subject photos', 'ubiris-check': 'UBIRIS v2 samples' }
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
-var gt         = {};
-var currentSet = 'test-images';
-var idx        = 0;
-var imgEl      = null;
-var SCALE      = 1;
-var algoResult = null;
-
-var iris  = { cx: -1, cy: -1, r: -1 };
-var pupil = { cx: -1, cy: -1, r: -1 };
-
-var activeCircle = 'iris';   // 'iris' | 'pupil'
-
-// Mouse drag state
-var drag     = null;
-var EDGE_TOL = 18;  // display pixels (same as app.js)
-
-// Touch state (mirrors app.js exactly)
-var pinchStart     = null;   // { dist, r }
-var touchDragPend  = null;   // { clientX0, clientY0, canvasX, canvasY, committed, startCx, startCy }
-var TOUCH_COMMIT   = 8;      // px before locking into drag
+var gt          = {};
+var currentSet  = 'test-images';
+var idx         = 0;
+var imgEl       = null;
+var SCALE       = 1;
+var algoResult  = null;
+var iris        = { cx: -1, cy: -1, r: -1 };
+var pupil       = { cx: -1, cy: -1, r: -1 };
+var activeCircle = 'iris';
+var drag         = null;
+var EDGE_TOL     = 18;
+var pinchStart   = null;
+var touchDragPend = null;
+var TOUCH_COMMIT  = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getCurrentFiles() { return IMAGE_SETS[currentSet].files; }
 function getImgDir()       { return IMAGE_SETS[currentSet].dir; }
 function imgKey(file)      { return currentSet + '/' + file; }
+function active()          { return activeCircle === 'iris' ? iris  : pupil; }
+function inactive()        { return activeCircle === 'iris' ? pupil : iris;  }
+function activeColor()     { return activeCircle === 'iris' ? '#3cf' : '#fc4'; }
+function inactiveColor()   { return activeCircle === 'iris' ? 'rgba(255,196,64,0.45)' : 'rgba(60,200,255,0.45)'; }
+function setRadius(r) {
+  if (activeCircle === 'iris') { iris.r = Math.max(4, r); }
+  else { pupil.r = Math.max(4, Math.min(r, iris.r > 0 ? iris.r * 0.92 : r)); }
+}
 
-// ── Canvas setup ──────────────────────────────────────────────────────────────
+function canvasPt(clientX, clientY) {
+  var r = canvas.getBoundingClientRect();
+  return { x: (clientX - r.left) / SCALE, y: (clientY - r.top) / SCALE };
+}
+function distPt(ax, ay, bx, by) {
+  var dx = bx-ax, dy = by-ay; return Math.sqrt(dx*dx+dy*dy);
+}
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
 var canvas = document.getElementById('c');
 var ctx    = canvas.getContext('2d');
 
-// ── Coordinate helpers ────────────────────────────────────────────────────────
-// Convert a client (CSS-px) point to image/canvas px, accounting for CSS scaling.
-function canvasPt(clientX, clientY) {
-  var r = canvas.getBoundingClientRect();
-  // SCALE = canvas.style size / canvas.width — same formula used throughout
-  return { x: (clientX - r.left) / SCALE, y: (clientY - r.top) / SCALE };
-}
-
-function distPt(ax, ay, bx, by) {
-  var dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy);
-}
-
-// ── Active circle accessors ───────────────────────────────────────────────────
-function active()        { return activeCircle === 'iris' ? iris  : pupil; }
-function inactive()      { return activeCircle === 'iris' ? pupil : iris;  }
-function activeColor()   { return activeCircle === 'iris' ? '#3cf' : '#fc4'; }
-function inactiveColor() { return activeCircle === 'iris' ? 'rgba(255,196,64,0.45)' : 'rgba(60,200,255,0.45)'; }
-
-function setRadius(r) {
-  // Clamp: iris min 4, pupil min 4 and must be < iris radius
-  var obj = active();
-  if (activeCircle === 'iris') {
-    obj.r = Math.max(4, r);
-  } else {
-    obj.r = Math.max(4, Math.min(r, iris.r > 0 ? iris.r * 0.92 : r));
-  }
-}
-
-// ── Mouse events ──────────────────────────────────────────────────────────────
+// Mouse
 canvas.addEventListener('mousedown', function(ev) {
   if (ev.button !== 0) return;
-  var p   = canvasPt(ev.clientX, ev.clientY);
-  var obj = active();
-  var et  = EDGE_TOL / SCALE;
-
+  var p = canvasPt(ev.clientX, ev.clientY), obj = active(), et = EDGE_TOL / SCALE;
   if (obj.r > 0) {
     var d = distPt(p.x, p.y, obj.cx, obj.cy);
-    if (Math.abs(d - obj.r) <= et) {
-      drag = { type: 'resize', startCx: obj.cx, startCy: obj.cy };
-      ev.preventDefault(); return;
-    }
-    if (d < obj.r - et) {
-      drag = { type: 'move', startMx: p.x, startMy: p.y, startCx: obj.cx, startCy: obj.cy };
-      ev.preventDefault(); return;
-    }
+    if (Math.abs(d - obj.r) <= et) { drag = { type:'resize', startCx:obj.cx, startCy:obj.cy }; ev.preventDefault(); return; }
+    if (d < obj.r - et)            { drag = { type:'move', startMx:p.x, startMy:p.y, startCx:obj.cx, startCy:obj.cy }; ev.preventDefault(); return; }
   }
-  // Outside or no circle — draw fresh
   obj.cx = p.x; obj.cy = p.y; obj.r = 2;
-  drag = { type: 'draw', startCx: p.x, startCy: p.y };
-  ev.preventDefault();
+  drag = { type:'draw', startCx:p.x, startCy:p.y }; ev.preventDefault();
 });
-
 canvas.addEventListener('mousemove', function(ev) {
-  var p   = canvasPt(ev.clientX, ev.clientY);
-  var obj = active();
-
+  var p = canvasPt(ev.clientX, ev.clientY), obj = active();
   if (drag) {
-    if (drag.type === 'move') {
-      obj.cx = drag.startCx + (p.x - drag.startMx);
-      obj.cy = drag.startCy + (p.y - drag.startMy);
-    } else {
-      setRadius(Math.max(2, distPt(drag.startCx, drag.startCy, p.x, p.y)));
-    }
+    if (drag.type === 'move') { obj.cx = drag.startCx + (p.x - drag.startMx); obj.cy = drag.startCy + (p.y - drag.startMy); }
+    else { setRadius(Math.max(2, distPt(drag.startCx, drag.startCy, p.x, p.y))); }
     updateUI(); draw(); return;
   }
-
-  // Cursor feedback
   if (obj.r > 0) {
-    var d  = distPt(p.x, p.y, obj.cx, obj.cy);
-    var et = EDGE_TOL / SCALE;
-    canvas.style.cursor = Math.abs(d - obj.r) <= et ? 'ew-resize' :
-                          d < obj.r - et            ? 'move'      : 'crosshair';
-  } else {
-    canvas.style.cursor = 'crosshair';
-  }
+    var d = distPt(p.x, p.y, obj.cx, obj.cy), et = EDGE_TOL / SCALE;
+    canvas.style.cursor = Math.abs(d-obj.r)<=et ? 'ew-resize' : d<obj.r-et ? 'move' : 'crosshair';
+  } else { canvas.style.cursor = 'crosshair'; }
   draw();
 });
-
 canvas.addEventListener('mouseup',    function() { drag = null; });
 canvas.addEventListener('mouseleave', function() { drag = null; });
 
-// ── Touch events (mirrors app.js model exactly) ───────────────────────────────
-//
-//  1 finger tap  → snap active circle center to tap point (keep radius)
-//  1 finger drag → move active circle after TOUCH_COMMIT px threshold
-//                  (bail if primarily vertical — iOS scroll intent)
-//  2 fingers     → pinch-resize + track midpoint as center
-//  touchcancel   → iOS claimed scroll — discard cleanly
-
+// Touch (exact model from app.js)
 canvas.addEventListener('touchstart', function(ev) {
   if (ev.touches.length === 2) {
-    // Two-finger pinch: claim immediately, never scrolls
     ev.preventDefault();
     touchDragPend = null; drag = null;
     var t0 = ev.touches[0], t1 = ev.touches[1];
-    var mx = (t0.clientX + t1.clientX) / 2;
-    var my = (t0.clientY + t1.clientY) / 2;
-    var mid = canvasPt(mx, my);
-    var obj = active();
-    obj.cx = mid.x; obj.cy = mid.y;
-    pinchStart = {
-      dist: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
-      r: obj.r > 0 ? obj.r : 60
-    };
+    var mid = canvasPt((t0.clientX+t1.clientX)/2, (t0.clientY+t1.clientY)/2);
+    var obj = active(); obj.cx = mid.x; obj.cy = mid.y;
+    pinchStart = { dist: Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY), r: obj.r > 0 ? obj.r : 60 };
     updateUI(); draw();
-
   } else if (ev.touches.length === 1) {
-    // Single finger — record start but don't move yet (scroll safety)
     pinchStart = null; drag = null;
     var p = canvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
     var obj = active();
-    touchDragPend = {
-      clientX0: ev.touches[0].clientX,
-      clientY0: ev.touches[0].clientY,
-      canvasX:  p.x, canvasY: p.y,
-      startCx:  obj.cx, startCy: obj.cy,
-      committed: false
-    };
+    touchDragPend = { clientX0: ev.touches[0].clientX, clientY0: ev.touches[0].clientY,
+                      canvasX: p.x, canvasY: p.y, startCx: obj.cx, startCy: obj.cy, committed: false };
   }
 }, { passive: false });
 
@@ -428,28 +482,20 @@ canvas.addEventListener('touchmove', function(ev) {
   if (ev.touches.length === 2 && pinchStart) {
     ev.preventDefault();
     var t0 = ev.touches[0], t1 = ev.touches[1];
-    var mx  = (t0.clientX + t1.clientX) / 2;
-    var my  = (t0.clientY + t1.clientY) / 2;
-    var mid = canvasPt(mx, my);
-    var obj = active();
-    obj.cx = mid.x; obj.cy = mid.y;
-    setRadius(pinchStart.r * (Math.hypot(t1.clientX - t0.clientX,
-                                         t1.clientY - t0.clientY) / pinchStart.dist));
+    var mid = canvasPt((t0.clientX+t1.clientX)/2, (t0.clientY+t1.clientY)/2);
+    var obj = active(); obj.cx = mid.x; obj.cy = mid.y;
+    setRadius(pinchStart.r * (Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY) / pinchStart.dist));
     updateUI(); draw();
-
   } else if (ev.touches.length === 1 && touchDragPend) {
     var mdx = ev.touches[0].clientX - touchDragPend.clientX0;
     var mdy = ev.touches[0].clientY - touchDragPend.clientY0;
-    var moved = Math.hypot(mdx, mdy);
-
     if (!touchDragPend.committed) {
-      if (moved < TOUCH_COMMIT) return;
-      // Primarily vertical → likely a page scroll; bail cleanly
+      if (Math.hypot(mdx,mdy) < TOUCH_COMMIT) return;
       if (Math.abs(mdy) > Math.abs(mdx) * 1.8) { touchDragPend = null; return; }
       touchDragPend.committed = true;
     }
-    ev.preventDefault();  // lock in canvas drag
-    var p   = canvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
+    ev.preventDefault();
+    var p = canvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
     var obj = active();
     obj.cx = touchDragPend.startCx + (p.x - touchDragPend.canvasX);
     obj.cy = touchDragPend.startCy + (p.y - touchDragPend.canvasY);
@@ -460,360 +506,279 @@ canvas.addEventListener('touchmove', function(ev) {
 canvas.addEventListener('touchend', function(ev) {
   if (ev.touches.length < 2) pinchStart = null;
   if (ev.touches.length === 0) {
-    // Quick tap (never committed) → snap center to tap point, keep radius
     if (touchDragPend && !touchDragPend.committed) {
-      var obj = active();
-      obj.cx = touchDragPend.canvasX;
-      obj.cy = touchDragPend.canvasY;
-      if (obj.r <= 0) obj.r = 60;  // default radius on first tap
+      var obj = active(); obj.cx = touchDragPend.canvasX; obj.cy = touchDragPend.canvasY;
+      if (obj.r <= 0) obj.r = 60;
       updateUI(); draw();
     }
     drag = null; touchDragPend = null;
   }
 });
+canvas.addEventListener('touchcancel', function() { pinchStart = null; drag = null; touchDragPend = null; });
 
-canvas.addEventListener('touchcancel', function() {
-  // iOS claimed a scroll gesture — discard without snapping
-  pinchStart = null; drag = null; touchDragPend = null;
-});
-
-// Keyboard shortcuts (desktop)
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'i' || e.key === 'I') selectCircle('iris');
-  if (e.key === 'p' || e.key === 'P') selectCircle('pupil');
+  if (e.key==='i'||e.key==='I') selectCircle('iris');
+  if (e.key==='p'||e.key==='P') selectCircle('pupil');
 });
 
-// ── Drawing ───────────────────────────────────────────────────────────────────
+// ── Draw ──────────────────────────────────────────────────────────────────────
 function draw() {
   if (!imgEl) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(imgEl, 0, 0);
-
-  // Algorithm overlay — dim dashed
   if (algoResult && algoResult.ok) {
-    var aCx  = algoResult.cxFrac  * canvas.width;
-    var aCy  = algoResult.cyFrac  * canvas.height;
+    var aCx  = algoResult.cxFrac * canvas.width, aCy = algoResult.cyFrac * canvas.height;
     var aPCx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * canvas.width;
     var aPCy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * canvas.height;
-    drawCircle(aCx, aCy, algoResult.rIrisFrac * canvas.width, 'rgba(80,80,200,0.35)', 1.5, [5,4]);
-    if (algoResult.rPupilFrac)
-      drawCircle(aPCx, aPCy, algoResult.rPupilFrac * canvas.width, 'rgba(200,120,30,0.35)', 1.5, [5,4]);
+    drawCircle(aCx, aCy, algoResult.rIrisFrac*canvas.width, 'rgba(80,80,200,0.35)', 1.5, [5,4]);
+    if (algoResult.rPupilFrac) drawCircle(aPCx, aPCy, algoResult.rPupilFrac*canvas.width, 'rgba(200,120,30,0.35)', 1.5, [5,4]);
   }
-
   var act = active(), inact = inactive();
-
-  if (inact.r > 0)
-    drawCircle(inact.cx, inact.cy, inact.r, inactiveColor(), 0.8 / SCALE);
-
+  if (inact.r > 0) drawCircle(inact.cx, inact.cy, inact.r, inactiveColor(), 0.8/SCALE);
   if (act.r > 0) {
-    drawCircle(act.cx, act.cy, act.r, activeColor(), 1.2 / SCALE);
+    drawCircle(act.cx, act.cy, act.r, activeColor(), 1.2/SCALE);
     drawCross(act.cx, act.cy, activeColor());
-    ['E','W','N','S'].forEach(function(dir) {
-      var hx = act.cx + (dir==='E' ? act.r : dir==='W' ? -act.r : 0);
-      var hy = act.cy + (dir==='S' ? act.r : dir==='N' ? -act.r : 0);
-      drawHandle(hx, hy, activeColor());
+    ['E','W','N','S'].forEach(function(d) {
+      drawHandle(act.cx+(d==='E'?act.r:d==='W'?-act.r:0), act.cy+(d==='S'?act.r:d==='N'?-act.r:0), activeColor());
     });
-  } else if (act.cx >= 0) {
-    drawCross(act.cx, act.cy, activeColor());
-  }
+  } else if (act.cx >= 0) { drawCross(act.cx, act.cy, activeColor()); }
 }
-
 function drawCircle(cx, cy, r, color, lw, dash) {
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = color; ctx.lineWidth = lw || 2;
-  if (dash) ctx.setLineDash(dash);
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.strokeStyle=color; ctx.lineWidth=lw||2; if(dash) ctx.setLineDash(dash);
   ctx.stroke(); ctx.restore();
 }
 function drawCross(cx, cy, color) {
-  var s = 8 / SCALE;
-  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  var s=8/SCALE; ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.moveTo(cx-s,cy); ctx.lineTo(cx+s,cy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx,cy+s); ctx.stroke();
-  ctx.restore();
+  ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx,cy+s); ctx.stroke(); ctx.restore();
 }
 function drawHandle(x, y, color) {
-  var s = 6 / SCALE;  // slightly bigger for touch visibility
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2);
-  ctx.fillStyle = color; ctx.fill();
-  ctx.restore();
+  var s=6/SCALE; ctx.save(); ctx.beginPath(); ctx.arc(x,y,s,0,Math.PI*2);
+  ctx.fillStyle=color; ctx.fill(); ctx.restore();
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 function selectCircle(which) {
   activeCircle = which;
-  document.getElementById('tab-iris').className  = 'circ-tab iris'  + (which==='iris'  ? ' active':'');
-  document.getElementById('tab-pupil').className = 'circ-tab pupil' + (which==='pupil' ? ' active':'');
-  // Reset any in-progress touch gesture when switching circles
+  document.getElementById('tab-iris').className  = 'circ-tab iris'  + (which==='iris'  ?' active':'');
+  document.getElementById('tab-pupil').className = 'circ-tab pupil' + (which==='pupil'?' active':'');
   pinchStart = null; drag = null; touchDragPend = null;
   updateUI(); draw();
 }
-
-function placeNew() {
-  var obj = active(); obj.cx = -1; obj.cy = -1; obj.r = -1;
-  canvas.style.cursor = 'crosshair';
-  updateUI(); draw();
-}
-
+function placeNew() { var obj=active(); obj.cx=-1; obj.cy=-1; obj.r=-1; canvas.style.cursor='crosshair'; updateUI(); draw(); }
 function resetToAlgo() {
-  if (!algoResult || !algoResult.ok) return;
-  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
-  if (activeCircle === 'iris') {
-    iris.cx = algoResult.cxFrac * iw;
-    iris.cy = algoResult.cyFrac * ih;
-    iris.r  = algoResult.rIrisFrac * iw;
-  } else {
-    pupil.cx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * iw;
-    pupil.cy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * ih;
-    pupil.r  = algoResult.rPupilFrac ? algoResult.rPupilFrac * iw : iris.r * 0.35;
-  }
+  if (!algoResult||!algoResult.ok) return;
+  var iw=imgEl.naturalWidth, ih=imgEl.naturalHeight;
+  if (activeCircle==='iris') { iris.cx=algoResult.cxFrac*iw; iris.cy=algoResult.cyFrac*ih; iris.r=algoResult.rIrisFrac*iw; }
+  else { pupil.cx=(algoResult.cxPupilFrac!=null?algoResult.cxPupilFrac:algoResult.cxFrac)*iw; pupil.cy=(algoResult.cyPupilFrac!=null?algoResult.cyPupilFrac:algoResult.cyFrac)*ih; pupil.r=algoResult.rPupilFrac?algoResult.rPupilFrac*iw:iris.r*0.35; }
   updateUI(); draw();
 }
-
 function updateUI() {
-  var box = document.getElementById('instrBox');
-  box.className = '';
-  box.textContent =
-    'Active: ' + (activeCircle === 'iris' ? 'IRIS' : 'PUPIL') + '\n\n' +
-    'Mouse:\nDrag outside  → draw new circle\nDrag inside   → move\nDrag edge     → resize\n\n' +
-    'Touch:\nTap           → snap center\nDrag          → move\nPinch (2 fingers) → resize\n\n' +
-    'Keys: I = iris   P = pupil';
-
-  var act = active(), inact = inactive();
-  var iw  = imgEl ? imgEl.naturalWidth : 1;
-
-  document.getElementById('valTitle').textContent   = activeCircle === 'iris' ? 'Iris values' : 'Pupil values';
-  document.getElementById('otherTitle').textContent = activeCircle === 'iris' ? 'Pupil values (inactive)' : 'Iris values (inactive)';
-  document.getElementById('vCx').textContent =
-    act.cx >= 0 ? Math.round(act.cx)+', '+Math.round(act.cy) : '—';
-  document.getElementById('vR').textContent =
-    act.r  > 0  ? Math.round(act.r)+'  ('+( act.r/iw).toFixed(3)+')' : '—';
-  document.getElementById('vOtherCx').textContent =
-    inact.cx >= 0 ? Math.round(inact.cx)+', '+Math.round(inact.cy) : '—';
-  document.getElementById('vOtherR').textContent =
-    inact.r  > 0  ? Math.round(inact.r)+'  ('+(inact.r/iw).toFixed(3)+')' : '—';
+  document.getElementById('instrBox').textContent =
+    'Active: '+(activeCircle==='iris'?'IRIS':'PUPIL')+'\n\n'+
+    'Mouse:\nDrag outside  → draw new\nDrag inside   → move\nDrag edge     → resize\n\n'+
+    'Touch:\nTap           → snap center\nDrag          → move\nPinch 2-finger → resize\n\nKeys: I=iris  P=pupil';
+  var act=active(), inact=inactive(), iw=imgEl?imgEl.naturalWidth:1;
+  document.getElementById('valTitle').textContent   = activeCircle==='iris'?'Iris values':'Pupil values';
+  document.getElementById('otherTitle').textContent = activeCircle==='iris'?'Pupil values (inactive)':'Iris values (inactive)';
+  document.getElementById('vCx').textContent = act.cx>=0?Math.round(act.cx)+', '+Math.round(act.cy):'—';
+  document.getElementById('vR').textContent  = act.r>0?Math.round(act.r)+'  ('+(act.r/iw).toFixed(3)+')':'—';
+  document.getElementById('vOtherCx').textContent = inact.cx>=0?Math.round(inact.cx)+', '+Math.round(inact.cy):'—';
+  document.getElementById('vOtherR').textContent  = inact.r>0?Math.round(inact.r)+'  ('+(inact.r/iw).toFixed(3)+')':'—';
 }
-
 function showAlgo() {
-  var box = document.getElementById('algoBox');
-  if (!algoResult) { box.textContent = 'n/a'; return; }
-  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
-  box.textContent =
-    'ok: ' + algoResult.ok + '\n' +
-    'cx: ' + (algoResult.cxFrac*iw).toFixed(1) +
-    '  cy: ' + (algoResult.cyFrac*ih).toFixed(1) + '\n' +
-    'irisR: ' + (algoResult.rIrisFrac*iw).toFixed(1) + '\n' +
-    'pupilR: ' + (algoResult.rPupilFrac ? (algoResult.rPupilFrac*iw).toFixed(1) : '—');
+  if (!algoResult) { document.getElementById('algoBox').textContent='n/a'; return; }
+  var iw=imgEl.naturalWidth, ih=imgEl.naturalHeight;
+  document.getElementById('algoBox').textContent=
+    'ok: '+algoResult.ok+'\ncx: '+(algoResult.cxFrac*iw).toFixed(1)+'  cy: '+(algoResult.cyFrac*ih).toFixed(1)+
+    '\nirisR: '+(algoResult.rIrisFrac*iw).toFixed(1)+'\npupilR: '+(algoResult.rPupilFrac?(algoResult.rPupilFrac*iw).toFixed(1):'—');
 }
 
 // ── Load image ────────────────────────────────────────────────────────────────
 function loadImage(i) {
-  idx = i;
-  drag = null; pinchStart = null; touchDragPend = null;
-
-  var files = getCurrentFiles();
-  var file  = files[i];
-  var key   = imgKey(file);
-
-  document.getElementById('imgLabel').textContent =
-    currentSet + '/' + file + '  (' + (i+1) + '/' + files.length + ')';
-
+  idx=i; drag=null; pinchStart=null; touchDragPend=null;
+  var files=getCurrentFiles(), file=files[i], key=imgKey(file);
+  document.getElementById('imgLabel').textContent = currentSet+'/'+file+'  ('+(i+1)+'/'+files.length+')';
   imgEl = new Image();
   imgEl.onload = function() {
-    var wrapEl = document.getElementById('canvasWrap');
-    var maxW = wrapEl.clientWidth  - 4;
-    var maxH = wrapEl.clientHeight - 4;
-    SCALE = Math.min(maxW / imgEl.naturalWidth, maxH / imgEl.naturalHeight, 1);
-    // Never scale up (SCALE ≤ 1); canvas buffer = image native res
-    canvas.style.width  = Math.round(imgEl.naturalWidth  * SCALE) + 'px';
-    canvas.style.height = Math.round(imgEl.naturalHeight * SCALE) + 'px';
-    canvas.width  = imgEl.naturalWidth;
-    canvas.height = imgEl.naturalHeight;
-
-    algoResult = autoFit(imgEl, true);
-    showAlgo();
-
+    var wrapEl=document.getElementById('canvasWrap');
+    SCALE = Math.min((wrapEl.clientWidth-4)/imgEl.naturalWidth, (wrapEl.clientHeight-4)/imgEl.naturalHeight, 1);
+    canvas.style.width  = Math.round(imgEl.naturalWidth  * SCALE)+'px';
+    canvas.style.height = Math.round(imgEl.naturalHeight * SCALE)+'px';
+    canvas.width=imgEl.naturalWidth; canvas.height=imgEl.naturalHeight;
+    algoResult=autoFit(imgEl, true); showAlgo();
     if (gt[key] && !gt[key]._skip) {
-      iris  = { cx: gt[key].irisCx,  cy: gt[key].irisCy,  r: gt[key].irisR  };
-      pupil = { cx: gt[key].pupilCx, cy: gt[key].pupilCy, r: gt[key].pupilR };
+      iris  = { cx:gt[key].irisCx,  cy:gt[key].irisCy,  r:gt[key].irisR  };
+      pupil = { cx:gt[key].pupilCx, cy:gt[key].pupilCy, r:gt[key].pupilR };
     } else {
-      var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
-      if (algoResult && algoResult.ok) {
-        iris  = { cx: algoResult.cxFrac*iw, cy: algoResult.cyFrac*ih,
-                  r:  algoResult.rIrisFrac*iw };
-        pupil = { cx: (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac)*iw,
-                  cy: (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac)*ih,
-                  r:  algoResult.rPupilFrac ? algoResult.rPupilFrac*iw : iris.r*0.35 };
-      } else {
-        iris  = { cx: -1, cy: -1, r: -1 };
-        pupil = { cx: -1, cy: -1, r: -1 };
-      }
+      var iw=imgEl.naturalWidth, ih=imgEl.naturalHeight;
+      if (algoResult&&algoResult.ok) {
+        iris  = { cx:algoResult.cxFrac*iw, cy:algoResult.cyFrac*ih, r:algoResult.rIrisFrac*iw };
+        pupil = { cx:(algoResult.cxPupilFrac!=null?algoResult.cxPupilFrac:algoResult.cxFrac)*iw,
+                  cy:(algoResult.cyPupilFrac!=null?algoResult.cyPupilFrac:algoResult.cyFrac)*ih,
+                  r:algoResult.rPupilFrac?algoResult.rPupilFrac*iw:iris.r*0.35 };
+      } else { iris={cx:-1,cy:-1,r:-1}; pupil={cx:-1,cy:-1,r:-1}; }
     }
-
-    document.getElementById('noteBox').value = (gt[key] && gt[key].note) ? gt[key].note : '';
-    updateUI(); draw();
-    updateThumbs(); updateProgress();
+    document.getElementById('noteBox').value = (gt[key]&&gt[key].note) ? gt[key].note : '';
+    updateUI(); draw(); updateThumbs(); updateProgress();
   };
   imgEl.onerror = function() {
-    document.getElementById('instrBox').textContent = '⚠ Failed to load:\n' + file;
-    document.getElementById('instrBox').className = 'warn';
+    document.getElementById('instrBox').textContent='⚠ Failed to load:\n'+file;
   };
-  imgEl.src = getImgDir() + file;
+  imgEl.src = getImgDir()+file;
 }
 
-// ── Save / navigation ─────────────────────────────────────────────────────────
+// ── Save / navigate ───────────────────────────────────────────────────────────
 function saveAndNext() {
-  if (iris.r <= 0) { alert('Iris circle not placed yet. Place it or tap Skip.'); return; }
-  if (pupil.r <= 0) pupil.r = iris.r * 0.35;
-
-  var files = getCurrentFiles();
-  var file  = files[idx];
-  var key   = imgKey(file);
-  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
-
+  if (iris.r<=0) { alert('Iris circle not placed yet.'); return; }
+  if (pupil.r<=0) pupil.r=iris.r*0.35;
+  var files=getCurrentFiles(), file=files[idx], key=imgKey(file);
+  var iw=imgEl.naturalWidth, ih=imgEl.naturalHeight;
   gt[key] = {
-    set: currentSet, file: file,
-    imgW: iw, imgH: ih,
-    irisCx:  Math.round(iris.cx),  irisCy:  Math.round(iris.cy),  irisR:  Math.round(iris.r),
-    pupilCx: Math.round(pupil.cx), pupilCy: Math.round(pupil.cy), pupilR: Math.round(pupil.r),
-    // Fractional (resolution-independent)
-    irisCxFrac:  iris.cx / iw,  irisCyFrac:  iris.cy / ih,  irisRFrac:  iris.r / iw,
-    pupilCxFrac: pupil.cx / iw, pupilCyFrac: pupil.cy / ih, pupilRFrac: pupil.r / iw,
-    note: document.getElementById('noteBox').value,
-    ts:   new Date().toISOString()
+    set:currentSet, file:file, imgW:iw, imgH:ih,
+    irisCx:Math.round(iris.cx), irisCy:Math.round(iris.cy), irisR:Math.round(iris.r),
+    pupilCx:Math.round(pupil.cx), pupilCy:Math.round(pupil.cy), pupilR:Math.round(pupil.r),
+    irisCxFrac:iris.cx/iw, irisCyFrac:iris.cy/ih, irisRFrac:iris.r/iw,
+    pupilCxFrac:pupil.cx/iw, pupilCyFrac:pupil.cy/ih, pupilRFrac:pupil.r/iw,
+    note:document.getElementById('noteBox').value, ts:new Date().toISOString()
   };
-
   persistGT();
-  document.getElementById('noteBox').value = '';
+  document.getElementById('noteBox').value='';
   updateThumbs(); updateProgress();
-  autoExportJSON();
 
-  // Advance to next unannotated
-  var next = idx + 1;
-  while (next < files.length && gt[imgKey(files[next])] && gt[imgKey(files[next])]._skip) next++;
-  if (next < files.length) loadImage(next);
-  else alert('All images in this set done!');
+  // GitHub sync
+  var s = document.getElementById('saveStatus');
+  s.textContent = ''; // clear
+
+  if (_ghToken()) {
+    _setGhStatus('syncing', '⟳ Syncing…');
+    var msg = 'GT: annotate ' + key;
+    ghPush(msg)
+      .then(function(res) {
+        if (res.ok) {
+          _setGhStatus('ok', '✓ GitHub'); s.textContent='✓ Committed to GitHub';
+          setTimeout(function(){ s.textContent=''; }, 3000);
+        }
+      })
+      .catch(function(e) {
+        _setGhStatus('err', '✗ GitHub');
+        s.textContent='✗ GitHub failed — downloaded locally';
+        autoDownload(); // fallback download
+        setTimeout(function(){ s.textContent=''; }, 5000);
+      });
+  } else {
+    // No token — just download
+    autoDownload();
+  }
+
+  var next=idx+1, flen=files.length;
+  while (next<flen && gt[imgKey(files[next])] && gt[imgKey(files[next])]._skip) next++;
+  if (next<flen) loadImage(next); else alert('All images in this set done!');
 }
 
 function skipImage() {
-  var files = getCurrentFiles();
-  gt[imgKey(files[idx])] = { _skip: true };
-  persistGT();
-  updateThumbs(); updateProgress();
-  if (idx + 1 < files.length) loadImage(idx + 1);
+  var files=getCurrentFiles(); gt[imgKey(files[idx])]={_skip:true};
+  persistGT(); updateThumbs(); updateProgress();
+  if (idx+1<files.length) loadImage(idx+1);
 }
 
 // ── Persist ───────────────────────────────────────────────────────────────────
-function persistGT() {
-  try { localStorage.setItem('aeye_gt', JSON.stringify(gt)); } catch(e) {}
-}
+function persistGT() { try { localStorage.setItem('aeye_gt', JSON.stringify(gt)); } catch(e) {} }
 
-// ── Export ────────────────────────────────────────────────────────────────────
 function buildExportObj() {
-  var out = {
-    _version: gtMeta._version, _note: gtMeta._note, _sets: gtMeta._sets,
-    _updated: new Date().toISOString()
-  };
-  for (var k in gt) { if (!gt[k]._skip) out[k] = gt[k]; }
+  var out={_version:gtMeta._version,_note:gtMeta._note,_sets:gtMeta._sets,_updated:new Date().toISOString()};
+  for (var k in gt) { if(!gt[k]._skip) out[k]=gt[k]; }
   return out;
 }
 
-function autoExportJSON() {
-  var json = JSON.stringify(buildExportObj(), null, 2);
+function autoDownload() {
+  var json=JSON.stringify(buildExportObj(), null, 2);
   try {
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    a.download = 'gt-data.json'; a.click();
-  } catch(e) {}
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+    a.download='gt-data.json'; a.click();
+  } catch(e){}
   console.log('[GT-EXPORT]', json);
-  var s = document.getElementById('saveStatus');
-  s.textContent = '✓ gt-data.json downloaded';
-  setTimeout(function() { s.textContent = ''; }, 3000);
 }
-
-function exportJSON() { autoExportJSON(); }
-
-function logJSON() {
-  var json = JSON.stringify(buildExportObj(), null, 2);
-  console.log('[GT-EXPORT]', json);
-  alert('JSON logged to console (DevTools → Console to copy).');
-}
+function exportJSON() { autoDownload(); }
 
 // ── Set switcher ──────────────────────────────────────────────────────────────
 function switchSet(setId) {
-  if (setId === currentSet) return;
-  currentSet = setId;
-  document.getElementById('btn-set-test').className =
-    'set-btn' + (setId === 'test-images'  ? ' active-set' : '');
-  document.getElementById('btn-set-ubiris').className =
-    'set-btn' + (setId === 'ubiris-check' ? ' active-set' : '');
+  if (setId===currentSet) return;
+  currentSet=setId;
+  document.getElementById('btn-set-test').className   = 'set-btn'+(setId==='test-images' ?' active-set':'');
+  document.getElementById('btn-set-ubiris').className = 'set-btn'+(setId==='ubiris-check'?' active-set':'');
   buildThumbs();
-  var files = getCurrentFiles(), start = 0;
-  while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
+  var files=getCurrentFiles(), start=0;
+  while (start<files.length-1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
   loadImage(start);
 }
 
 // ── Thumbnails ────────────────────────────────────────────────────────────────
 function buildThumbs() {
-  var list = document.getElementById('thumbList');
-  list.innerHTML = '';
-  var files = getCurrentFiles();
-  files.forEach(function(file, i) {
-    var img = document.createElement('img');
-    img.src = getImgDir() + file;
-    img.className = 'imgthumb'; img.title = file;
-    img.onclick = (function(ii) { return function() { loadImage(ii); }; })(i);
+  var list=document.getElementById('thumbList'); list.innerHTML='';
+  getCurrentFiles().forEach(function(file, i) {
+    var img=document.createElement('img');
+    img.src=getImgDir()+file; img.className='imgthumb'; img.title=file;
+    img.onclick=(function(ii){ return function(){ loadImage(ii); }; })(i);
     list.appendChild(img);
   });
 }
-
 function updateThumbs() {
-  var thumbs = document.getElementById('thumbList').querySelectorAll('img');
-  var files  = getCurrentFiles();
-  files.forEach(function(file, i) {
-    var key = imgKey(file);
-    thumbs[i].className = 'imgthumb' +
-      (i === idx               ? ' active' : '') +
-      (gt[key] && !gt[key]._skip ? ' done'   : '') +
-      (gt[key] &&  gt[key]._skip ? ' skip'   : '');
+  var thumbs=document.getElementById('thumbList').querySelectorAll('img');
+  getCurrentFiles().forEach(function(file, i) {
+    var k=imgKey(file);
+    thumbs[i].className='imgthumb'+(i===idx?' active':'')+(gt[k]&&!gt[k]._skip?' done':'')+(gt[k]&&gt[k]._skip?' skip':'');
   });
 }
-
 function updateProgress() {
-  var files = getCurrentFiles(), done = 0;
-  files.forEach(function(f) { var k = imgKey(f); if (gt[k] && !gt[k]._skip) done++; });
-  document.getElementById('progress').textContent = done + ' / ' + files.length + ' annotated';
+  var files=getCurrentFiles(), done=0;
+  files.forEach(function(f){ var k=imgKey(f); if(gt[k]&&!gt[k]._skip) done++; });
+  document.getElementById('progress').textContent=done+' / '+files.length+' annotated';
 }
 
-// ── Data merge from fetched gt-data.json ──────────────────────────────────────
+// ── Data merge ────────────────────────────────────────────────────────────────
 function mergeFromFetch(data) {
-  if (data._version) gtMeta._version = data._version;
-  if (data._note)    gtMeta._note    = data._note;
-  if (data._sets)    gtMeta._sets    = data._sets;
-  for (var k in data) {
-    if (k.startsWith('_')) continue;
-    if (!gt[k]) gt[k] = data[k];   // localStorage wins if both exist
-  }
+  if (data._version) gtMeta._version=data._version;
+  if (data._note)    gtMeta._note=data._note;
+  if (data._sets)    gtMeta._sets=data._sets;
+  for (var k in data) { if(!k.startsWith('_') && !gt[k]) gt[k]=data[k]; }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-try { gt = JSON.parse(localStorage.getItem('aeye_gt') || '{}'); } catch(e) { gt = {}; }
+try { gt=JSON.parse(localStorage.getItem('aeye_gt')||'{}'); } catch(e){ gt={}; }
 
+function _boot() {
+  buildThumbs(); updateProgress();
+  var files=getCurrentFiles(), start=0;
+  while (start<files.length-1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
+  loadImage(start);
+}
+
+var _hasToken = !!_ghToken();
+if (_hasToken) { _setGhStatus('syncing', '⟳ Syncing…'); }
+else           { _setGhStatus('none', '📴 Local only'); }
+
+// Step 1: load local committed gt-data.json
 fetch('ground-truth/gt-data.json')
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    mergeFromFetch(data);
-    persistGT();
-    var n = Object.keys(data).filter(function(k) { return !k.startsWith('_'); }).length;
-    console.log('[GT-BOOT] Loaded', n, 'entries from gt-data.json');
-  })
-  .catch(function(e) { console.warn('[GT-BOOT] Could not fetch gt-data.json:', e.message); })
+  .then(function(r){ return r.json(); })
+  .then(function(data){ mergeFromFetch(data); persistGT(); })
+  .catch(function(){})
   .finally(function() {
-    buildThumbs(); updateProgress();
-    var files = getCurrentFiles(), start = 0;
-    while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
-    loadImage(start);
+    if (!_hasToken) { _boot(); return; }
+    // Step 2: merge from GitHub (authoritative remote)
+    ghFetch()
+      .then(function() {
+        _ghReady=true;
+        _setGhStatus('ok','✓ GitHub');
+        console.log('[GT-BOOT] GitHub sync OK');
+      })
+      .catch(function(e) {
+        _setGhStatus('err','✗ GitHub');
+        console.warn('[GT-BOOT] GitHub sync failed:', e.message);
+      })
+      .finally(_boot);
   });
 </script>
 </body>
