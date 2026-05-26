@@ -2401,11 +2401,20 @@ function zoomToEye(skipSanityCheck) {
       } // end if (!_rayUsed)
 
       // ── BAND-mode pupil-anchor iris centre correction (PCC) ──────────────────
-      // After ITER-REFINE, if the iris ring centre is > 20% of irisR away from
-      // the reliably-detected pupil centre, move the iris centre toward the pupil
-      // leaving a 10% residual (anatomical allowance), then expand the ring from
-      // the corrected centre until sclera first appears.
+      // After ITER-REFINE, if the iris ring centre is too far from the
+      // reliably-detected pupil centre, move the iris centre toward the pupil.
       // Only runs in BAND/close-up mode where zPupil is accurate.
+      //
+      // When _probeFloorFired (sclera-pair gave a false inner-corner hit), the
+      // CASCADE CENTRE is also unreliable.  Use a 5% trigger and correct FULLY
+      // to the pupil anchor (frac=1.0).  The CASCADE RADIUS (from ITER-REFINE)
+      // is kept — it was measured from the CASCADE centre and approximates the
+      // true limbus radius.  Expanding from the pupil anchor is unreliable
+      // because the limbus appears at varying distances from the pupil (the
+      // limbus is a circle centred on the iris, not the pupil).
+      //
+      // Normal BAND (sclera-pair centre reliable): threshold=20%, leave 10%
+      // residual, then expand the ring to sclera from the corrected centre.
       if (_isFromBand && zPupil) {
         var _pccIrX    = (donut.cx - drawInfo.dx) / nsx;
         var _pccIrY    = (donut.cy - drawInfo.dy) / nsy;
@@ -2414,32 +2423,49 @@ function zoomToEye(skipSanityCheck) {
         var _pccDist   = Math.sqrt(_pccDx*_pccDx + _pccDy*_pccDy);
         var _pccR      = donut.rIris / nsx;
         var _pccOffPct = _pccR > 0 ? _pccDist / _pccR : 0;
+        // Probe-floor: sclera-pair centre is unreliable — correct aggressively,
+        // but keep the cascade radius (it is reliable from the old centre and
+        // approximates the true limbus from the corrected pupil-anchor centre too).
+        var _pccThresh   = _probeFloorFired ? 0.05 : 0.20;
+        var _pccResidual = _probeFloorFired ? 0.00 : 0.10;
+        var _pccFracCap  = _probeFloorFired ? 1.00 : 0.80;
         console.log('[PCC] iris-pupil: dx=' + Math.round(_pccDx) + ' dy=' + Math.round(_pccDy) +
                     ' dist=' + Math.round(_pccDist) + ' (' + Math.round(_pccOffPct * 100) +
-                    '% of rIris=' + Math.round(_pccR) + ')');
-        if (_pccOffPct > 0.20 && _pccDist > 0) {
-          // Shift iris centre so residual offset = 10% of irisR.
-          var _pccFrac = Math.min(1 - 0.10 / _pccOffPct, 0.80);
-          var _pccNx   = _pccIrX - _pccDx * _pccFrac;
-          var _pccNy   = _pccIrY - _pccDy * _pccFrac;
+                    '% of rIris=' + Math.round(_pccR) + ') thresh=' + Math.round(_pccThresh * 100) +
+                    '% probeFloor=' + _probeFloorFired);
+        if (_pccOffPct > _pccThresh && _pccDist > 0) {
+          // Shift iris centre toward (or all the way to) the pupil.
+          var _pccFrac = _pccResidual > 0
+            ? Math.min(1 - _pccResidual / _pccOffPct, _pccFracCap)
+            : _pccFracCap;
+          var _pccNx = _pccIrX - _pccDx * _pccFrac;
+          var _pccNy = _pccIrY - _pccDy * _pccFrac;
           donut.cx = drawInfo.dx + _pccNx * nsx;
           donut.cy = drawInfo.dy + _pccNy * nsy;
           console.log('[PCC] APPLIED frac=' + _pccFrac.toFixed(2) +
-                      ' → new iris cx=' + Math.round(donut.cx) + ' cy=' + Math.round(donut.cy));
-          // Expand ring from corrected centre until sclera first appears.
-          var _pccRB   = _pccR;
-          var _pccCeil = iR * 1.55;
-          var _pccSt   = 0;
-          while (_pccRB < _pccCeil &&
-                 _irSclFrac(_pccNx, _pccNy, _pccRB, _sclAdaptHi) < _irSCL_THRESH &&
-                 _pccSt < 60) {
-            _pccRB += 2; _pccSt++;
-          }
-          if (_irSclFrac(_pccNx, _pccNy, _pccRB, _sclAdaptHi) > _irSCL_THRESH) _pccRB -= 2;
-          if (_pccRB > _pccR + 2) {
-            donut.rIris = Math.round(_pccRB * nsx);
-            console.log('[PCC] EXPANDED: rIris ' + Math.round(_pccR) + '→' + Math.round(_pccRB) +
-                        ' from corrected centre');
+                      ' → new iris cx=' + Math.round(donut.cx) + ' cy=' + Math.round(donut.cy) +
+                      ' (img: ' + Math.round(_pccNx) + ',' + Math.round(_pccNy) + ')');
+          // For normal BAND paths: expand ring from corrected centre until sclera.
+          // For probeFloorFired: keep cascade radius — expand is unreliable from
+          // the pupil anchor (limbus is anisotropic relative to the pupil centre).
+          if (!_probeFloorFired) {
+            var _pccRB   = _pccR;
+            var _pccCeil = iR * 1.55;
+            var _pccSt   = 0;
+            while (_pccRB < _pccCeil &&
+                   _irSclFrac(_pccNx, _pccNy, _pccRB, _sclAdaptHi) < _irSCL_THRESH &&
+                   _pccSt < 60) {
+              _pccRB += 2; _pccSt++;
+            }
+            if (_irSclFrac(_pccNx, _pccNy, _pccRB, _sclAdaptHi) > _irSCL_THRESH) _pccRB -= 2;
+            if (_pccRB > _pccR + 2) {
+              donut.rIris = Math.round(_pccRB * nsx);
+              console.log('[PCC] EXPANDED: rIris ' + Math.round(_pccR) + '→' + Math.round(_pccRB) +
+                          ' from corrected centre');
+            }
+          } else {
+            console.log('[PCC] probeFloor: keeping cascade rIris=' + Math.round(_pccR) +
+                        ' (expand skipped — anisotropic from pupil anchor)');
           }
         }
       }
