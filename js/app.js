@@ -1332,11 +1332,15 @@ function _tryCloseupFit() {
         // MACRO-GUARD cx (anchored on the actual iris) and use pair's irisR.
         var _swCxDelta = _swRipR > 0 ? Math.abs(_swBest.cx - mpZoomHint.midX) : 0;
         if (_swRipR > 0 && _swCxDelta > _swIrisR * 0.25) {
+          // cx-mismatch: sclera-pair hit a false structure (e.g. inner-corner highlight).
+          // Its irisR is also unreliable (two close peaks → tiny r).
+          // Use MACRO-GUARD's RIP radius instead — it's anchored on the actual iris.
           console.log('[BAND] cx-mismatch: pair cx=' + _swBest.cx +
                       ' vs MACRO-GUARD cx=' + Math.round(mpZoomHint.midX) +
                       ' (Δ=' + Math.round(_swCxDelta) + ' > 0.25×iR=' + Math.round(_swIrisR * 0.25) + ')' +
-                      ' — MACRO-GUARD cx wins, pair irisR=' + Math.round(_swIrisR));
-          mpZoomHint = { midX: mpZoomHint.midX, midY: _swBest.cy, irisR: _swIrisR, _fromBand: true };
+                      ' — MACRO-GUARD cx+ripR win (pair r=' + Math.round(_swIrisR) +
+                      ' discarded, using ripR=' + _swRipR + ')');
+          mpZoomHint = { midX: mpZoomHint.midX, midY: _swBest.cy, irisR: _swRipR, _fromBand: true };
         } else {
           console.log('[BAND] sclera-pair: cx=' + _swBest.cx + ' cy=' + _swBest.cy +
                       ' irisR=' + _swIrisR + ' score=' + Math.round(_swBest.score));
