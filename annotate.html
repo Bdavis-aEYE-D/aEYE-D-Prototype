@@ -2,32 +2,39 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Ground-Truth Annotator</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0e0e0e; color: #ddd; font-family: monospace; display: flex;
-       flex-direction: column; height: 100vh; overflow: hidden; user-select: none; }
+       flex-direction: column; height: 100vh; overflow: hidden; user-select: none;
+       -webkit-user-select: none; }
 
-#topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
-          background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; flex-wrap: wrap; }
-#topbar h1 { font-size: 15px; color: #fff; }
-#imgLabel  { font-size: 13px; color: #fa0; flex: 1; min-width: 120px; }
-#progress  { font-size: 12px; color: #888; }
+/* ── Top bar ── */
+#topbar { display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+          background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0;
+          flex-wrap: wrap; }
+#topbar h1 { font-size: 14px; color: #fff; white-space: nowrap; }
+#imgLabel  { font-size: 12px; color: #fa0; flex: 1; min-width: 0;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#progress  { font-size: 11px; color: #888; white-space: nowrap; }
 
 /* Set selector */
 #setSelector { display: flex; gap: 4px; }
 .set-btn { padding: 4px 10px; border: 1px solid #444; border-radius: 4px;
            background: #222; color: #888; font-family: monospace; font-size: 11px;
-           cursor: pointer; }
-.set-btn:hover   { background: #2a2a2a; color: #aaa; }
+           cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .set-btn.active-set { background: #1a3a5c; color: #4cf; border-color: #4cf; }
 
-#main { display: flex; flex: 1; overflow: hidden; }
+/* ── Main layout ── */
+#main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
 #canvasWrap { flex: 1; display: flex; align-items: center; justify-content: center;
-              background: #111; overflow: hidden; }
-canvas { image-rendering: pixelated; display: block; }
+              background: #111; overflow: hidden; min-width: 0; min-height: 0; }
+canvas { image-rendering: pixelated; display: block;
+         touch-action: none; -webkit-touch-callout: none; }
 
+/* ── Desktop sidebar ── */
 #sidebar { width: 270px; background: #181818; border-left: 1px solid #333;
            display: flex; flex-direction: column; padding: 12px; gap: 8px;
            overflow-y: auto; flex-shrink: 0; }
@@ -36,10 +43,11 @@ canvas { image-rendering: pixelated; display: block; }
 #circleSelect { display: flex; gap: 6px; }
 .circ-tab { flex: 1; padding: 8px 4px; border: 2px solid transparent;
             border-radius: 6px; text-align: center; cursor: pointer;
-            font-size: 12px; font-family: monospace; transition: all 0.15s; }
-.circ-tab.iris  { background: #0e2233; color: #5ae; border-color: #1a3a5c; }
-.circ-tab.iris.active  { background: #1a3a5c; color: #4cf; border-color: #4cf; }
-.circ-tab.pupil { background: #2a1a00; color: #ca6; border-color: #5c3a00; }
+            font-size: 12px; font-family: monospace; transition: border-color 0.1s;
+            -webkit-tap-highlight-color: transparent; }
+.circ-tab.iris        { background: #0e2233; color: #5ae; border-color: #1a3a5c; }
+.circ-tab.iris.active { background: #1a3a5c; color: #4cf; border-color: #4cf; }
+.circ-tab.pupil        { background: #2a1a00; color: #ca6; border-color: #5c3a00; }
 .circ-tab.pupil.active { background: #5c3a00; color: #fc4; border-color: #fc4; }
 
 .section { background: #222; border-radius: 6px; padding: 10px; }
@@ -54,17 +62,12 @@ canvas { image-rendering: pixelated; display: block; }
 .val span:last-child  { color: #cfc; }
 
 .btn { width: 100%; padding: 7px; border: none; border-radius: 5px;
-       font-size: 12px; font-family: monospace; cursor: pointer; }
+       font-size: 12px; font-family: monospace; cursor: pointer;
+       -webkit-tap-highlight-color: transparent; }
 .btn-green  { background: #1a5c1a; color: #8f8; }
-.btn-green:hover  { background: #246624; }
 .btn-blue   { background: #1a3a5c; color: #88f; }
-.btn-blue:hover   { background: #1e4a78; }
-.btn-orange { background: #5c3a00; color: #fb8; }
-.btn-orange:hover { background: #7a4e00; }
 .btn-red    { background: #5c1a1a; color: #f88; }
-.btn-red:hover    { background: #7a2222; }
-.btn-gray   { background: #333; color: #aaa; }
-.btn-gray:hover   { background: #444; }
+.btn-gray   { background: #333;    color: #aaa; }
 
 #algoBox { font-size: 11px; color: #666; line-height: 1.6; white-space: pre; }
 #noteBox { width:100%; background:#111; color:#ccc; border:1px solid #444;
@@ -72,15 +75,68 @@ canvas { image-rendering: pixelated; display: block; }
            resize:vertical; height:48px; }
 
 .imglist { display: flex; flex-wrap: wrap; gap: 4px; }
-.imgthumb { width: 36px; height: 27px; border: 2px solid #444; border-radius:3px;
-            cursor: pointer; object-fit: cover; }
+.imgthumb { width: 36px; height: 27px; border: 2px solid #444; border-radius: 3px;
+            cursor: pointer; object-fit: cover;
+            -webkit-tap-highlight-color: transparent; }
 .imgthumb.done   { border-color: #4a4; }
 .imgthumb.active { border-color: #fa0; }
-.imgthumb.skip   { border-color: #555; opacity:.5; }
+.imgthumb.skip   { border-color: #555; opacity: .5; }
 
 #exportWrap { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
-
 #saveStatus { font-size: 10px; color: #4f4; text-align: center; min-height: 14px; }
+
+/* ── Mobile layout (portrait phones) ── */
+@media (max-width: 768px) {
+  /* Compact topbar: title + sets on one row, label fills second row */
+  #topbar { padding: 5px 10px; gap: 6px; }
+  #topbar h1 { font-size: 13px; }
+  #imgLabel  { order: 10; flex-basis: 100%; font-size: 11px; }
+  #progress  { font-size: 10px; }
+  .set-btn   { font-size: 10px; padding: 3px 8px; }
+
+  /* Stack canvas on top, controls below */
+  #main { flex-direction: column; }
+
+  #canvasWrap { flex: 1; min-height: 0; }
+
+  /* Sidebar becomes a flat bottom strip */
+  #sidebar {
+    width: 100%;
+    height: auto;
+    flex-shrink: 0;
+    border-left: none;
+    border-top: 1px solid #444;
+    padding: 7px 10px;
+    gap: 6px;
+    overflow-y: visible;
+    flex-direction: column;
+  }
+
+  /* Hide desktop-only sections on mobile */
+  .section { display: none; }
+
+  /* Always show circle tabs */
+  #circleSelect { display: flex; }
+  .circ-tab { padding: 11px 4px; font-size: 14px; }
+
+  /* Always show action row */
+  #exportWrap { display: flex; flex-direction: row; gap: 6px; margin-top: 0; }
+  #exportWrap .btn-red   { flex: 0 0 72px; width: auto; padding: 10px 0; font-size: 13px; }
+  #exportWrap .btn-green { flex: 1; padding: 10px; font-size: 14px; }
+
+  /* Hide less-critical export buttons on mobile — keep only confirm+skip */
+  #exportWrap .btn-blue,
+  #exportWrap .btn-gray { display: none; }
+
+  #saveStatus { font-size: 9px; }
+
+  /* Thumbnail strip: horizontal scroll */
+  #thumbSection { display: block !important; padding: 5px 0; }
+  #thumbSection h3 { display: none; }
+  .imglist { flex-wrap: nowrap; overflow-x: auto; gap: 5px;
+             -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .imgthumb { flex-shrink: 0; width: 46px; height: 34px; }
+}
 </style>
 </head>
 <body>
@@ -100,69 +156,62 @@ canvas { image-rendering: pixelated; display: block; }
 
   <div id="sidebar">
 
-    <!-- Circle selector -->
+    <!-- Circle selector — always visible -->
     <div id="circleSelect">
-      <div class="circ-tab iris active" id="tab-iris"  onclick="selectCircle('iris')">
-        🔵 IRIS
-      </div>
-      <div class="circ-tab pupil" id="tab-pupil" onclick="selectCircle('pupil')">
-        🟠 PUPIL
-      </div>
+      <div class="circ-tab iris active" id="tab-iris"  onclick="selectCircle('iris')">🔵 IRIS</div>
+      <div class="circ-tab pupil"       id="tab-pupil" onclick="selectCircle('pupil')">🟠 PUPIL</div>
     </div>
 
-    <!-- Instructions for active circle -->
+    <!-- Desktop: instructions -->
     <div class="section">
       <h3>Instructions</h3>
       <div id="instrBox">—</div>
     </div>
 
-    <!-- Active circle values -->
+    <!-- Desktop: active circle values -->
     <div class="section">
       <h3 id="valTitle">Iris values</h3>
       <div class="val"><span>Center</span>     <span id="vCx">—</span></div>
       <div class="val"><span>Radius (px)</span><span id="vR">—</span></div>
       <div style="display:flex;gap:4px;margin-top:6px">
-        <button class="btn btn-gray" style="flex:1" onclick="placeNew()">
-          Place New</button>
-        <button class="btn btn-gray" style="flex:1" onclick="resetToAlgo()">
-          From Algo</button>
+        <button class="btn btn-gray" style="flex:1" onclick="placeNew()">Place New</button>
+        <button class="btn btn-gray" style="flex:1" onclick="resetToAlgo()">From Algo</button>
       </div>
     </div>
 
-    <!-- Other circle values (read-only) -->
+    <!-- Desktop: other circle (read-only) -->
     <div class="section" style="opacity:0.55">
       <h3 id="otherTitle">Pupil values</h3>
       <div class="val"><span>Center</span>     <span id="vOtherCx">—</span></div>
       <div class="val"><span>Radius (px)</span><span id="vOtherR">—</span></div>
     </div>
 
-    <!-- Algorithm -->
+    <!-- Desktop: algorithm result -->
     <div class="section">
       <h3>Algorithm result</h3>
       <div id="algoBox">—</div>
     </div>
 
-    <!-- Notes -->
+    <!-- Desktop: notes -->
     <div class="section">
       <h3>Notes</h3>
       <textarea id="noteBox" placeholder="Optional: occlusion, poor quality…"></textarea>
     </div>
 
-    <!-- Thumbnails -->
-    <div class="section">
+    <!-- Thumbnails — always shown (horizontal on mobile) -->
+    <div class="section" id="thumbSection">
       <h3>Images</h3>
       <div class="imglist" id="thumbList"></div>
     </div>
 
+    <!-- Action buttons — always visible -->
     <div id="exportWrap">
       <div id="saveStatus"></div>
-      <button class="btn btn-red"   onclick="skipImage()">Skip Image</button>
+      <button class="btn btn-red"   onclick="skipImage()">Skip</button>
       <button class="btn btn-green" onclick="saveAndNext()"
               style="font-size:14px;padding:10px">✓ Confirm &amp; Next →</button>
-      <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">
-        Export ground-truth.json</button>
-      <button class="btn btn-gray"  style="margin-top:2px" onclick="logJSON()">
-        Log JSON to Console</button>
+      <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">Export ground-truth.json</button>
+      <button class="btn btn-gray"  style="margin-top:2px" onclick="logJSON()">Log JSON to Console</button>
     </div>
 
   </div>
@@ -214,7 +263,6 @@ var IMAGE_SETS = {
   }
 };
 
-// Metadata from gt-data.json (populated at boot)
 var gtMeta = {
   _version: 2,
   _note: 'Ground-truth iris ring placements. Keys are \'dir/filename\'. Add entries via annotate.html, then save this file to git.',
@@ -225,86 +273,90 @@ var gtMeta = {
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
-// gt keys: "setId/filename"  e.g. "test-images/IMG_9924 Bryan Left.JPG"
-var gt  = {};
+var gt         = {};
 var currentSet = 'test-images';
-var idx = 0;
+var idx        = 0;
 var imgEl      = null;
 var SCALE      = 1;
 var algoResult = null;
 
-// Circles — completely independent objects
 var iris  = { cx: -1, cy: -1, r: -1 };
 var pupil = { cx: -1, cy: -1, r: -1 };
 
-// Which circle the user is currently working on
 var activeCircle = 'iris';   // 'iris' | 'pupil'
 
-// Drag state — type: 'draw' | 'move' | 'resize'
-var drag = null;
-var EDGE_TOL_PX = 16;   // display pixels for edge grab zone
+// Mouse drag state
+var drag     = null;
+var EDGE_TOL = 18;  // display pixels (same as app.js)
+
+// Touch state (mirrors app.js exactly)
+var pinchStart     = null;   // { dist, r }
+var touchDragPend  = null;   // { clientX0, clientY0, canvasX, canvasY, committed, startCx, startCy }
+var TOUCH_COMMIT   = 8;      // px before locking into drag
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getCurrentFiles() { return IMAGE_SETS[currentSet].files; }
 function getImgDir()       { return IMAGE_SETS[currentSet].dir; }
 function imgKey(file)      { return currentSet + '/' + file; }
 
-// ── Canvas ────────────────────────────────────────────────────────────────────
+// ── Canvas setup ──────────────────────────────────────────────────────────────
 var canvas = document.getElementById('c');
 var ctx    = canvas.getContext('2d');
 
-canvas.addEventListener('mousedown',  onDown);
-canvas.addEventListener('mousemove',  onMove);
-canvas.addEventListener('mouseup',    onUp);
-canvas.addEventListener('mouseleave', onUp);
-
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'i' || e.key === 'I') selectCircle('iris');
-  if (e.key === 'p' || e.key === 'P') selectCircle('pupil');
-});
-
-function imgPt(e) {
+// ── Coordinate helpers ────────────────────────────────────────────────────────
+// Convert a client (CSS-px) point to image/canvas px, accounting for CSS scaling.
+function canvasPt(clientX, clientY) {
   var r = canvas.getBoundingClientRect();
-  return { x: (e.clientX - r.left) / SCALE, y: (e.clientY - r.top) / SCALE };
-}
-function dist(ax, ay, bx, by) {
-  var dx = bx-ax, dy = by-ay; return Math.sqrt(dx*dx+dy*dy);
+  // SCALE = canvas.style size / canvas.width — same formula used throughout
+  return { x: (clientX - r.left) / SCALE, y: (clientY - r.top) / SCALE };
 }
 
-// ── Active circle accessor ────────────────────────────────────────────────────
-function active()  { return activeCircle === 'iris' ? iris  : pupil; }
-function inactive(){ return activeCircle === 'iris' ? pupil : iris;  }
+function distPt(ax, ay, bx, by) {
+  var dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ── Active circle accessors ───────────────────────────────────────────────────
+function active()        { return activeCircle === 'iris' ? iris  : pupil; }
+function inactive()      { return activeCircle === 'iris' ? pupil : iris;  }
 function activeColor()   { return activeCircle === 'iris' ? '#3cf' : '#fc4'; }
 function inactiveColor() { return activeCircle === 'iris' ? 'rgba(255,196,64,0.45)' : 'rgba(60,200,255,0.45)'; }
 
-// ── Mouse ─────────────────────────────────────────────────────────────────────
-function onDown(e) {
-  if (e.button !== 0) return;
-  var p   = imgPt(e);
+function setRadius(r) {
+  // Clamp: iris min 4, pupil min 4 and must be < iris radius
   var obj = active();
-  var et  = EDGE_TOL_PX / SCALE;
-
-  if (obj.r > 0) {
-    var d = dist(p.x, p.y, obj.cx, obj.cy);
-    if (Math.abs(d - obj.r) <= et) {
-      drag = { type:'resize', startCx: obj.cx, startCy: obj.cy };
-      e.preventDefault(); return;
-    }
-    if (d < obj.r - et) {
-      drag = { type:'move', startMx: p.x, startMy: p.y,
-               startCx: obj.cx, startCy: obj.cy };
-      e.preventDefault(); return;
-    }
+  if (activeCircle === 'iris') {
+    obj.r = Math.max(4, r);
+  } else {
+    obj.r = Math.max(4, Math.min(r, iris.r > 0 ? iris.r * 0.92 : r));
   }
-
-  // Outside (or no circle yet) — start drawing a new circle from scratch
-  obj.cx = p.x; obj.cy = p.y; obj.r = 2;
-  drag = { type:'draw', startCx: p.x, startCy: p.y };
-  e.preventDefault();
 }
 
-function onMove(e) {
-  var p   = imgPt(e);
+// ── Mouse events ──────────────────────────────────────────────────────────────
+canvas.addEventListener('mousedown', function(ev) {
+  if (ev.button !== 0) return;
+  var p   = canvasPt(ev.clientX, ev.clientY);
+  var obj = active();
+  var et  = EDGE_TOL / SCALE;
+
+  if (obj.r > 0) {
+    var d = distPt(p.x, p.y, obj.cx, obj.cy);
+    if (Math.abs(d - obj.r) <= et) {
+      drag = { type: 'resize', startCx: obj.cx, startCy: obj.cy };
+      ev.preventDefault(); return;
+    }
+    if (d < obj.r - et) {
+      drag = { type: 'move', startMx: p.x, startMy: p.y, startCx: obj.cx, startCy: obj.cy };
+      ev.preventDefault(); return;
+    }
+  }
+  // Outside or no circle — draw fresh
+  obj.cx = p.x; obj.cy = p.y; obj.r = 2;
+  drag = { type: 'draw', startCx: p.x, startCy: p.y };
+  ev.preventDefault();
+});
+
+canvas.addEventListener('mousemove', function(ev) {
+  var p   = canvasPt(ev.clientX, ev.clientY);
   var obj = active();
 
   if (drag) {
@@ -312,24 +364,124 @@ function onMove(e) {
       obj.cx = drag.startCx + (p.x - drag.startMx);
       obj.cy = drag.startCy + (p.y - drag.startMy);
     } else {
-      obj.r = Math.max(2, dist(drag.startCx, drag.startCy, p.x, p.y));
+      setRadius(Math.max(2, distPt(drag.startCx, drag.startCy, p.x, p.y)));
     }
     updateUI(); draw(); return;
   }
 
+  // Cursor feedback
   if (obj.r > 0) {
-    var d  = dist(p.x, p.y, obj.cx, obj.cy);
-    var et = EDGE_TOL_PX / SCALE;
-    if (Math.abs(d - obj.r) <= et) canvas.style.cursor = 'ew-resize';
-    else if (d < obj.r - et)       canvas.style.cursor = 'move';
-    else                           canvas.style.cursor = 'crosshair';
+    var d  = distPt(p.x, p.y, obj.cx, obj.cy);
+    var et = EDGE_TOL / SCALE;
+    canvas.style.cursor = Math.abs(d - obj.r) <= et ? 'ew-resize' :
+                          d < obj.r - et            ? 'move'      : 'crosshair';
   } else {
     canvas.style.cursor = 'crosshair';
   }
   draw();
-}
+});
 
-function onUp() { drag = null; }
+canvas.addEventListener('mouseup',    function() { drag = null; });
+canvas.addEventListener('mouseleave', function() { drag = null; });
+
+// ── Touch events (mirrors app.js model exactly) ───────────────────────────────
+//
+//  1 finger tap  → snap active circle center to tap point (keep radius)
+//  1 finger drag → move active circle after TOUCH_COMMIT px threshold
+//                  (bail if primarily vertical — iOS scroll intent)
+//  2 fingers     → pinch-resize + track midpoint as center
+//  touchcancel   → iOS claimed scroll — discard cleanly
+
+canvas.addEventListener('touchstart', function(ev) {
+  if (ev.touches.length === 2) {
+    // Two-finger pinch: claim immediately, never scrolls
+    ev.preventDefault();
+    touchDragPend = null; drag = null;
+    var t0 = ev.touches[0], t1 = ev.touches[1];
+    var mx = (t0.clientX + t1.clientX) / 2;
+    var my = (t0.clientY + t1.clientY) / 2;
+    var mid = canvasPt(mx, my);
+    var obj = active();
+    obj.cx = mid.x; obj.cy = mid.y;
+    pinchStart = {
+      dist: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
+      r: obj.r > 0 ? obj.r : 60
+    };
+    updateUI(); draw();
+
+  } else if (ev.touches.length === 1) {
+    // Single finger — record start but don't move yet (scroll safety)
+    pinchStart = null; drag = null;
+    var p = canvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
+    var obj = active();
+    touchDragPend = {
+      clientX0: ev.touches[0].clientX,
+      clientY0: ev.touches[0].clientY,
+      canvasX:  p.x, canvasY: p.y,
+      startCx:  obj.cx, startCy: obj.cy,
+      committed: false
+    };
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', function(ev) {
+  if (ev.touches.length === 2 && pinchStart) {
+    ev.preventDefault();
+    var t0 = ev.touches[0], t1 = ev.touches[1];
+    var mx  = (t0.clientX + t1.clientX) / 2;
+    var my  = (t0.clientY + t1.clientY) / 2;
+    var mid = canvasPt(mx, my);
+    var obj = active();
+    obj.cx = mid.x; obj.cy = mid.y;
+    setRadius(pinchStart.r * (Math.hypot(t1.clientX - t0.clientX,
+                                         t1.clientY - t0.clientY) / pinchStart.dist));
+    updateUI(); draw();
+
+  } else if (ev.touches.length === 1 && touchDragPend) {
+    var mdx = ev.touches[0].clientX - touchDragPend.clientX0;
+    var mdy = ev.touches[0].clientY - touchDragPend.clientY0;
+    var moved = Math.hypot(mdx, mdy);
+
+    if (!touchDragPend.committed) {
+      if (moved < TOUCH_COMMIT) return;
+      // Primarily vertical → likely a page scroll; bail cleanly
+      if (Math.abs(mdy) > Math.abs(mdx) * 1.8) { touchDragPend = null; return; }
+      touchDragPend.committed = true;
+    }
+    ev.preventDefault();  // lock in canvas drag
+    var p   = canvasPt(ev.touches[0].clientX, ev.touches[0].clientY);
+    var obj = active();
+    obj.cx = touchDragPend.startCx + (p.x - touchDragPend.canvasX);
+    obj.cy = touchDragPend.startCy + (p.y - touchDragPend.canvasY);
+    updateUI(); draw();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', function(ev) {
+  if (ev.touches.length < 2) pinchStart = null;
+  if (ev.touches.length === 0) {
+    // Quick tap (never committed) → snap center to tap point, keep radius
+    if (touchDragPend && !touchDragPend.committed) {
+      var obj = active();
+      obj.cx = touchDragPend.canvasX;
+      obj.cy = touchDragPend.canvasY;
+      if (obj.r <= 0) obj.r = 60;  // default radius on first tap
+      updateUI(); draw();
+    }
+    drag = null; touchDragPend = null;
+  }
+});
+
+canvas.addEventListener('touchcancel', function() {
+  // iOS claimed a scroll gesture — discard without snapping
+  pinchStart = null; drag = null; touchDragPend = null;
+});
+
+// Keyboard shortcuts (desktop)
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'i' || e.key === 'I') selectCircle('iris');
+  if (e.key === 'p' || e.key === 'P') selectCircle('pupil');
+});
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 function draw() {
@@ -337,26 +489,24 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(imgEl, 0, 0);
 
-  // Algorithm overlay — always dim dashed
+  // Algorithm overlay — dim dashed
   if (algoResult && algoResult.ok) {
     var aCx  = algoResult.cxFrac  * canvas.width;
     var aCy  = algoResult.cyFrac  * canvas.height;
     var aPCx = (algoResult.cxPupilFrac != null ? algoResult.cxPupilFrac : algoResult.cxFrac) * canvas.width;
     var aPCy = (algoResult.cyPupilFrac != null ? algoResult.cyPupilFrac : algoResult.cyFrac) * canvas.height;
-    var aRi  = algoResult.rIrisFrac * canvas.width;
-    drawCircle(aCx, aCy, aRi,  'rgba(80,80,200,0.35)', 1.5, [5,4]);
+    drawCircle(aCx, aCy, algoResult.rIrisFrac * canvas.width, 'rgba(80,80,200,0.35)', 1.5, [5,4]);
     if (algoResult.rPupilFrac)
-      drawCircle(aPCx, aPCy, algoResult.rPupilFrac*canvas.width,
-                 'rgba(200,120,30,0.35)', 1.5, [5,4]);
+      drawCircle(aPCx, aPCy, algoResult.rPupilFrac * canvas.width, 'rgba(200,120,30,0.35)', 1.5, [5,4]);
   }
 
   var act = active(), inact = inactive();
 
   if (inact.r > 0)
-    drawCircle(inact.cx, inact.cy, inact.r, inactiveColor(), 0.7 / SCALE);
+    drawCircle(inact.cx, inact.cy, inact.r, inactiveColor(), 0.8 / SCALE);
 
   if (act.r > 0) {
-    drawCircle(act.cx, act.cy, act.r, activeColor(), 1 / SCALE);
+    drawCircle(act.cx, act.cy, act.r, activeColor(), 1.2 / SCALE);
     drawCross(act.cx, act.cy, activeColor());
     ['E','W','N','S'].forEach(function(dir) {
       var hx = act.cx + (dir==='E' ? act.r : dir==='W' ? -act.r : 0);
@@ -370,11 +520,10 @@ function draw() {
 
 function drawCircle(cx, cy, r, color, lw, dash) {
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.strokeStyle = color; ctx.lineWidth = lw || 2;
   if (dash) ctx.setLineDash(dash);
-  ctx.stroke();
-  ctx.restore();
+  ctx.stroke(); ctx.restore();
 }
 function drawCross(cx, cy, color) {
   var s = 8 / SCALE;
@@ -384,9 +533,9 @@ function drawCross(cx, cy, color) {
   ctx.restore();
 }
 function drawHandle(x, y, color) {
-  var s = 5 / SCALE;
+  var s = 6 / SCALE;  // slightly bigger for touch visibility
   ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2);
+  ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2);
   ctx.fillStyle = color; ctx.fill();
   ctx.restore();
 }
@@ -396,12 +545,13 @@ function selectCircle(which) {
   activeCircle = which;
   document.getElementById('tab-iris').className  = 'circ-tab iris'  + (which==='iris'  ? ' active':'');
   document.getElementById('tab-pupil').className = 'circ-tab pupil' + (which==='pupil' ? ' active':'');
+  // Reset any in-progress touch gesture when switching circles
+  pinchStart = null; drag = null; touchDragPend = null;
   updateUI(); draw();
 }
 
 function placeNew() {
-  var obj = active();
-  obj.cx = -1; obj.cy = -1; obj.r = -1;
+  var obj = active(); obj.cx = -1; obj.cy = -1; obj.r = -1;
   canvas.style.cursor = 'crosshair';
   updateUI(); draw();
 }
@@ -423,25 +573,22 @@ function resetToAlgo() {
 
 function updateUI() {
   var box = document.getElementById('instrBox');
-  var label = activeCircle === 'iris' ? 'IRIS' : 'PUPIL';
   box.className = '';
   box.textContent =
-    'Working on: ' + label + '\n\n' +
-    'Drag outside  → draw new circle\nDrag interior → move\nDrag edge     → resize\n\n' +
-    'Switch:  I = iris   P = pupil';
+    'Active: ' + (activeCircle === 'iris' ? 'IRIS' : 'PUPIL') + '\n\n' +
+    'Mouse:\nDrag outside  → draw new circle\nDrag inside   → move\nDrag edge     → resize\n\n' +
+    'Touch:\nTap           → snap center\nDrag          → move\nPinch (2 fingers) → resize\n\n' +
+    'Keys: I = iris   P = pupil';
 
-  var act   = active();
-  var inact = inactive();
-  var iw    = imgEl ? imgEl.naturalWidth : 1;
+  var act = active(), inact = inactive();
+  var iw  = imgEl ? imgEl.naturalWidth : 1;
 
   document.getElementById('valTitle').textContent   = activeCircle === 'iris' ? 'Iris values' : 'Pupil values';
   document.getElementById('otherTitle').textContent = activeCircle === 'iris' ? 'Pupil values (inactive)' : 'Iris values (inactive)';
-
   document.getElementById('vCx').textContent =
     act.cx >= 0 ? Math.round(act.cx)+', '+Math.round(act.cy) : '—';
   document.getElementById('vR').textContent =
     act.r  > 0  ? Math.round(act.r)+'  ('+( act.r/iw).toFixed(3)+')' : '—';
-
   document.getElementById('vOtherCx').textContent =
     inact.cx >= 0 ? Math.round(inact.cx)+', '+Math.round(inact.cy) : '—';
   document.getElementById('vOtherR').textContent =
@@ -463,7 +610,8 @@ function showAlgo() {
 // ── Load image ────────────────────────────────────────────────────────────────
 function loadImage(i) {
   idx = i;
-  drag = null;
+  drag = null; pinchStart = null; touchDragPend = null;
+
   var files = getCurrentFiles();
   var file  = files[i];
   var key   = imgKey(file);
@@ -474,9 +622,10 @@ function loadImage(i) {
   imgEl = new Image();
   imgEl.onload = function() {
     var wrapEl = document.getElementById('canvasWrap');
-    var maxW = wrapEl.clientWidth  - 20;
-    var maxH = wrapEl.clientHeight - 20;
-    SCALE = Math.min(maxW / imgEl.naturalWidth, maxH / imgEl.naturalHeight);
+    var maxW = wrapEl.clientWidth  - 4;
+    var maxH = wrapEl.clientHeight - 4;
+    SCALE = Math.min(maxW / imgEl.naturalWidth, maxH / imgEl.naturalHeight, 1);
+    // Never scale up (SCALE ≤ 1); canvas buffer = image native res
     canvas.style.width  = Math.round(imgEl.naturalWidth  * SCALE) + 'px';
     canvas.style.height = Math.round(imgEl.naturalHeight * SCALE) + 'px';
     canvas.width  = imgEl.naturalWidth;
@@ -486,11 +635,9 @@ function loadImage(i) {
     showAlgo();
 
     if (gt[key] && !gt[key]._skip) {
-      // Restore saved annotation
       iris  = { cx: gt[key].irisCx,  cy: gt[key].irisCy,  r: gt[key].irisR  };
       pupil = { cx: gt[key].pupilCx, cy: gt[key].pupilCy, r: gt[key].pupilR };
     } else {
-      // Auto-fill from algorithm
       var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
       if (algoResult && algoResult.ok) {
         iris  = { cx: algoResult.cxFrac*iw, cy: algoResult.cyFrac*ih,
@@ -504,21 +651,20 @@ function loadImage(i) {
       }
     }
 
-    // Restore note
     document.getElementById('noteBox').value = (gt[key] && gt[key].note) ? gt[key].note : '';
-
     updateUI(); draw();
     updateThumbs(); updateProgress();
   };
   imgEl.onerror = function() {
-    document.getElementById('instrBox').textContent = 'Failed to load image: ' + file;
+    document.getElementById('instrBox').textContent = '⚠ Failed to load:\n' + file;
+    document.getElementById('instrBox').className = 'warn';
   };
   imgEl.src = getImgDir() + file;
 }
 
 // ── Save / navigation ─────────────────────────────────────────────────────────
 function saveAndNext() {
-  if (iris.r <= 0) { alert('Iris circle not placed yet. Place it or click Skip.'); return; }
+  if (iris.r <= 0) { alert('Iris circle not placed yet. Place it or tap Skip.'); return; }
   if (pupil.r <= 0) pupil.r = iris.r * 0.35;
 
   var files = getCurrentFiles();
@@ -527,25 +673,23 @@ function saveAndNext() {
   var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
 
   gt[key] = {
-    set:     currentSet,
-    file:    file,
-    imgW:    iw, imgH: ih,
+    set: currentSet, file: file,
+    imgW: iw, imgH: ih,
     irisCx:  Math.round(iris.cx),  irisCy:  Math.round(iris.cy),  irisR:  Math.round(iris.r),
     pupilCx: Math.round(pupil.cx), pupilCy: Math.round(pupil.cy), pupilR: Math.round(pupil.r),
-    // Fractional values for resolution-independent use
-    irisCxFrac:  iris.cx / iw,   irisCyFrac:  iris.cy / ih,   irisRFrac:  iris.r / iw,
-    pupilCxFrac: pupil.cx / iw,  pupilCyFrac: pupil.cy / ih,  pupilRFrac: pupil.r / iw,
-    note:    document.getElementById('noteBox').value,
-    ts:      new Date().toISOString()
+    // Fractional (resolution-independent)
+    irisCxFrac:  iris.cx / iw,  irisCyFrac:  iris.cy / ih,  irisRFrac:  iris.r / iw,
+    pupilCxFrac: pupil.cx / iw, pupilCyFrac: pupil.cy / ih, pupilRFrac: pupil.r / iw,
+    note: document.getElementById('noteBox').value,
+    ts:   new Date().toISOString()
   };
 
   persistGT();
   document.getElementById('noteBox').value = '';
   updateThumbs(); updateProgress();
-
-  // Auto-export JSON (safety net — data never lost)
   autoExportJSON();
 
+  // Advance to next unannotated
   var next = idx + 1;
   while (next < files.length && gt[imgKey(files[next])] && gt[imgKey(files[next])]._skip) next++;
   if (next < files.length) loadImage(next);
@@ -554,58 +698,46 @@ function saveAndNext() {
 
 function skipImage() {
   var files = getCurrentFiles();
-  var key   = imgKey(files[idx]);
-  gt[key] = { _skip: true };
+  gt[imgKey(files[idx])] = { _skip: true };
   persistGT();
   updateThumbs(); updateProgress();
   if (idx + 1 < files.length) loadImage(idx + 1);
 }
 
-// ── Persist to localStorage ───────────────────────────────────────────────────
+// ── Persist ───────────────────────────────────────────────────────────────────
 function persistGT() {
   try { localStorage.setItem('aeye_gt', JSON.stringify(gt)); } catch(e) {}
 }
 
-// ── Export helpers ────────────────────────────────────────────────────────────
+// ── Export ────────────────────────────────────────────────────────────────────
 function buildExportObj() {
-  // Build gt-data.json compatible object
   var out = {
-    _version:  gtMeta._version,
-    _note:     gtMeta._note,
-    _sets:     gtMeta._sets,
-    _updated:  new Date().toISOString()
+    _version: gtMeta._version, _note: gtMeta._note, _sets: gtMeta._sets,
+    _updated: new Date().toISOString()
   };
-  for (var k in gt) {
-    if (!gt[k]._skip) out[k] = gt[k];
-  }
+  for (var k in gt) { if (!gt[k]._skip) out[k] = gt[k]; }
   return out;
 }
 
 function autoExportJSON() {
-  // Trigger download (browser allows this inside a click handler)
   var json = JSON.stringify(buildExportObj(), null, 2);
   try {
     var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([json], {type:'application/json'}));
-    a.download = 'gt-data.json';
-    a.click();
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = 'gt-data.json'; a.click();
   } catch(e) {}
-  // Also log so Claude can capture via browser JS tool
   console.log('[GT-EXPORT]', json);
-  // Show status
   var s = document.getElementById('saveStatus');
-  s.textContent = '✓ Saved & downloaded gt-data.json';
-  setTimeout(function(){ s.textContent = ''; }, 3000);
+  s.textContent = '✓ gt-data.json downloaded';
+  setTimeout(function() { s.textContent = ''; }, 3000);
 }
 
-function exportJSON() {
-  autoExportJSON();
-}
+function exportJSON() { autoExportJSON(); }
 
 function logJSON() {
   var json = JSON.stringify(buildExportObj(), null, 2);
   console.log('[GT-EXPORT]', json);
-  alert('JSON logged to console. Open DevTools → Console to copy it.');
+  alert('JSON logged to console (DevTools → Console to copy).');
 }
 
 // ── Set switcher ──────────────────────────────────────────────────────────────
@@ -613,26 +745,25 @@ function switchSet(setId) {
   if (setId === currentSet) return;
   currentSet = setId;
   document.getElementById('btn-set-test').className =
-    'set-btn' + (setId === 'test-images'   ? ' active-set' : '');
+    'set-btn' + (setId === 'test-images'  ? ' active-set' : '');
   document.getElementById('btn-set-ubiris').className =
-    'set-btn' + (setId === 'ubiris-check'  ? ' active-set' : '');
+    'set-btn' + (setId === 'ubiris-check' ? ' active-set' : '');
   buildThumbs();
-  var files = getCurrentFiles();
-  var start = 0;
+  var files = getCurrentFiles(), start = 0;
   while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
   loadImage(start);
 }
 
 // ── Thumbnails ────────────────────────────────────────────────────────────────
 function buildThumbs() {
-  var list  = document.getElementById('thumbList');
+  var list = document.getElementById('thumbList');
   list.innerHTML = '';
   var files = getCurrentFiles();
   files.forEach(function(file, i) {
     var img = document.createElement('img');
     img.src = getImgDir() + file;
     img.className = 'imgthumb'; img.title = file;
-    img.onclick = (function(ii){ return function(){ loadImage(ii); }; })(i);
+    img.onclick = (function(ii) { return function() { loadImage(ii); }; })(i);
     list.appendChild(img);
   });
 }
@@ -643,51 +774,44 @@ function updateThumbs() {
   files.forEach(function(file, i) {
     var key = imgKey(file);
     thumbs[i].className = 'imgthumb' +
-      (i === idx                       ? ' active' : '') +
-      (gt[key] && !gt[key]._skip       ? ' done'   : '') +
-      (gt[key] &&  gt[key]._skip       ? ' skip'   : '');
+      (i === idx               ? ' active' : '') +
+      (gt[key] && !gt[key]._skip ? ' done'   : '') +
+      (gt[key] &&  gt[key]._skip ? ' skip'   : '');
   });
 }
 
 function updateProgress() {
-  var files = getCurrentFiles();
-  var done  = 0;
-  files.forEach(function(file){ var k = imgKey(file); if (gt[k] && !gt[k]._skip) done++; });
+  var files = getCurrentFiles(), done = 0;
+  files.forEach(function(f) { var k = imgKey(f); if (gt[k] && !gt[k]._skip) done++; });
   document.getElementById('progress').textContent = done + ' / ' + files.length + ' annotated';
 }
 
-// ── Data merge ────────────────────────────────────────────────────────────────
+// ── Data merge from fetched gt-data.json ──────────────────────────────────────
 function mergeFromFetch(data) {
-  // Metadata
   if (data._version) gtMeta._version = data._version;
   if (data._note)    gtMeta._note    = data._note;
   if (data._sets)    gtMeta._sets    = data._sets;
-  // Annotations — localStorage wins (it may have newer edits)
   for (var k in data) {
     if (k.startsWith('_')) continue;
-    if (!gt[k]) gt[k] = data[k];
+    if (!gt[k]) gt[k] = data[k];   // localStorage wins if both exist
   }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-// 1. Load localStorage
 try { gt = JSON.parse(localStorage.getItem('aeye_gt') || '{}'); } catch(e) { gt = {}; }
 
-// 2. Fetch committed gt-data.json and merge
 fetch('ground-truth/gt-data.json')
-  .then(function(r){ return r.json(); })
+  .then(function(r) { return r.json(); })
   .then(function(data) {
     mergeFromFetch(data);
     persistGT();
-    console.log('[GT-BOOT] Loaded', Object.keys(data).filter(function(k){return !k.startsWith('_');}).length,
-                'entries from gt-data.json');
+    var n = Object.keys(data).filter(function(k) { return !k.startsWith('_'); }).length;
+    console.log('[GT-BOOT] Loaded', n, 'entries from gt-data.json');
   })
-  .catch(function(e){ console.warn('[GT-BOOT] Could not fetch gt-data.json:', e.message); })
+  .catch(function(e) { console.warn('[GT-BOOT] Could not fetch gt-data.json:', e.message); })
   .finally(function() {
-    buildThumbs();
-    updateProgress();
-    var files = getCurrentFiles();
-    var start = 0;
+    buildThumbs(); updateProgress();
+    var files = getCurrentFiles(), start = 0;
     while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
     loadImage(start);
   });
