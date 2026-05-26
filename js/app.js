@@ -2399,6 +2399,50 @@ function zoomToEye(skipSanityCheck) {
         console.log('[ITER-REFINE] no significant change — cascade result kept');
       }
       } // end if (!_rayUsed)
+
+      // ── BAND-mode pupil-anchor iris centre correction (PCC) ──────────────────
+      // After ITER-REFINE, if the iris ring centre is > 20% of irisR away from
+      // the reliably-detected pupil centre, move the iris centre toward the pupil
+      // leaving a 10% residual (anatomical allowance), then expand the ring from
+      // the corrected centre until sclera first appears.
+      // Only runs in BAND/close-up mode where zPupil is accurate.
+      if (_isFromBand && zPupil) {
+        var _pccIrX    = (donut.cx - drawInfo.dx) / nsx;
+        var _pccIrY    = (donut.cy - drawInfo.dy) / nsy;
+        var _pccDx     = _pccIrX - zPupil.cx;
+        var _pccDy     = _pccIrY - zPupil.cy;
+        var _pccDist   = Math.sqrt(_pccDx*_pccDx + _pccDy*_pccDy);
+        var _pccR      = donut.rIris / nsx;
+        var _pccOffPct = _pccR > 0 ? _pccDist / _pccR : 0;
+        console.log('[PCC] iris-pupil: dx=' + Math.round(_pccDx) + ' dy=' + Math.round(_pccDy) +
+                    ' dist=' + Math.round(_pccDist) + ' (' + Math.round(_pccOffPct * 100) +
+                    '% of rIris=' + Math.round(_pccR) + ')');
+        if (_pccOffPct > 0.20 && _pccDist > 0) {
+          // Shift iris centre so residual offset = 10% of irisR.
+          var _pccFrac = Math.min(1 - 0.10 / _pccOffPct, 0.80);
+          var _pccNx   = _pccIrX - _pccDx * _pccFrac;
+          var _pccNy   = _pccIrY - _pccDy * _pccFrac;
+          donut.cx = drawInfo.dx + _pccNx * nsx;
+          donut.cy = drawInfo.dy + _pccNy * nsy;
+          console.log('[PCC] APPLIED frac=' + _pccFrac.toFixed(2) +
+                      ' → new iris cx=' + Math.round(donut.cx) + ' cy=' + Math.round(donut.cy));
+          // Expand ring from corrected centre until sclera first appears.
+          var _pccRB   = _pccR;
+          var _pccCeil = iR * 1.55;
+          var _pccSt   = 0;
+          while (_pccRB < _pccCeil &&
+                 _irSclFrac(_pccNx, _pccNy, _pccRB, _sclAdaptHi) < _irSCL_THRESH &&
+                 _pccSt < 60) {
+            _pccRB += 2; _pccSt++;
+          }
+          if (_irSclFrac(_pccNx, _pccNy, _pccRB, _sclAdaptHi) > _irSCL_THRESH) _pccRB -= 2;
+          if (_pccRB > _pccR + 2) {
+            donut.rIris = Math.round(_pccRB * nsx);
+            console.log('[PCC] EXPANDED: rIris ' + Math.round(_pccR) + '→' + Math.round(_pccRB) +
+                        ' from corrected centre');
+          }
+        }
+      }
     }
     // ── Visible-iris inward limbus scan (centre correction) ───────────────────
     // Quality gate: if > 15 % of the ring boundary samples are scleral
