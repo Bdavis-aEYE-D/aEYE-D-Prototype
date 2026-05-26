@@ -1285,6 +1285,19 @@ function _scleraPairScan(imgEl, midY) {
 function _tryCloseupFit() {
   if (!originalImgEl) { showLocate(); return; }
 
+  // ── autoFit probe — run first so we have a reliable irisR reference ──────
+  // Serves two purposes:
+  //   1. Gate: bail if no real iris found in the original image.
+  //   2. Reference: _probeIrisR guards the sclera-pair result against false hits
+  //      (e.g. inner-corner highlight) that return a tiny r, regardless of whether
+  //      MACRO-GUARD's RIP also succeeded (_swRipR may be 0).
+  var probe, _probeIrisR = 0;
+  try {
+    probe = autoFit(originalImgEl, true);
+    if (!probe.ok || probe.rIrisFrac < 0.08) { showLocate(); return; }
+    _probeIrisR = Math.round(probe.rIrisFrac * originalImgEl.width);
+  } catch(e) { showLocate(); return; }
+
   // ── Sclera-pair scan to find the iris X-centre ───────────────────────────
   // When mpZoomHint has a known y-position (1-eye gate / MACRO-GUARD path),
   // scan there first, then fall back to ±10/20% offsets if needed.
@@ -1325,22 +1338,23 @@ function _tryCloseupFit() {
                     Math.round(_swRipR * 1.3) + ') — using MACRO-GUARD cx/ripR=' + _swRipR);
         mpZoomHint = { midX: mpZoomHint.midX, midY: mpZoomHint.midY, irisR: _swRipR, _fromBand: true };
       } else {
-        // When MACRO-GUARD provided a centre, validate the sclera-pair cx.
-        // A large horizontal offset means the pair hit a false structure
-        // (e.g. inner-corner highlight instead of the nasal sclera).
-        // If pair cx differs from MACRO-GUARD cx by >25% of irisR, keep the
-        // MACRO-GUARD cx (anchored on the actual iris) and use pair's irisR.
-        var _swCxDelta = _swRipR > 0 ? Math.abs(_swBest.cx - mpZoomHint.midX) : 0;
-        if (_swRipR > 0 && _swCxDelta > _swIrisR * 0.25) {
-          // cx-mismatch: sclera-pair hit a false structure (e.g. inner-corner highlight).
+        // Validate the sclera-pair cx against the MACRO-GUARD centre (when available).
+        // A large offset means the pair hit a false structure (inner-corner highlight, etc.).
+        // Reference radius: RIP radius if available, else autoFit probe estimate.
+        // Both are more reliable for scale than the sclera-pair's own r.
+        var _refR = _swRipR > 0 ? _swRipR : _probeIrisR;
+        var _swCxDelta = (_refR > 0 && mpZoomHint && mpZoomHint.midX > 0) ?
+                         Math.abs(_swBest.cx - mpZoomHint.midX) : 0;
+        if (_swCxDelta > 0 && _swCxDelta > _refR * 0.25) {
+          // cx-mismatch: sclera-pair hit a false structure.
           // Its irisR is also unreliable (two close peaks → tiny r).
-          // Use MACRO-GUARD's RIP radius instead — it's anchored on the actual iris.
+          // Use MACRO-GUARD's cx and the best available irisR reference.
           console.log('[BAND] cx-mismatch: pair cx=' + _swBest.cx +
                       ' vs MACRO-GUARD cx=' + Math.round(mpZoomHint.midX) +
-                      ' (Δ=' + Math.round(_swCxDelta) + ' > 0.25×iR=' + Math.round(_swIrisR * 0.25) + ')' +
-                      ' — MACRO-GUARD cx+ripR win (pair r=' + Math.round(_swIrisR) +
-                      ' discarded, using ripR=' + _swRipR + ')');
-          mpZoomHint = { midX: mpZoomHint.midX, midY: _swBest.cy, irisR: _swRipR, _fromBand: true };
+                      ' (Δ=' + Math.round(_swCxDelta) + ' > 0.25×refR=' + Math.round(_refR * 0.25) +
+                      ', src:' + (_swRipR > 0 ? 'ripR' : 'probe') + ')' +
+                      ' — MACRO-GUARD cx+refR=' + _refR + ' (pair r=' + Math.round(_swIrisR) + ' discarded)');
+          mpZoomHint = { midX: mpZoomHint.midX, midY: _swBest.cy, irisR: _refR, _fromBand: true };
         } else {
           console.log('[BAND] sclera-pair: cx=' + _swBest.cx + ' cy=' + _swBest.cy +
                       ' irisR=' + _swIrisR + ' score=' + Math.round(_swBest.score));
@@ -1358,11 +1372,19 @@ function _tryCloseupFit() {
     }
   }
 
-  try {
-    var probe = autoFit(originalImgEl, true);
-    // Require a real iris: limbus must be detected and span at least 8% of image width.
-    if (!probe.ok || probe.rIrisFrac < 0.08) { showLocate(); return; }
-  } catch(e) { showLocate(); return; }
+  // ── irisR sanity floor ────────────────────────────────────────────────────
+  // The sclera-pair can produce a tiny irisR even when cx-mismatch didn't fire
+  // (pair cx close enough to MACRO-GUARD but r still from false peaks, or no
+  // MACRO-GUARD hint at all).  Floor = 50% of the probe's irisR estimate.
+  // pad = irisR×3.0 in zoomToEye, so a tiny irisR collapses the crop to almost
+  // just the iris and breaks the downstream detection cascade.
+  if (mpZoomHint && mpZoomHint._fromBand && _probeIrisR > 0 &&
+      mpZoomHint.irisR < _probeIrisR * 0.50) {
+    console.log('[BAND] irisR sanity floor: hint.irisR=' + mpZoomHint.irisR +
+                ' < probeR×0.5=' + Math.round(_probeIrisR * 0.50) +
+                ' — correcting to probeR=' + _probeIrisR);
+    mpZoomHint = Object.assign({}, mpZoomHint, { irisR: _probeIrisR });
+  }
 
   isCloseupMode = true;
   currentSide   = 'Right';
