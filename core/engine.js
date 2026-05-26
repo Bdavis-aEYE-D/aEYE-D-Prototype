@@ -404,15 +404,6 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     var _osLabG = rgbLab(_osMean[0], _osMean[1], _osMean[2]);
     var _osNeutral = (_osM && (_osM.entry.cat === 'Gray' || _osM.entry.cat === 'Blue'))
                    || (_osLabG[1] < 7 && _osLabG[2] < 11);
-    // Debug export — read by QC tool via window._lastEngineDebug
-    window._lastEngineDebug = {
-      outerM_cat: outerM.entry.cat, outerM_name: outerM.entry.name,
-      _t3InnerWarm: _t3InnerWarm, osMean: _osMean,
-      osLab: [Math.round(_osLabG[0]*10)/10, Math.round(_osLabG[1]*10)/10, Math.round(_osLabG[2]*10)/10],
-      osM_cat: _osM ? _osM.entry.cat : null, osM_name: _osM ? _osM.entry.name : null,
-      osNeutral: _osNeutral, osSamples: outerStroma.length,
-      innerDomLab: [Math.round(_t3InnerLab[0]*10)/10, Math.round(_t3InnerLab[1]*10)/10, Math.round(_t3InnerLab[2]*10)/10]
-    };
     if (_osNeutral) {
       // Find nearest Gray/Blue entry by ΔE on outerStroma Lab
       var _gbBest = null, _gbDist = Infinity;
@@ -872,15 +863,10 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Guard: skip when _t3InnerWarm (central heterochromia — warm bronze/amber collarette).
   // Those eyes have a genuinely neutral gray outer zone and must NOT be pulled to Green
   // by a tiebreaker — the warm inner ring is completely unrelated to iris hue.
-  // Always export tiebreaker debug regardless of whether it fires
-  window._lastTieDebug = {
-    outerM_cat: outerM.entry.cat, outerM_name: outerM.entry.name,
-    _t3InnerWarm: _t3InnerWarm,
-    pzLab: [Math.round(_t3InnerLab[0]*10)/10, Math.round(_t3InnerLab[1]*10)/10, Math.round(_t3InnerLab[2]*10)/10],
-    innerDomLab: [Math.round(_innerDomLab2[0]*10)/10, Math.round(_innerDomLab2[1]*10)/10, Math.round(_innerDomLab2[2]*10)/10],
-    pupilZoneLen: pupilZone.length
-  };
-  if (outerM.entry.cat === 'Gray' && !_t3InnerWarm) {
+  // Extend to Blue as well: borderline green eyes sometimes land on Blue (cool-tinted outer
+  // zone) instead of Gray depending on ring size. The ΔE + 6 margin is tight enough that
+  // deeply blue irises (b* ≈ −20 to −50) are unaffected — their nearest Green is far beyond +6.
+  if ((outerM.entry.cat === 'Gray' || outerM.entry.cat === 'Blue') && !_t3InnerWarm) {
     var _tieOuterLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
     var _tieGreenBest = null, _tieGreenDist = Infinity;
     for (var _tgi = 0; _tgi < PALETTE.length; _tgi++) {
@@ -888,7 +874,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       var _tgDe = dE(_tieOuterLab, PALETTE[_tgi].lab);
       if (_tgDe < _tieGreenDist) { _tieGreenDist = _tgDe; _tieGreenBest = PALETTE[_tgi]; }
     }
-    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 6) {
+    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 10) {
       outerM = { entry: _tieGreenBest, distance: _tieGreenDist };
     }
   }
@@ -928,6 +914,14 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     limbalDropL: limbalDropL,           // Lab-L drop, useful for debug/share card
     sectoral: sectoral,                 // {color, rgb, clock, spanW, spanDeg, meanDE} or null
     freckles: freckles,                 // [{x, y, rPx, sigma, dropL, clock, palette, rgb}, ...]
+    // Central heterochromia flag: warm amber/bronze collarette around pupil detected,
+    // AND the outer iris is cool/neutral (Gray or Blue). This specific combination
+    // causes observers to perceive the eye as Hazel at normal viewing distance — the
+    // warm inner ring blends spatially with the cool outer iris.
+    // Restricted to Gray/Blue outer: Brown eyes with warm interiors are simply Brown,
+    // and calling them "may look Hazel" would be confusing rather than helpful.
+    centralHetero: _t3InnerWarm &&
+      (outerM.entry.cat === 'Gray' || outerM.entry.cat === 'Blue'),
     rarity: RARITY[outerM.entry.cat] || null,                      // {pct, label, line}
     rarityScore: null,   // populated after result object is built
     vibe: getVibe(outerM.entry.cat, outerM.entry.lab),              // descriptive nickname

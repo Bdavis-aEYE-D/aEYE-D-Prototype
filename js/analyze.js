@@ -148,6 +148,16 @@ function renderResult(result){
     }
   }
 
+  // ── Central-heterochromia perception note ────────────────────────────────
+  // When a warm amber/bronze collarette is detected around the pupil and the outer
+  // iris is a different (cooler or neutral) color, humans spatially integrate the two
+  // zones at normal viewing distance — often perceiving the eye as Hazel even when
+  // the outer iris is Gray, Blue, or Brown. Surface this explanation when the engine
+  // detects the warm ring AND the main color isn't already Hazel (where it's obvious).
+  if (result.centralHetero && cat !== 'Hazel') {
+    n += 'You may notice that some people describe this eye as Hazel — that\'s a natural perception effect: the warm amber ring around the pupil blends with the ' + cat.toLowerCase() + ' outer iris at normal viewing distances, creating the visual impression of a blended, hazel-like color. ';
+  }
+
   // ── Limbal ring ───────────────────────────────────────────────────────────
   if (result.limbal !== 'None' && result.limbalColor) {
     var ftype = result.limbalType || 'ring';

@@ -41,6 +41,48 @@ for (var i=0;i<tabs.length;i++){
 // ======================= FILE LOADING =======================
 var fileInput = $('file-input');
 
+// ── Ring Correction Memory ─────────────────────────────────────────────────
+// Saves user-accepted ring placements (filename:size key) so the same image
+// never needs to be re-corrected. Corrections survive page reloads.
+var _loadedFile = null;   // File object currently loaded
+var _ringStore = (function () {
+  var KEY = 'aeyed_ring_v1';
+  function _rd() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } }
+  function _wr(d) { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) {} }
+  function _fp(f) { return f ? f.name + ':' + f.size : ''; }
+  return {
+    get: function (f) { var k = _fp(f); return k ? (_rd()[k] || null) : null; },
+    set: function (f, v) { if (!f) return; var d = _rd(), k = _fp(f); d[k] = v; _wr(d); },
+    list: function () { return _rd(); }
+  };
+})();
+// Convert current donut canvas coords → normalised image fractions for storage
+function _donutToImgCoords() {
+  if (!imgEl || !imgEl.naturalWidth) return null;
+  var sx = drawInfo.dw / imgEl.naturalWidth, sy = drawInfo.dh / imgEl.naturalHeight;
+  return {
+    irisCxFrac:  (donut.cx - drawInfo.dx) / sx / imgEl.naturalWidth,
+    irisCyFrac:  (donut.cy - drawInfo.dy) / sy / imgEl.naturalHeight,
+    irisRFrac:    donut.rIris / sx / imgEl.naturalWidth,
+    pupilCxFrac: ((donut.cxPupil != null ? donut.cxPupil : donut.cx) - drawInfo.dx) / sx / imgEl.naturalWidth,
+    pupilCyFrac: ((donut.cyPupil != null ? donut.cyPupil : donut.cy) - drawInfo.dy) / sy / imgEl.naturalHeight,
+    pupilRFrac:  (donut.rPupil || 0) / sx / imgEl.naturalWidth,
+    ts: Date.now()
+  };
+}
+// Apply stored correction (normalised fractions → canvas coords)
+function _applyStoredRing(stored) {
+  if (!stored || !imgEl || !imgEl.naturalWidth) return false;
+  var sx = drawInfo.dw / imgEl.naturalWidth, sy = drawInfo.dh / imgEl.naturalHeight;
+  donut.cx      = drawInfo.dx + stored.irisCxFrac  * imgEl.naturalWidth  * sx;
+  donut.cy      = drawInfo.dy + stored.irisCyFrac  * imgEl.naturalHeight * sy;
+  donut.rIris   =               stored.irisRFrac   * imgEl.naturalWidth  * sx;
+  donut.cxPupil = drawInfo.dx + stored.pupilCxFrac * imgEl.naturalWidth  * sx;
+  donut.cyPupil = drawInfo.dy + stored.pupilCyFrac * imgEl.naturalHeight * sy;
+  donut.rPupil  =               stored.pupilRFrac  * imgEl.naturalWidth  * sx;
+  return true;
+}
+
 // Native camera buttons — opens iOS full-resolution camera directly
 function _nativeCamHandler(inputId) {
   var input = $(inputId);
@@ -55,6 +97,7 @@ $('btn-cam-front').addEventListener('click', function(){ _nativeCamHandler('nati
   $(id).addEventListener('change', function(e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
+    _loadedFile = f;
     var reader = new FileReader();
     reader.onload = function(){ loadOriginalFromUrl(reader.result); };
     reader.onerror = function(){ showError('Could not read file.'); };
@@ -82,6 +125,7 @@ $('tips-modal').addEventListener('click', function(e){
 fileInput.addEventListener('change', function(e){
   var f = e.target.files && e.target.files[0];
   if (!f) return;
+  _loadedFile = f;
   var reader = new FileReader();
   reader.onload = function(){ loadOriginalFromUrl(reader.result); };
   reader.onerror = function(){ showError('Could not read file.'); };
@@ -2372,6 +2416,12 @@ function zoomToEye(skipSanityCheck) {
           console.log('[ITER-REFINE] P2 FIND-LIMBUS: ' + Math.round(_irRBefore2) + '→' + Math.round(_irRB) +
                       ' (' + _irP2n + ' steps)' + (_probeFloorFired ? ' [probeFloor]' : ''));
         }
+        // NOTE: T-BAR-R radius override was considered but reverted.
+        // When only 1 of 3 L-side rays succeeds (L=[586], single measurement),
+        // the T-BAR radius is unreliable — it over-extends into temporal sclera.
+        // Phase 2 result (478px from inferior sclera detection) is the best
+        // circular fit for this anisotropic iris. User can fine-tune manually;
+        // the Ring Correction Memory will save and re-apply the correction.
       }
       // Band-mode floor rescue: if all phases still leave the ring ≥ 20% above the
       // floor (iR×0.72), the adaptive scleral thresholds were calibrated to the bright
@@ -2604,6 +2654,17 @@ function zoomToEye(skipSanityCheck) {
         hint.style.color = '';
         if (retakeBtn2) retakeBtn2.style.display = 'none';
       }
+    }
+    // Ring Correction Memory: if this image was previously placed manually,
+    // override the auto-fit result with the saved correction.
+    var _storedRing = _loadedFile ? _ringStore.get(_loadedFile) : null;
+    if (_storedRing && _applyStoredRing(_storedRing)) {
+      draw();
+      if (hint) {
+        hint.textContent = 'Restored your saved placement. Adjust if needed, then tap "Analyze Iris".';
+        hint.style.color = '#6cc4ff';
+      }
+      console.log('[RING-STORE] restored:', _loadedFile ? _loadedFile.name : '?');
     }
   };
   newImg.src = off.toDataURL();
@@ -2877,6 +2938,14 @@ $('btn-analyze').addEventListener('click', function(){
   if (captureMode === 'portrait') {
     savePortraitForCurrentResult();
   } else {
+    // Save the ring placement before running analysis so it persists for next load
+    if (_loadedFile) {
+      var _coords = _donutToImgCoords();
+      if (_coords) {
+        _ringStore.set(_loadedFile, _coords);
+        console.log('[RING-STORE] saved:', _loadedFile.name);
+      }
+    }
     donut.analyzed = true;
     draw();          // redraw immediately with thin rings before analysis runs
     analyze();
