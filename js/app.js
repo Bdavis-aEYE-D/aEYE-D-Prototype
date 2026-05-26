@@ -1398,7 +1398,7 @@ function _tryCloseupFit() {
     console.log('[BAND] irisR sanity floor: hint.irisR=' + mpZoomHint.irisR +
                 ' < probeR×0.5=' + Math.round(_probeIrisR * 0.50) +
                 ' — correcting to probeR=' + _probeIrisR);
-    mpZoomHint = Object.assign({}, mpZoomHint, { irisR: _probeIrisR });
+    mpZoomHint = Object.assign({}, mpZoomHint, { irisR: _probeIrisR, _probeFloorFired: true });
   }
 
   isCloseupMode = true;
@@ -1536,6 +1536,12 @@ function zoomToEye(skipSanityCheck) {
   // Capture _fromBand BEFORE mpZoomHint is consumed below — used in post-cascade
   // floor logic to decide whether to treat iR as the authoritative limbus measurement.
   var _isFromBand = !!(mpZoomHint && mpZoomHint._fromBand);
+  // _probeFloorFired: true when the irisR sanity floor in _tryCloseupFit corrected
+  // a too-small sclera-pair result up to probeR.  The probe finds the inner edge of
+  // the limbal ring, NOT the outer limbus, so iR slightly overestimates the limbus.
+  // Applying the 1.00× band floor in this case overrides a correct cascade result
+  // (which has independently found the true limbus) with an inflated iR.
+  var _probeFloorFired = !!(mpZoomHint && mpZoomHint._probeFloorFired);
   if (_eye_c2c && _eye_c2c.eyeW > 20) {
     // Centre on the canthus midpoint (eyeMidX/eyeMidY), NOT the iris centre.
     // The iris centre moves with gaze; the canthi are fixed lid landmarks.
@@ -1924,17 +1930,23 @@ function zoomToEye(skipSanityCheck) {
     console.log('[TRIM] closeup=' + isCloseupMode + ' cascImgR=' + Math.round(_cascImgR) + ' iR=' + Math.round(iR) + ((_cascImgR > iR) ? ' (overshoot→trimmed)' : ' (undershoot→skip)') + ' result=' + Math.round(donut.rIris) + ' (img→' + Math.round(donut.rIris/nsx) + ')');
     // Floor: for band-path subjects (iR = sclera-pair measurement = true limbus),
     // use iR directly (100%) as the floor — the band scan IS the authoritative radius.
+    // Exception: _probeFloorFired — iR was corrected from a bad sclera-pair to probeR,
+    // but the probe finds the inner limbal ring edge, slightly overestimating the true
+    // limbus.  The cascade result (RIP+SAT-LIMBUS ~466 px) is more reliable.
+    // Use 0.75× floor so the cascade result is preserved without triggering the floor.
     // For all other paths, keep the conservative 90% backstop.
     // The sclera back-off below will still trim if iR overshoots into sclera.
-    var _floorFrac = _isFromBand ? 1.00 : 0.90;
+    var _floorFrac = _isFromBand ? (_probeFloorFired ? 0.75 : 1.00) : 0.90;
     // _mainFloorFiredToIR: true when the cascade undershoots iR and the floor
-    // raises it to exactly iR (band-path only).  Used below to skip BACKOFF-SCLERA:
+    // raises it to exactly iR (normal band-path only).  Used below to skip BACKOFF-SCLERA:
     // the ring is already at the band-measured limbus; trimming further cuts into the iris.
+    // Not set for probe-floor paths — the cascade result is the authoritative radius,
+    // and BACKOFF-SCLERA may legitimately refine it.
     var _mainFloorFiredToIR = false;
     if (isCloseupMode && donut.rIris < iR * nsx * _floorFrac) {
       donut.rIris = Math.round(iR * nsx * _floorFrac);
-      _mainFloorFiredToIR = _isFromBand;
-      console.log('[FLOOR] applied iR×' + _floorFrac.toFixed(2) + ' floor (band=' + _isFromBand + ') → donut.rIris=' + Math.round(donut.rIris) + ' (img=' + Math.round(donut.rIris/nsx) + ')');
+      _mainFloorFiredToIR = _isFromBand && !_probeFloorFired;
+      console.log('[FLOOR] applied iR×' + _floorFrac.toFixed(2) + ' floor (band=' + _isFromBand + ' probeFloor=' + _probeFloorFired + ') → donut.rIris=' + Math.round(donut.rIris) + ' (img=' + Math.round(donut.rIris/nsx) + ')');
     }
     // ── Close-up limbal ring back-off ────────────────────────────────────────
     // The 0.94 trim above corrects the typical 5–8 % limbal-sclera anchor error.
@@ -2316,9 +2328,15 @@ function zoomToEye(skipSanityCheck) {
       // BAND always overestimates iR (finds outer-sclera brightness peaks, not limbus).
       // If Phase 1 stopped > 5% above the floor (iR×0.72), fire Phase 1b with Lo
       // threshold so the ring can continue shrinking toward the true limbus.
-      var _irBandNeedsP1b = _isFromBand && _irRB > _irFlr * 1.05;
+      // Exception (_probeFloorFired): the starting radius IS the cascade's limbus
+      // estimate (not a sclera-pair overestimate) — P1b would over-shrink past it.
+      var _irBandNeedsP1b = _isFromBand && !_probeFloorFired && _irRB > _irFlr * 1.05;
       var _irP1bFired = false;
-      if ((_irP1n < 3 && !_xRecenterFired) || _irBandNeedsP1b) {
+      // _probeFloorFired: cascade result is already at the true limbus (not a
+      // sclera-pair overestimate). Suppress P1b entirely — it would shrink past
+      // the correct limbus using the Lo threshold.  Phase 2 FIND-LIMBUS runs
+      // instead, stepping outward to confirm the exact limbus position.
+      if (!_probeFloorFired && ((_irP1n < 3 && !_xRecenterFired) || _irBandNeedsP1b)) {
         var _irP1bN = 0;
         while (_irRB > _irFlr && _irSclFrac(_irCxB, _irCyB, _irRB, _sclAdaptLo) > _irSCL_THRESH && _irP1bN < 50) {
           _irRB -= 2; _irP1bN++;
