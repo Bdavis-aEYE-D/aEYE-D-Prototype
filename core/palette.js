@@ -38,7 +38,7 @@ var PALETTE = [
   // ── HAZEL (24 entries: golden-green → dark brown-green) ──
   ['Hazel','Warm Gold','#C8A870'],['Hazel','Honey Gold','#B89060'],['Hazel','Sandy Hazel','#A88050'],
   ['Hazel','Light Hazel','#987040'],['Hazel','Golden Hazel','#906838'],['Hazel','Warm Hazel','#886030'],
-  ['Hazel','Hazel','#806028'],['Hazel','Autumn Hazel','#786020'],['Hazel','Amber Hazel','#906828'],
+  ['Hazel','Hazel','#806028'],['Hazel','Autumn Hazel','#786020'],
   ['Hazel','Copper Hazel','#885830'],['Hazel','Rich Hazel','#705028'],['Hazel','Harvest Brown','#604820'],
   ['Hazel','Deep Hazel','#584018'],['Hazel','Cedarwood','#788848'],['Hazel','Sage Ember','#708040'],
   ['Hazel','Mossy Hazel','#687038'],['Hazel','Prairie Hazel','#787040'],['Hazel','Forest Hazel','#606838'],
@@ -51,7 +51,7 @@ var PALETTE = [
   ['Amber','Cognac','#A05810'],['Amber','Tawny','#985010'],['Amber','Copper','#904808'],
   ['Amber','Butterscotch','#C89048'],['Amber','Caramel Gold','#B88040'],['Amber','Warm Amber','#B87030'],
   ['Amber','Bronze Gold','#A87028'],['Amber','Tiger Eye','#B87020'],['Amber','Tortoise','#987010'],
-  ['Amber','Warm Tawny','#906018'],['Amber','Smoked Honey','#885010'],
+  ['Amber','Warm Tawny','#906018'],['Amber','Smoked Honey','#885010'],['Amber','Amber Hazel','#906828'],
   // ── BROWN (56 entries: tan → near-black) ──
   ['Brown','Ivory','#E8D8B8'],['Brown','Cream','#D8C8A0'],['Brown','Linen','#C8B888'],
   ['Brown','Sand','#B8A870'],['Brown','Wheat','#A89858'],['Brown','Tan','#988848'],
