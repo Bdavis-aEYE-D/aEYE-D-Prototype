@@ -404,6 +404,10 @@ var IMAGE_SETS = {
 // key = "color/filename", value = color string
 var _rbLabels = {};   // populated by _loadRoboflowLabels()
 
+// COCO iris bounding boxes for roboflow-color rf2_ images, loaded from bboxes.json at boot
+// key = "color/filename", value = {cx, cy, r} (fractions of image width)
+var _rfBboxes = {};   // populated by _loadRoboflowBboxes()
+
 function _loadRoboflowLabels() {
   return fetch('roboflow-color/labels.json')
     .then(function(r){ return r.json(); })
@@ -419,6 +423,16 @@ function _loadRoboflowLabels() {
       console.log('[GT] Roboflow labels loaded:', files.length, 'images');
     })
     .catch(function(e){ console.warn('[GT] Could not load roboflow labels.json:', e.message); });
+}
+
+function _loadRoboflowBboxes() {
+  return fetch('roboflow-color/bboxes.json')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      _rfBboxes = data.bboxes || {};
+      console.log('[GT] Roboflow bboxes loaded:', Object.keys(_rfBboxes).length, 'entries');
+    })
+    .catch(function(e){ console.warn('[GT] Could not load roboflow bboxes.json:', e.message); });
 }
 
 function _knownLabel(file) {
@@ -673,7 +687,18 @@ function loadImage(i) {
       pupil = { cx:gt[key].pupilCx, cy:gt[key].pupilCy, r:gt[key].pupilR };
     } else {
       var iw=imgEl.naturalWidth, ih=imgEl.naturalHeight;
-      if (algoResult&&algoResult.ok) {
+      // For roboflow-color rf2_ images, prefer the COCO bbox over the algorithm result
+      // when available — it is more accurate than autoFit for these close-up crops.
+      var bb = (currentSet === 'roboflow-color') ? _rfBboxes[file] : null;
+      if (bb) {
+        var irisRpx = bb.r * iw;
+        iris  = { cx: bb.cx * iw, cy: bb.cy * iw, r: irisRpx };
+        pupil = { cx: bb.cx * iw, cy: bb.cy * iw, r: irisRpx * 0.35 };
+        document.getElementById('instrBox').textContent =
+          '(COCO bbox)\nRing pre-filled from\nRoboflow annotation.\n\nAdjust if needed,\nthen Confirm.\n\n'+
+          'Mouse:\nDrag outside  → draw new\nDrag inside   → move\nDrag edge     → resize\n\n'+
+          'Touch:\nTap           → snap center\nDrag          → move\nPinch 2-finger → resize\n\nKeys: I=iris  P=pupil';
+      } else if (algoResult&&algoResult.ok) {
         iris  = { cx:algoResult.cxFrac*iw, cy:algoResult.cyFrac*ih, r:algoResult.rIrisFrac*iw };
         pupil = { cx:(algoResult.cxPupilFrac!=null?algoResult.cxPupilFrac:algoResult.cxFrac)*iw,
                   cy:(algoResult.cyPupilFrac!=null?algoResult.cyPupilFrac:algoResult.cyFrac)*ih,
@@ -825,8 +850,9 @@ function mergeFromFetch(data) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 try { gt=JSON.parse(localStorage.getItem('aeye_gt')||'{}'); } catch(e){ gt={}; }
 
-// Load roboflow labels immediately (needed before any roboflow-color image loads)
+// Load roboflow labels and COCO bboxes immediately (needed before any roboflow-color image loads)
 _loadRoboflowLabels();
+_loadRoboflowBboxes();
 
 function _boot() {
   buildThumbs(); updateProgress();
