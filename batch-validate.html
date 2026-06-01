@@ -106,12 +106,14 @@ table.cm .row-total{color:#666;font-style:italic}
 
     <h2 style="margin-top:16px">Notes</h2>
     <p style="color:#555;font-size:11px;line-height:1.6">
-      • Center-bias ring estimation: cx/cy = image center,
-        rIris = 40 % of shorter staged dimension.<br>
-      • Uses annotated positions from gt-data.json if available.<br>
-      • Images &lt; 60 px in either dimension are skipped.<br>
+      <b style="color:#888">Ring source priority:</b><br>
+      1. GT annotation (annotate.html) — most accurate<br>
+      2. COCO bbox (rf2_ images, 722 of 823) — iris center + radius<br>
+      3. Center-bias fallback (rf1_ images) — cx/cy = center, r = 35 %<br>
+      <br>
+      • Images &lt; 60 px are skipped.<br>
       • Engine categories: Amber, Blue, Brown, Gray, Green, Hazel, Violet.<br>
-      • Gray → grey mapping applied for comparison.
+      • Gray → grey for comparison.
     </p>
   </div>
 
@@ -141,6 +143,7 @@ var _stopFlag = false;
 var _results  = [];   // { file, known, pred, ok, err }
 var _rbLabels = {};   // file → color string
 var _gt       = {};   // gt-data.json entries
+var _bboxes   = {};   // file → {cx,cy,r} from COCO annotations (rf2_ images only)
 
 // Engine category → Roboflow label mapping
 var CAT_MAP = {
@@ -162,12 +165,19 @@ window.addEventListener('load', function() {
       log('Loaded ' + Object.keys(_rbLabels).length + ' Roboflow labels.');
     }).catch(function(e){ log('⚠ Could not load labels.json: ' + e.message); }),
 
+    fetch('roboflow-color/bboxes.json').then(function(r){return r.json();}).then(function(d){
+      _bboxes = d.bboxes || {};
+      log('Loaded ' + Object.keys(_bboxes).length + ' COCO iris bboxes.');
+    }).catch(function(){
+      log('bboxes.json not found — rf2_ images will use center-bias fallback.');
+    }),
+
     fetch('ground-truth/gt-data.json').then(function(r){return r.json();}).then(function(d){
       _gt = d || {};
       var n = Object.keys(_gt).filter(function(k){return k.startsWith('roboflow-color/');}).length;
       log('Loaded gt-data.json — ' + n + ' Roboflow entries annotated.');
     }).catch(function(){
-      log('gt-data.json not found — will use center-bias estimation for all images.');
+      log('gt-data.json not found — will use COCO/center-bias estimation.');
     })
   ]);
 });
@@ -277,8 +287,9 @@ function processOne(file, cb) {
     var drawInfo = { dx:dx, dy:dy, dw:dw, dh:dh };
 
     var cx, cy, rIris, rPupil, cxP, cyP;
+    var ringSource = 'center-bias';
 
-    // Use gt-data.json if annotated
+    // Priority 1: GT annotation from annotate.html
     var gtKey = 'roboflow-color/' + file;
     var stored = _gt[gtKey];
     if (stored && stored.irisRFrac > 0) {
@@ -288,11 +299,23 @@ function processOne(file, cb) {
       cxP   = dx + stored.pupilCxFrac * nW * scale;
       cyP   = dy + stored.pupilCyFrac * nH * scale;
       rPupil= stored.pupilRFrac * nW * scale;
-    } else {
-      // Center-bias estimation
+      ringSource = 'gt-annotated';
+    }
+    // Priority 2: COCO bounding-box (rf2_ images, 722 of them)
+    else if (_bboxes[file]) {
+      var bb = _bboxes[file];
+      cx    = dx + bb.cx * nW * scale;
+      cy    = dy + bb.cy * nH * scale;
+      rIris = bb.r * nW * scale;
+      rPupil = rIris * 0.35;
+      cxP = cx; cyP = cy;
+      ringSource = 'coco-bbox';
+    }
+    // Priority 3: Center-bias fallback (rf1_ images, no COCO data)
+    else {
       cx = dx + dw / 2;
       cy = dy + dh / 2;
-      rIris = Math.min(dw, dh) * 0.40;
+      rIris = Math.min(dw, dh) * 0.35;  // 0.35 is more conservative than 0.40
       rPupil = rIris * 0.35;
       cxP = cx; cyP = cy;
     }
@@ -322,7 +345,7 @@ function processOne(file, cb) {
     var correct  = (predNorm === known);
 
     cb({ file:file, known:known, pred:predCat, predNorm:predNorm, ok:correct, err:null, err_skip:false,
-         src:src, annotated: !!stored });
+         src:src, annotated: !!stored, ringSource: ringSource });
   };
 
   imgEl.src = src;

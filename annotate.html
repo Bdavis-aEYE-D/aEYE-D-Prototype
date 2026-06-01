@@ -649,8 +649,21 @@ function loadImage(i) {
   document.getElementById('imgLabel').textContent = currentSet+'/'+file+'  ('+(i+1)+'/'+files.length+')';
   imgEl = new Image();
   imgEl.onload = function() {
+    // Auto-skip images that are too small to annotate meaningfully
+    if (imgEl.naturalWidth < 80 || imgEl.naturalHeight < 80) {
+      console.log('[annotate] Skipping tiny image (' + imgEl.naturalWidth + '×' + imgEl.naturalHeight + '): ' + file);
+      var files2=getCurrentFiles();
+      if (!gt[imgKey(file)]) { gt[imgKey(file)] = { _skip:true, _reason:'too_small', imgW:imgEl.naturalWidth, imgH:imgEl.naturalHeight }; }
+      var next = idx + 1;
+      if (next < files2.length) loadImage(next);
+      return;
+    }
     var wrapEl=document.getElementById('canvasWrap');
-    SCALE = Math.min((wrapEl.clientWidth-4)/imgEl.naturalWidth, (wrapEl.clientHeight-4)/imgEl.naturalHeight, 1);
+    // Clamp scale: never shrink below natural size, and upscale small images
+    // so even a 100×100 image renders at a comfortable 300px minimum.
+    var minScale = Math.min(300 / imgEl.naturalWidth, 300 / imgEl.naturalHeight);
+    SCALE = Math.min((wrapEl.clientWidth-4)/imgEl.naturalWidth, (wrapEl.clientHeight-4)/imgEl.naturalHeight);
+    SCALE = Math.max(SCALE, minScale);
     canvas.style.width  = Math.round(imgEl.naturalWidth  * SCALE)+'px';
     canvas.style.height = Math.round(imgEl.naturalHeight * SCALE)+'px';
     canvas.width=imgEl.naturalWidth; canvas.height=imgEl.naturalHeight;
@@ -794,9 +807,11 @@ function updateThumbs() {
   });
 }
 function updateProgress() {
-  var files=getCurrentFiles(), done=0;
-  files.forEach(function(f){ var k=imgKey(f); if(gt[k]&&!gt[k]._skip) done++; });
-  document.getElementById('progress').textContent=done+' / '+files.length+' annotated';
+  var files=getCurrentFiles(), done=0, skipped=0;
+  files.forEach(function(f){ var k=imgKey(f); if(gt[k]&&!gt[k]._skip) done++; else if(gt[k]&&gt[k]._skip) skipped++; });
+  var available = files.length - skipped;
+  var skipNote = skipped > 0 ? ' ('+skipped+' tiny skipped)' : '';
+  document.getElementById('progress').textContent=done+' / '+available+' annotated'+skipNote;
 }
 
 // ── Data merge ────────────────────────────────────────────────────────────────
