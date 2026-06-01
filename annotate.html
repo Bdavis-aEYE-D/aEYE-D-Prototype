@@ -24,6 +24,15 @@ body { background: #0e0e0e; color: #ddd; font-family: monospace; display: flex;
 #gh-status.syncing{ color: #aaa; border-color: #444;    background: #222; }
 #gh-status.ok     { color: #4f4; border-color: #1a4a1a; background: #0e2a0e; }
 #gh-status.err    { color: #f88; border-color: #5c1a1a; background: #2a0e0e; }
+#known-label { font-size: 13px; font-weight: bold; padding: 3px 10px;
+               border-radius: 10px; white-space: nowrap; display: none;
+               flex-shrink: 0; }
+#known-label.amber  { background: #3a2200; color: #ffa040; border: 1px solid #7a4400; }
+#known-label.blue   { background: #0e1a33; color: #6ab0ff; border: 1px solid #1a3a7c; }
+#known-label.brown  { background: #2a1500; color: #c87040; border: 1px solid #5a2e00; }
+#known-label.green  { background: #0e2a0e; color: #60d060; border: 1px solid #1a5a1a; }
+#known-label.grey   { background: #222;    color: #aaa;    border: 1px solid #555; }
+#known-label.hazel  { background: #2a1e00; color: #c0a040; border: 1px solid #5a4400; }
 
 /* Set selector */
 #setSelector { display: flex; gap: 4px; }
@@ -169,10 +178,12 @@ canvas { image-rendering: pixelated; display: block;
 <div id="topbar">
   <h1>GT Annotator</h1>
   <div id="setSelector">
-    <button class="set-btn active-set" id="btn-set-test"   onclick="switchSet('test-images')">Test Images</button>
-    <button class="set-btn"            id="btn-set-ubiris" onclick="switchSet('ubiris-check')">UBIRIS v2</button>
+    <button class="set-btn active-set" id="btn-set-test"      onclick="switchSet('test-images')">Test Images</button>
+    <button class="set-btn"            id="btn-set-ubiris"    onclick="switchSet('ubiris-check')">UBIRIS v2</button>
+    <button class="set-btn"            id="btn-set-roboflow"  onclick="switchSet('roboflow-color')">Roboflow 🏷</button>
   </div>
   <span id="gh-status" class="none" onclick="openSetup()" title="Tap to configure GitHub sync">📴 Local only</span>
+  <span id="known-label"></span>
   <span id="imgLabel">—</span>
   <span id="progress">0 / 0 annotated</span>
 </div>
@@ -381,8 +392,40 @@ var IMAGE_SETS = {
       'C338_S1_I4.jpg','C349_S1_I4.jpg','C379_S1_I13.jpg','C390_S1_I6.jpg',
       'C394_S1_I1.jpg','C465_S1_I5.jpg','C492_S1_I11.jpg','C58_S1_I3.jpg'
     ]
+  },
+  'roboflow-color': {
+    label: 'Roboflow Color', dir: '/roboflow-color/',
+    // Files are listed dynamically after labels.json loads — see _rbFiles below
+    files: []
   }
 };
+
+// Known color labels for roboflow-color set, loaded from labels.json at boot
+// key = "color/filename", value = color string
+var _rbLabels = {};   // populated by _loadRoboflowLabels()
+
+function _loadRoboflowLabels() {
+  return fetch('roboflow-color/labels.json')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      _rbLabels = data.labels || {};
+      // Build sorted file list: color/filename keys
+      var files = Object.keys(_rbLabels).sort(function(a,b){
+        // Sort by color then filename
+        var ca = a.split('/')[0], cb = b.split('/')[0];
+        return ca !== cb ? ca.localeCompare(cb) : a.localeCompare(b);
+      });
+      IMAGE_SETS['roboflow-color'].files = files;
+      console.log('[GT] Roboflow labels loaded:', files.length, 'images');
+    })
+    .catch(function(e){ console.warn('[GT] Could not load roboflow labels.json:', e.message); });
+}
+
+function _knownLabel(file) {
+  // For roboflow-color, key = "color/filename" (which IS the file value)
+  if (currentSet === 'roboflow-color') return _rbLabels[file] || null;
+  return null;
+}
 
 var gtMeta = {
   _version: 2,
@@ -410,6 +453,10 @@ var TOUCH_COMMIT  = 8;
 function getCurrentFiles() { return IMAGE_SETS[currentSet].files; }
 function getImgDir()       { return IMAGE_SETS[currentSet].dir; }
 function imgKey(file)      { return currentSet + '/' + file; }
+// For roboflow-color, file = "color/filename" so the src is dir + file directly
+function imgSrc(file) {
+  return getImgDir() + file;
+}
 function active()          { return activeCircle === 'iris' ? iris  : pupil; }
 function inactive()        { return activeCircle === 'iris' ? pupil : iris;  }
 function activeColor()     { return activeCircle === 'iris' ? '#3cf' : '#fc4'; }
@@ -626,7 +673,19 @@ function loadImage(i) {
   imgEl.onerror = function() {
     document.getElementById('instrBox').textContent='⚠ Failed to load:\n'+file;
   };
-  imgEl.src = getImgDir()+file;
+  imgEl.src = imgSrc(file);
+
+  // Show known color label badge if available
+  var kl = document.getElementById('known-label');
+  var label = _knownLabel(file);
+  if (label) {
+    kl.textContent = '✓ ' + label.charAt(0).toUpperCase() + label.slice(1);
+    kl.className = label;
+    kl.style.display = '';
+  } else {
+    kl.textContent = '';
+    kl.style.display = 'none';
+  }
 }
 
 // ── Save / navigate ───────────────────────────────────────────────────────────
@@ -641,7 +700,8 @@ function saveAndNext() {
     pupilCx:Math.round(pupil.cx), pupilCy:Math.round(pupil.cy), pupilR:Math.round(pupil.r),
     irisCxFrac:iris.cx/iw, irisCyFrac:iris.cy/ih, irisRFrac:iris.r/iw,
     pupilCxFrac:pupil.cx/iw, pupilCyFrac:pupil.cy/ih, pupilRFrac:pupil.r/iw,
-    note:document.getElementById('noteBox').value, ts:new Date().toISOString()
+    note:document.getElementById('noteBox').value, ts:new Date().toISOString(),
+    knownColor: _knownLabel(file) || undefined
   };
   persistGT();
   document.getElementById('noteBox').value='';
@@ -707,8 +767,9 @@ function exportJSON() { autoDownload(); }
 function switchSet(setId) {
   if (setId===currentSet) return;
   currentSet=setId;
-  document.getElementById('btn-set-test').className   = 'set-btn'+(setId==='test-images' ?' active-set':'');
-  document.getElementById('btn-set-ubiris').className = 'set-btn'+(setId==='ubiris-check'?' active-set':'');
+  document.getElementById('btn-set-test').className     = 'set-btn'+(setId==='test-images'    ?' active-set':'');
+  document.getElementById('btn-set-ubiris').className   = 'set-btn'+(setId==='ubiris-check'   ?' active-set':'');
+  document.getElementById('btn-set-roboflow').className = 'set-btn'+(setId==='roboflow-color' ?' active-set':'');
   buildThumbs();
   var files=getCurrentFiles(), start=0;
   while (start<files.length-1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
@@ -748,6 +809,9 @@ function mergeFromFetch(data) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 try { gt=JSON.parse(localStorage.getItem('aeye_gt')||'{}'); } catch(e){ gt={}; }
+
+// Load roboflow labels immediately (needed before any roboflow-color image loads)
+_loadRoboflowLabels();
 
 function _boot() {
   buildThumbs(); updateProgress();
