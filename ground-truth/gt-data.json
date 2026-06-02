@@ -5,7 +5,7 @@
     "test-images": "Subject photos used for algorithm development and regression testing",
     "ubiris-check": "UBIRIS v2 close-up iris dataset samples"
   },
-  "_updated": "2026-06-02T18:20:23.836Z",
+  "_updated": "2026-06-02T18:20:27.013Z",
   "test-images/Bryan Left Window Reflection.png": {
     "set": "test-images",
     "file": "Bryan Left Window Reflection.png",
@@ -465,7 +465,7 @@
     "pupilCyFrac": 0.6263269639065817,
     "pupilRFrac": 0.040369088811995385,
     "note": "",
-    "ts": "2026-06-02T16:08:20.125Z",
+    "ts": "2026-06-02T18:20:24.600Z",
     "knownColor": "amber"
   },
   "roboflow-color/amber/rf2_Amber-113-_jpg.rf.7ba5a7d1fc12a30bf4e331a367778700.jpg": {
@@ -486,7 +486,7 @@
     "pupilCyFrac": 0.4490566037735849,
     "pupilRFrac": 0.03597122302158273,
     "note": "",
-    "ts": "2026-06-02T16:08:20.827Z",
+    "ts": "2026-06-02T18:20:25.585Z",
     "knownColor": "amber"
   },
   "roboflow-color/amber/rf2_Amber-114-_jpg.rf.21146f85359146d4cbf2e71040df067b.jpg": {
@@ -507,7 +507,7 @@
     "pupilCyFrac": 0.6178343949044586,
     "pupilRFrac": 0.041237113402061855,
     "note": "",
-    "ts": "2026-06-02T16:08:21.410Z",
+    "ts": "2026-06-02T18:20:26.248Z",
     "knownColor": "amber"
   },
   "roboflow-color/amber/rf2_Amber-12-_jpg.rf.31f15160f8ae5dfa259fb962cab13d76.jpg": {
