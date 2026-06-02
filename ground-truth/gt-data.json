@@ -5,7 +5,7 @@
     "test-images": "Subject photos used for algorithm development and regression testing",
     "ubiris-check": "UBIRIS v2 close-up iris dataset samples"
   },
-  "_updated": "2026-06-02T16:08:46.215Z",
+  "_updated": "2026-06-02T16:10:30.415Z",
   "test-images/Bryan Left Window Reflection.png": {
     "set": "test-images",
     "file": "Bryan Left Window Reflection.png",
@@ -1095,7 +1095,7 @@
     "pupilCyFrac": 0.295,
     "pupilRFrac": 0.03745318352059925,
     "note": "",
-    "ts": "2026-06-01T20:46:58.554Z",
+    "ts": "2026-06-02T16:08:46.746Z",
     "knownColor": "amber"
   },
   "roboflow-color/amber/rf2_Amber-47-_jpg.rf.0ef944fe3275aed804f51462635f7140.jpg": {
@@ -4797,5 +4797,26 @@
     "pupilRFrac": 0.024214958249163775,
     "note": "",
     "ts": "2026-06-02T15:20:23.008Z"
+  },
+  "roboflow-color/brown/rf1_k10_jpg.rf.3a37f4d3e4464f01eb687c4a7e6fb27a.jpg": {
+    "set": "roboflow-color",
+    "file": "brown/rf1_k10_jpg.rf.3a37f4d3e4464f01eb687c4a7e6fb27a.jpg",
+    "imgW": 236,
+    "imgH": 185,
+    "irisCx": 147,
+    "irisCy": 105,
+    "irisR": 32,
+    "pupilCx": 150,
+    "pupilCy": 107,
+    "pupilR": 8,
+    "irisCxFrac": 0.6247906197654941,
+    "irisCyFrac": 0.5657204943637102,
+    "irisRFrac": 0.1336844398655644,
+    "pupilCxFrac": 0.6344221105527639,
+    "pupilCyFrac": 0.576938747793019,
+    "pupilRFrac": 0.03224398397683911,
+    "note": "",
+    "ts": "2026-06-02T16:10:30.410Z",
+    "knownColor": "brown"
   }
 }
