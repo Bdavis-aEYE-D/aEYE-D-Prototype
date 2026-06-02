@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GT Validator — aEYE-D</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0e0e0e;color:#ccc;font-family:monospace;font-size:13px;min-height:100vh}
+
+/* ── Header ── */
+#header{display:flex;align-items:center;gap:10px;padding:9px 14px;background:#181818;border-bottom:1px solid #2e2e2e;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+#header h1{font-size:14px;color:#fff;white-space:nowrap}
+#header .spacer{flex:1}
+.btn{padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;font-family:monospace}
+.btn-green{background:#173317;color:#4e4;border:1px solid #265526}
+.btn-green:hover{background:#1e401e}
+.btn-red{background:#331717;color:#f64;border:1px solid #552626}
+.btn-red:hover{background:#401e1e}
+.btn-blue{background:#172233;color:#6af;border:1px solid #263d55}
+.btn-blue:hover{background:#1e3050}
+.btn:disabled{opacity:.35;cursor:default}
+.nav-link{color:#6af;font-size:12px;text-decoration:none;white-space:nowrap}
+.nav-link:hover{color:#9cf}
+
+/* ── Summary bar ── */
+#summary-bar{display:flex;align-items:center;gap:12px;padding:7px 14px;background:#141414;border-bottom:1px solid #222;flex-wrap:wrap}
+#progress-wrap{flex:1;min-width:160px}
+#progress-text{font-size:10px;color:#666;margin-bottom:3px}
+#progress-track{height:7px;background:#222;border-radius:4px;overflow:hidden}
+#progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#265526,#4e4);transition:width .2s}
+.sum-stat{display:flex;flex-direction:column;align-items:center;min-width:70px}
+.sum-val{font-size:18px;font-weight:700;line-height:1}
+.sum-lbl{font-size:9px;color:#555;margin-top:2px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.c-green{color:#4e4}.c-yellow{color:#fb0}.c-red{color:#f64}.c-blue{color:#6af}.c-amber{color:#ffa040}
+.pipe{color:#2e2e2e;font-size:16px;align-self:center}
+
+/* ── Main two-column layout ── */
+#main{display:flex;min-height:calc(100vh - 150px)}
+#left-panel{flex:0 0 380px;padding:14px;border-right:1px solid #222;overflow-y:auto}
+#right-panel{flex:1;padding:14px;overflow-y:auto;min-width:0}
+@media(max-width:720px){
+  #main{flex-direction:column}
+  #left-panel{flex:none;border-right:none;border-bottom:1px solid #222}
+}
+
+/* ── Section headings ── */
+.sec-head{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#666;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #1e1e1e}
+
+/* ── Ring accuracy ── */
+.ring-summary{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.ring-bucket{flex:1;min-width:70px;background:#181818;border-radius:6px;padding:8px;text-align:center;border:1px solid #222}
+.ring-bucket .rb-val{font-size:20px;font-weight:700}
+.ring-bucket .rb-lbl{font-size:9px;color:#666;margin-top:1px;text-transform:uppercase;letter-spacing:.05em}
+.ring-metrics{background:#181818;border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px;line-height:2}
+.ring-metrics .mk{color:#666}.ring-metrics .mv{color:#cfc;font-weight:600}
+
+/* ── Gallery ── */
+.gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.th-card{background:#181818;border:1px solid #2a2a2a;border-radius:5px;padding:5px;text-align:center}
+.th-card canvas{display:block;width:120px;height:90px;border-radius:3px}
+.th-cap{font-size:9px;color:#666;margin-top:3px;line-height:1.4}
+.th-cap span{display:block}
+.th-cap .bad{color:#f64}.th-cap .warn{color:#fb0}.th-cap .ok{color:#4e4}
+
+/* ── Confusion matrix ── */
+#cm-wrap{overflow-x:auto;margin-bottom:18px}
+table.cm{border-collapse:collapse;font-size:11px;min-width:100%}
+table.cm th,table.cm td{padding:5px 8px;text-align:center;border:1px solid #222;white-space:nowrap}
+table.cm th{background:#181818;color:#666;font-weight:600}
+table.cm th.row-hdr{text-align:right;color:#999}
+table.cm td.diag{background:#0b220b;color:#4e4;font-weight:700}
+table.cm td.near{background:#201a00;color:#db0}
+table.cm td.off{background:#220b0b;color:#f64}
+table.cm td.zero{color:#2a2a2a}
+table.cm .row-total{color:#555;font-style:italic;font-size:10px}
+
+/* ── Per-class bars ── */
+.class-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.class-name{width:52px;text-align:right;font-weight:600;font-size:12px}
+.class-bar-bg{flex:1;height:16px;background:#1e1e1e;border-radius:3px;overflow:hidden}
+.class-bar{height:100%;border-radius:3px;transition:width .3s}
+.class-pct{width:40px;text-align:right;font-size:12px;font-weight:700}
+.class-n{width:50px;font-size:10px;color:#444}
+
+/* ── Color legend ── */
+.col-amber{color:#ffa040}.col-blue{color:#6ab0ff}.col-brown{color:#c87040}
+.col-green{color:#60d060}.col-grey{color:#aaa}.col-hazel{color:#c0a040}
+.col-violet{color:#c080ff}.col-error{color:#f64}
+
+/* ── Dispute cards ── */
+#dispute-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.d-card{background:#181818;border:1px solid #2a2a2a;border-radius:6px;padding:7px;width:140px;text-align:center;position:relative}
+.d-card canvas{display:block;width:96px;height:72px;border-radius:3px;margin:0 auto 5px}
+.d-label{font-size:10px;color:#888;margin-bottom:2px}
+.d-known{font-size:12px;font-weight:700}
+.d-pred{font-size:12px;font-weight:700;margin-bottom:5px}
+.verdict-row{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-top:4px}
+.vbtn{font-size:9px;padding:3px 5px;border:1px solid #333;border-radius:4px;background:#222;color:#888;cursor:pointer;font-family:monospace;line-height:1}
+.vbtn:hover{background:#333;color:#ccc}
+.vbtn.active-lw{background:#0e2200;color:#4e4;border-color:#265526}
+.vbtn.active-ew{background:#220e0e;color:#f64;border-color:#552020}
+.vbtn.active-am{background:#1a1a00;color:#cc0;border-color:#443300}
+.verdict-badge{position:absolute;top:4px;right:4px;font-size:8px;padding:1px 5px;border-radius:3px;font-weight:700}
+.vb-lw{background:#0e2200;color:#4e4;border:1px solid #265526}
+.vb-ew{background:#220e0e;color:#f64;border:1px solid #552020}
+.vb-am{background:#1a1a00;color:#cc0;border:1px solid #443300}
+
+/* ── Notice ── */
+.notice{font-size:10px;color:#555;line-height:1.6;background:#181818;border-radius:5px;padding:8px 10px;margin-bottom:10px;border-left:2px solid #333}
+.notice b{color:#888}
+
+/* ── Log ── */
+#log-bar{font-size:10px;color:#444;padding:5px 14px;background:#111;border-top:1px solid #1a1a1a;font-family:monospace;min-height:22px}
+
+/* ── Placeholder text ── */
+.placeholder{color:#333;font-style:italic;font-size:11px;padding:4px 0}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<div id="header">
+  <h1>🔬 GT Validator</h1>
+  <button id="btn-run"    class="btn btn-green" onclick="startRun()">▶ Run</button>
+  <button id="btn-stop"   class="btn btn-red"   onclick="stopRun()" disabled>■ Stop</button>
+  <button id="btn-export" class="btn btn-blue"  onclick="exportCSV()" disabled>⬇ CSV</button>
+  <div class="spacer"></div>
+  <a href="annotate.html"      class="nav-link">← Annotator</a>
+  <a href="batch-validate.html" class="nav-link" style="margin-left:8px">Batch →</a>
+</div>
+
+<!-- ═══════════════ SUMMARY BAR ═══════════════ -->
+<div id="summary-bar">
+  <div id="progress-wrap">
+    <div id="progress-text">0 / 0</div>
+    <div id="progress-track"><div id="progress-fill"></div></div>
+  </div>
+  <span class="pipe">|</span>
+  <div class="sum-stat"><div class="sum-val c-blue"  id="s-gt">0</div><div class="sum-lbl">GT</div></div>
+  <span class="pipe">|</span>
+  <div class="sum-stat"><div class="sum-val c-green" id="s-ring">—</div><div class="sum-lbl">Ring Good</div></div>
+  <span class="pipe">|</span>
+  <div class="sum-stat"><div class="sum-val c-green" id="s-color">—</div><div class="sum-lbl">Color Acc</div></div>
+  <span class="pipe">|</span>
+  <div class="sum-stat"><div class="sum-val c-amber" id="s-disputes">0</div><div class="sum-lbl">Disputes</div></div>
+</div>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<div id="main">
+
+  <!-- ─── LEFT: Ring accuracy ─── -->
+  <div id="left-panel">
+
+    <div class="sec-head">Ring Detection Accuracy (all GT images)</div>
+    <div class="ring-summary">
+      <div class="ring-bucket"><div class="rb-val c-green"  id="r-good">—</div><div class="rb-lbl">Good</div></div>
+      <div class="ring-bucket"><div class="rb-val c-yellow" id="r-close">—</div><div class="rb-lbl">Close</div></div>
+      <div class="ring-bucket"><div class="rb-val c-red"    id="r-off">—</div><div class="rb-lbl">Off</div></div>
+    </div>
+    <div class="ring-metrics">
+      <div class="val-row" style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <span><span class="mk">Ctr err (mean)</span> <span class="mv" id="r-center-err">—</span></span>
+        <span><span class="mk">Rad ratio (mean)</span> <span class="mv" id="r-rad-ratio">—</span></span>
+      </div>
+      <div style="margin-top:4px;font-size:9px;color:#444">
+        Good: ctrErr &lt; 0.20 &amp; radRatio ∈ [0.80,1.25] · Close: ctrErr &lt; 0.45 &amp; ratio ∈ [0.60,1.60]
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:2px">Worst-Ring Gallery (top 24)</div>
+    <div id="ring-gallery" class="gallery"><p class="placeholder">Run to see worst-ring thumbnails.</p></div>
+
+  </div>
+
+  <!-- ─── RIGHT: Color accuracy ─── -->
+  <div id="right-panel">
+
+    <div class="sec-head">Color Classification (roboflow-color images with GT rings)</div>
+    <div class="notice">
+      <b>Note:</b> Engine uses GT rings (most accurate possible input) so ring errors don't contaminate color accuracy.
+      Some mismatches may be mislabeled Roboflow data — use the Dispute panel below to review.
+    </div>
+
+    <div style="margin-bottom:18px">
+      <div class="sec-head">Confusion Matrix <span style="font-weight:400;text-transform:none;font-size:10px;letter-spacing:0">row = known · col = predicted</span></div>
+      <div id="cm-wrap"><p class="placeholder">Run validation to see confusion matrix.</p></div>
+    </div>
+
+    <div style="margin-bottom:18px">
+      <div class="sec-head">Per-Class Accuracy</div>
+      <div id="class-bars"><p class="placeholder">—</p></div>
+    </div>
+
+    <div>
+      <div class="sec-head">Dispute Gallery — engine ≠ label <span id="dispute-note" style="font-weight:400;text-transform:none;font-size:10px;letter-spacing:0"></span></div>
+      <div id="dispute-grid"><p class="placeholder">Color mismatches will appear here after running.</p></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ LOG ═══════════════ -->
+<div id="log-bar" id="log">Ready — hit ▶ Run to start.</div>
+
+<!-- ─── Engine scripts ─── -->
+<script src="core/palette.js?v=279"></script>
+<script src="core/iris.js?v=277"></script>
+<script src="core/rayid.js?v=277"></script>
+<script src="core/collarette.js?v=277"></script>
+<script src="core/iris-fill.js?v=277"></script>
+<script src="core/eye-shape.js?v=277"></script>
+<script src="core/engine.js?v=279"></script>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var STAGE_SIZE = 400;
+var BATCH_SIZE = 5;
+var GALLERY_MAX = 24;   // worst-ring thumbnails
+var THUMB_W = 120, THUMB_H = 90; // canvas CSS px (also pixel px for simplicity)
+
+var CAT_MAP = {
+  'Amber':'amber','Blue':'blue','Brown':'brown',
+  'Gray':'grey','Green':'green','Hazel':'hazel','Violet':'violet'
+};
+
+var KNOWN_CATS  = ['amber','blue','brown','green','grey','hazel'];
+var ENGINE_CATS = ['Amber','Blue','Brown','Gray','Green','Hazel','Violet','error'];
+
+var CAT_COLORS = {
+  amber:'#ffa040', blue:'#6ab0ff', brown:'#c87040',
+  green:'#60d060', grey:'#aaaaaa', hazel:'#c0a040',
+  violet:'#c080ff', error:'#f64444'
+};
+
+// Ring accuracy thresholds
+var RING_GOOD_CE  = 0.20, RING_GOOD_RR_LO  = 0.80, RING_GOOD_RR_HI  = 1.25;
+var RING_CLOSE_CE = 0.45, RING_CLOSE_RR_LO = 0.60, RING_CLOSE_RR_HI = 1.60;
+
+var VERDICT_KEY = 'aeye_verdicts';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var _gtData   = {};    // raw gt-data.json
+var _entries  = [];    // filtered, processable GT entries [{key, entry}]
+var _running  = false;
+var _stopFlag = false;
+
+// Accumulated results
+var _ringResults  = [];  // { key, centerErr, radRatio, bucket, algoOk }
+var _colorResults = [];  // { key, knownColor, predCat, predNorm, ok }
+var _disputeCards = {};  // key → DOM element (for verdict badge updates)
+
+var _verdicts = {};  // loaded from localStorage
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.addEventListener('load', function () {
+  _verdicts = loadVerdicts();
+  fetch('ground-truth/gt-data.json')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      _gtData = data;
+      var all = Object.keys(data).filter(function (k) { return !k.startsWith('_'); });
+      // Filter: skip _skip and _zoomRequired; skip unannotated (no irisRFrac)
+      _entries = all
+        .filter(function (k) {
+          var e = data[k];
+          return !e._skip && !e._zoomRequired && e.irisRFrac;
+        })
+        .map(function (k) { return { key: k, entry: data[k] }; });
+      log('Loaded ' + all.length + ' GT entries; ' + _entries.length + ' processable.');
+      document.getElementById('s-gt').textContent = _entries.length;
+    })
+    .catch(function (err) {
+      log('ERROR loading gt-data.json: ' + err.message);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERDICTS — localStorage
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function loadVerdicts() {
+  try {
+    return JSON.parse(localStorage.getItem(VERDICT_KEY) || '{}');
+  } catch (e) { return {}; }
+}
+
+function saveVerdicts() {
+  try { localStorage.setItem(VERDICT_KEY, JSON.stringify(_verdicts)); } catch (e) {}
+}
+
+function setVerdict(key, verdict, cardEl) {
+  _verdicts[key] = verdict;
+  saveVerdicts();
+  updateVerdictBadge(cardEl, verdict);
+  // Update the verdict buttons styling
+  var btns = cardEl.querySelectorAll('.vbtn');
+  btns.forEach(function (b) {
+    b.classList.remove('active-lw', 'active-ew', 'active-am');
+  });
+  var clsMap = { label_wrong: 'active-lw', engine_wrong: 'active-ew', ambiguous: 'active-am' };
+  var activeBtn = cardEl.querySelector('[data-verdict="' + verdict + '"]');
+  if (activeBtn) activeBtn.classList.add(clsMap[verdict]);
+}
+
+function updateVerdictBadge(cardEl, verdict) {
+  var badge = cardEl.querySelector('.verdict-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.className = 'verdict-badge';
+    cardEl.appendChild(badge);
+  }
+  if (!verdict) { badge.remove(); return; }
+  var texts = { label_wrong: '🏷 Label wrong', engine_wrong: '🔬 Engine wrong', ambiguous: '❓ Ambiguous' };
+  var cls   = { label_wrong: 'vb-lw', engine_wrong: 'vb-ew', ambiguous: 'vb-am' };
+  badge.textContent  = texts[verdict] || '';
+  badge.className    = 'verdict-badge ' + (cls[verdict] || '');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RUN CONTROL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function startRun() {
+  if (_running) return;
+  if (!_entries.length) { log('GT data not loaded yet — wait a moment.'); return; }
+  _running  = true;
+  _stopFlag = false;
+  _ringResults  = [];
+  _colorResults = [];
+  _disputeCards = {};
+
+  document.getElementById('btn-run').disabled    = true;
+  document.getElementById('btn-stop').disabled   = false;
+  document.getElementById('btn-export').disabled = true;
+  document.getElementById('ring-gallery').innerHTML   = '';
+  document.getElementById('dispute-grid').innerHTML   = '';
+  document.getElementById('dispute-note').textContent = '';
+  document.getElementById('cm-wrap').innerHTML        = '<p class="placeholder">Running…</p>';
+  document.getElementById('class-bars').innerHTML     = '<p class="placeholder">Running…</p>';
+
+  log('Starting: ' + _entries.length + ' entries…');
+  _processNext(0);
+}
+
+function stopRun() {
+  _stopFlag = true;
+  log('Stopping after current batch…');
+}
+
+function _processNext(i) {
+  if (_stopFlag || i >= _entries.length) {
+    _running = false;
+    document.getElementById('btn-run').disabled    = false;
+    document.getElementById('btn-stop').disabled   = true;
+    document.getElementById('btn-export').disabled = false;
+    renderAll();
+    var msg = _stopFlag
+      ? ('Stopped at ' + i + ' / ' + _entries.length + '.')
+      : ('Done — ' + _entries.length + ' processed.');
+    log(msg);
+    return;
+  }
+
+  var end = Math.min(i + BATCH_SIZE, _entries.length);
+  var pending = end - i;
+  var done = 0;
+
+  for (var j = i; j < end; j++) {
+    (function (idx) {
+      processOne(_entries[idx], function (ringRes, colorRes) {
+        if (ringRes)  _ringResults.push(ringRes);
+        if (colorRes) _colorResults.push(colorRes);
+        done++;
+        if (done === pending) {
+          updateProgressBar(end, _entries.length);
+          renderSummaryBar();
+          if (colorRes && !colorRes.ok) renderDisputeCard(colorRes);
+          setTimeout(function () { _processNext(end); }, 0);
+        }
+      });
+    })(j);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROCESS ONE ENTRY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function processOne(item, cb) {
+  var key   = item.key;
+  var entry = item.entry;
+  var set   = entry.set || '';
+  var file  = entry.file || '';
+
+  // Build image src
+  var src;
+  if (set === 'roboflow-color') {
+    src = 'roboflow-color/' + file;
+  } else if (set === 'ubiris-check') {
+    src = 'ubiris-check/' + file;
+  } else if (set === 'test-images') {
+    src = 'test-images/' + file;
+  } else {
+    // Fallback: use key as relative path
+    src = key;
+  }
+
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+
+  img.onerror = function () {
+    log('Load error: ' + src);
+    cb(null, null);
+  };
+
+  img.onload = function () {
+    var nW = img.naturalWidth, nH = img.naturalHeight;
+    if (nW < 20 || nH < 20) { cb(null, null); return; }
+
+    // ── Stage layout (contain-fit into STAGE_SIZE) ──────────────────────────
+    var scale = Math.min(STAGE_SIZE / nW, STAGE_SIZE / nH);
+    var dw = nW * scale, dh = nH * scale;
+    var dx = (STAGE_SIZE - dw) / 2, dy = (STAGE_SIZE - dh) / 2;
+    var drawInfo = { dx: dx, dy: dy, dw: dw, dh: dh };
+
+    // ── GT ring in stage pixels ──────────────────────────────────────────────
+    // irisCxFrac / irisRFrac are fractions of image width
+    // irisCyFrac is fraction of image height
+    var gtCx    = dx + entry.irisCxFrac  * nW * scale;
+    var gtCy    = dy + entry.irisCyFrac  * nH * scale;
+    var gtR     = entry.irisRFrac        * nW * scale;
+    var gtPupCx = dx + entry.pupilCxFrac * nW * scale;
+    var gtPupCy = dy + entry.pupilCyFrac * nH * scale;
+    var gtPupR  = entry.pupilRFrac       * nW * scale;
+
+    // ── Run autoFit (ring detection) ─────────────────────────────────────────
+    var af = null, algoOk = false;
+    try {
+      // Roboflow: iris is centered in a 416×416 crop — use closeup=false (center-bias helps)
+      // UBIRIS: unconstrained close-up shots — use closeup=true
+      var isCloseup = (set === 'ubiris-check');
+      af = autoFit(img, isCloseup);
+      algoOk = !!(af && af.ok);
+    } catch (e) {
+      algoOk = false;
+    }
+
+    // ── Ring accuracy metrics ────────────────────────────────────────────────
+    var ringRes = null;
+    if (gtR > 0) {
+      var centerErr = 1e6, radRatio = 0;
+      if (algoOk && af) {
+        var algoCx = dx + af.cxFrac    * nW * scale;
+        var algoCy = dy + af.cyFrac    * nH * scale;
+        var algoR  = af.rIrisFrac      * nW * scale;
+        var dCx = algoCx - gtCx, dCy = algoCy - gtCy;
+        centerErr = Math.sqrt(dCx * dCx + dCy * dCy) / gtR;
+        radRatio  = algoR / gtR;
+      }
+
+      var bucket;
+      if (!algoOk) {
+        bucket = 'off';
+      } else if (centerErr < RING_GOOD_CE && radRatio >= RING_GOOD_RR_LO && radRatio <= RING_GOOD_RR_HI) {
+        bucket = 'good';
+      } else if (centerErr < RING_CLOSE_CE && radRatio >= RING_CLOSE_RR_LO && radRatio <= RING_CLOSE_RR_HI) {
+        bucket = 'close';
+      } else {
+        bucket = 'off';
+      }
+
+      // Algo ring fracs in stage coords for thumbnail
+      var algoCxStage = null, algoCyStage = null, algoRStage = null;
+      if (algoOk && af) {
+        algoCxStage = dx + af.cxFrac * nW * scale;
+        algoCyStage = dy + af.cyFrac * nH * scale;
+        algoRStage  = af.rIrisFrac   * nW * scale;
+      }
+
+      ringRes = {
+        key: key, src: src, img: img,
+        bucket: bucket, algoOk: algoOk,
+        centerErr: algoOk ? centerErr : Infinity,
+        radRatio:  algoOk ? radRatio  : 0,
+        // GT ring (stage px)
+        gtCx: gtCx, gtCy: gtCy, gtR: gtR,
+        // Algo ring (stage px)
+        algoCx: algoCxStage, algoCy: algoCyStage, algoR: algoRStage,
+        drawInfo: drawInfo
+      };
+    }
+
+    // ── Color accuracy (roboflow-color only, using GT rings) ─────────────────
+    var colorRes = null;
+    if (set === 'roboflow-color') {
+      var knownColor = entry.knownColor;
+      // Fallback: parse from key path roboflow-color/COLOR/filename
+      if (!knownColor) {
+        var parts = key.split('/');
+        if (parts.length >= 2) knownColor = parts[1];
+      }
+
+      if (knownColor) {
+        var donut = {
+          cx: gtCx, cy: gtCy,
+          cxPupil: gtPupCx, cyPupil: gtPupCy,
+          rIris: gtR, rPupil: gtPupR,
+          threshHi: 230
+        };
+
+        var predCat = 'error', predNorm = 'error', engineOk = false;
+        try {
+          var result = analyzeIris(img, donut, drawInfo, STAGE_SIZE, STAGE_SIZE, 'Left', 0, {});
+          if (!result.error && result.overall) {
+            predCat  = result.overall.cat || 'error';
+            predNorm = CAT_MAP[predCat] || predCat.toLowerCase();
+            engineOk = true;
+          }
+        } catch (e) {
+          predCat = 'error'; predNorm = 'error';
+        }
+
+        var isOk = (predNorm === knownColor);
+        colorRes = {
+          key: key, src: src, img: img,
+          knownColor: knownColor, predCat: predCat, predNorm: predNorm,
+          ok: isOk, engineOk: engineOk,
+          gtCx: gtCx, gtCy: gtCy, gtR: gtR,
+          drawInfo: drawInfo
+        };
+      }
+    }
+
+    cb(ringRes, colorRes);
+  };
+
+  img.src = src;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROGRESS / SUMMARY BAR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function updateProgressBar(done, total) {
+  document.getElementById('progress-text').textContent = done + ' / ' + total;
+  document.getElementById('progress-fill').style.width = (done / total * 100).toFixed(1) + '%';
+}
+
+function renderSummaryBar() {
+  // Ring summary
+  var good = 0, close = 0, off = 0;
+  _ringResults.forEach(function (r) {
+    if (r.bucket === 'good')  good++;
+    else if (r.bucket === 'close') close++;
+    else off++;
+  });
+  var ringTotal = _ringResults.length;
+  document.getElementById('s-ring').textContent = ringTotal > 0
+    ? (good / ringTotal * 100).toFixed(0) + '%'
+    : '—';
+  document.getElementById('r-good').textContent  = good;
+  document.getElementById('r-close').textContent = close;
+  document.getElementById('r-off').textContent   = off;
+
+  // Ring metrics
+  var ceVals = _ringResults.filter(function (r) { return r.algoOk; }).map(function (r) { return r.centerErr; });
+  var rrVals = _ringResults.filter(function (r) { return r.algoOk; }).map(function (r) { return r.radRatio; });
+  document.getElementById('r-center-err').textContent = ceVals.length ? mean(ceVals).toFixed(3) : '—';
+  document.getElementById('r-rad-ratio').textContent  = rrVals.length ? mean(rrVals).toFixed(3)  : '—';
+
+  // Color summary
+  var correct = _colorResults.filter(function (r) { return r.ok; }).length;
+  var colorTotal = _colorResults.length;
+  document.getElementById('s-color').textContent = colorTotal > 0
+    ? (correct / colorTotal * 100).toFixed(0) + '%'
+    : '—';
+  document.getElementById('s-disputes').textContent = _colorResults.filter(function (r) { return !r.ok && r.engineOk; }).length;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FINAL RENDER (after run completes or stops)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderAll() {
+  renderSummaryBar();
+  renderRingGallery();
+  renderConfusionMatrix();
+  renderClassBars();
+}
+
+// ─── Worst-ring gallery ───────────────────────────────────────────────────────
+
+function renderRingGallery() {
+  var sorted = _ringResults
+    .slice()
+    .sort(function (a, b) {
+      // Put algo failures last (centerErr=Infinity), then sort by centerErr desc
+      return b.centerErr - a.centerErr;
+    })
+    .slice(0, GALLERY_MAX);
+
+  var gallery = document.getElementById('ring-gallery');
+  gallery.innerHTML = '';
+
+  if (!sorted.length) {
+    gallery.innerHTML = '<p class="placeholder">No ring results yet.</p>';
+    return;
+  }
+
+  sorted.forEach(function (r) {
+    var card = document.createElement('div');
+    card.className = 'th-card';
+
+    // Build thumbnail canvas
+    var cnv = document.createElement('canvas');
+    cnv.width  = THUMB_W;
+    cnv.height = THUMB_H;
+    cnv.style.width  = THUMB_W + 'px';
+    cnv.style.height = THUMB_H + 'px';
+    var ctx = cnv.getContext('2d');
+
+    // Scale the image to fit the thumbnail
+    var scale = Math.min(THUMB_W / STAGE_SIZE, THUMB_H / STAGE_SIZE);
+    var tw = STAGE_SIZE * scale, th = STAGE_SIZE * scale;
+    var tx = (THUMB_W - tw) / 2, ty = (THUMB_H - th) / 2;
+
+    // Draw black background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+
+    // Draw the image (using drawInfo scaled down to thumbnail)
+    var di = r.drawInfo;
+    ctx.drawImage(r.img,
+      di.dx * scale + tx, di.dy * scale + ty,
+      di.dw * scale,      di.dh * scale);
+
+    // Draw GT ring: solid cyan
+    drawCircle(ctx, r.gtCx * scale + tx, r.gtCy * scale + ty, r.gtR * scale,
+      '#00e5ff', false);
+
+    // Draw algo ring: dashed red (if algo succeeded)
+    if (r.algoOk && r.algoCx !== null) {
+      drawCircle(ctx, r.algoCx * scale + tx, r.algoCy * scale + ty, r.algoR * scale,
+        '#ff4444', true);
+    }
+
+    card.appendChild(cnv);
+
+    // Caption
+    var ceStr = r.algoOk ? r.centerErr.toFixed(2) : 'FAIL';
+    var rrStr = r.algoOk ? r.radRatio.toFixed(2)  : '—';
+    var cls   = r.bucket === 'good' ? 'ok' : r.bucket === 'close' ? 'warn' : 'bad';
+    var fname = (r.key || '').split('/').pop();
+    if (fname.length > 20) fname = fname.slice(0, 18) + '…';
+
+    var cap = document.createElement('div');
+    cap.className = 'th-cap';
+    cap.innerHTML =
+      '<span class="' + cls + '">ctrErr ' + ceStr + '</span>' +
+      '<span style="color:#555">radRatio ' + rrStr + '</span>' +
+      '<span style="color:#333">' + fname + '</span>';
+    card.appendChild(cap);
+
+    gallery.appendChild(card);
+  });
+}
+
+function drawCircle(ctx, cx, cy, r, color, dashed) {
+  if (r <= 0) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  if (dashed) ctx.setLineDash([3, 3]);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ─── Confusion matrix ─────────────────────────────────────────────────────────
+
+function renderConfusionMatrix() {
+  // Accumulate counts: cm[known][predicted] = count
+  var cm = {};
+  KNOWN_CATS.forEach(function (k) {
+    cm[k] = {};
+    ENGINE_CATS.forEach(function (p) { cm[k][p] = 0; });
+  });
+
+  _colorResults.forEach(function (r) {
+    var k = r.knownColor;
+    var p = r.predCat || 'error';
+    if (!cm[k]) return;
+    cm[k][p] = (cm[k][p] || 0) + 1;
+  });
+
+  // Only show columns that have at least one count
+  var activeCols = ENGINE_CATS.filter(function (p) {
+    return KNOWN_CATS.some(function (k) { return (cm[k][p] || 0) > 0; });
+  });
+
+  if (!activeCols.length) {
+    document.getElementById('cm-wrap').innerHTML = '<p class="placeholder">No color results yet.</p>';
+    return;
+  }
+
+  var html = '<table class="cm"><thead><tr>';
+  html += '<th class="row-hdr">↓ known / pred →</th>';
+  activeCols.forEach(function (p) {
+    var col = CAT_COLORS[CAT_MAP[p] || p.toLowerCase()] || '#888';
+    html += '<th style="color:' + col + '">' + p + '</th>';
+  });
+  html += '<th class="row-total">N</th></tr></thead><tbody>';
+
+  KNOWN_CATS.forEach(function (k) {
+    var rowTotal = ENGINE_CATS.reduce(function (s, p) { return s + (cm[k][p] || 0); }, 0);
+    if (rowTotal === 0) return;
+    var kColor = CAT_COLORS[k] || '#aaa';
+    html += '<tr><th class="row-hdr" style="color:' + kColor + '">' + k + '</th>';
+    activeCols.forEach(function (p) {
+      var v = cm[k][p] || 0;
+      var isDiag  = (CAT_MAP[p] === k);
+      // "near-miss": violet→blue, gray→brown, etc.
+      var isNear  = !isDiag && v > 0;
+      var cls = v === 0 ? 'zero' : isDiag ? 'diag' : 'off';
+      html += '<td class="' + cls + '">' + (v || '·') + '</td>';
+    });
+    html += '<td class="row-total">' + rowTotal + '</td></tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('cm-wrap').innerHTML = html;
+}
+
+// ─── Per-class bars ───────────────────────────────────────────────────────────
+
+function renderClassBars() {
+  // Accumulate correct/total per known class
+  var totals   = {};
+  var corrects = {};
+  KNOWN_CATS.forEach(function (k) { totals[k] = 0; corrects[k] = 0; });
+
+  _colorResults.forEach(function (r) {
+    var k = r.knownColor;
+    if (!totals.hasOwnProperty(k)) return;
+    totals[k]++;
+    if (r.ok) corrects[k]++;
+  });
+
+  var html = '';
+  KNOWN_CATS.forEach(function (k) {
+    var n = totals[k];
+    if (n === 0) return;
+    var c   = corrects[k];
+    var pct = c / n * 100;
+    var col = CAT_COLORS[k] || '#aaa';
+    var barCol = pct >= 70 ? '#1e4a1e' : pct >= 50 ? '#3a3a00' : '#3a1010';
+    html +=
+      '<div class="class-row">' +
+        '<div class="class-name" style="color:' + col + '">' + k + '</div>' +
+        '<div class="class-bar-bg"><div class="class-bar" style="width:' + pct.toFixed(0) + '%;background:' + barCol + '"></div></div>' +
+        '<div class="class-pct" style="color:' + col + '">' + pct.toFixed(0) + '%</div>' +
+        '<div class="class-n">' + c + '/' + n + '</div>' +
+      '</div>';
+  });
+
+  document.getElementById('class-bars').innerHTML = html || '<p class="placeholder">—</p>';
+}
+
+// ─── Dispute card ─────────────────────────────────────────────────────────────
+
+function renderDisputeCard(colorRes) {
+  if (colorRes.ok || !colorRes.engineOk) return;  // only misclassified, engine-ok entries
+
+  var grid = document.getElementById('dispute-grid');
+  // Clear placeholder
+  if (grid.querySelector('p')) grid.innerHTML = '';
+
+  var key       = colorRes.key;
+  var known     = colorRes.knownColor;
+  var pred      = colorRes.predNorm;
+  var knownCol  = CAT_COLORS[known] || '#ccc';
+  var predCol   = CAT_COLORS[pred]  || '#f64';
+
+  var card = document.createElement('div');
+  card.className = 'd-card';
+
+  // Thumbnail canvas with GT ring overlay
+  var cnv = document.createElement('canvas');
+  var CW = 96, CH = 72;
+  cnv.width  = CW;
+  cnv.height = CH;
+  cnv.style.width  = CW + 'px';
+  cnv.style.height = CH + 'px';
+  var ctx = cnv.getContext('2d');
+
+  var scale = Math.min(CW / STAGE_SIZE, CH / STAGE_SIZE);
+  var tw = STAGE_SIZE * scale, th = STAGE_SIZE * scale;
+  var tx = (CW - tw) / 2, ty = (CH - th) / 2;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, CW, CH);
+  var di = colorRes.drawInfo;
+  ctx.drawImage(colorRes.img,
+    di.dx * scale + tx, di.dy * scale + ty,
+    di.dw * scale,      di.dh * scale);
+  // GT ring in cyan
+  drawCircle(ctx, colorRes.gtCx * scale + tx, colorRes.gtCy * scale + ty,
+    colorRes.gtR * scale, '#00e5ff', false);
+
+  card.appendChild(cnv);
+
+  // Labels
+  var info = document.createElement('div');
+  var fname = key.split('/').pop();
+  if (fname.length > 18) fname = fname.slice(0, 16) + '…';
+  info.innerHTML =
+    '<div class="d-label" title="' + key + '">' + fname + '</div>' +
+    '<div class="d-known" style="color:' + knownCol + '">Label: ' + known + '</div>' +
+    '<div class="d-pred"  style="color:' + predCol  + '">Engine: ' + pred  + '</div>';
+  card.appendChild(info);
+
+  // Verdict buttons
+  var vRow = document.createElement('div');
+  vRow.className = 'verdict-row';
+
+  var verdictData = [
+    { v: 'label_wrong',  label: '🏷 Label',  cls: 'active-lw' },
+    { v: 'engine_wrong', label: '🔬 Engine', cls: 'active-ew' },
+    { v: 'ambiguous',    label: '❓',        cls: 'active-am' }
+  ];
+
+  var currentVerdict = _verdicts[key] || null;
+
+  verdictData.forEach(function (vd) {
+    var btn = document.createElement('button');
+    btn.className    = 'vbtn';
+    btn.textContent  = vd.label;
+    btn.dataset.verdict = vd.v;
+    if (currentVerdict === vd.v) btn.classList.add(vd.cls);
+    btn.onclick = function () { setVerdict(key, vd.v, card); };
+    vRow.appendChild(btn);
+  });
+  card.appendChild(vRow);
+
+  // Pre-populate verdict badge if already judged
+  if (currentVerdict) {
+    updateVerdictBadge(card, currentVerdict);
+  }
+
+  _disputeCards[key] = card;
+  grid.appendChild(card);
+
+  // Update dispute count
+  var disputes = grid.querySelectorAll('.d-card').length;
+  document.getElementById('dispute-note').textContent = '(' + disputes + ' mismatches)';
+  document.getElementById('s-disputes').textContent = disputes;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CSV EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function exportCSV() {
+  var rows = ['key,set,known_color,pred_color,color_ok,ring_bucket,center_err,rad_ratio,verdict'];
+
+  // Build lookup maps
+  var ringMap = {};
+  _ringResults.forEach(function (r) { ringMap[r.key] = r; });
+  var colorMap = {};
+  _colorResults.forEach(function (r) { colorMap[r.key] = r; });
+
+  // Union of all keys
+  var allKeys = Object.keys(ringMap);
+  _colorResults.forEach(function (r) {
+    if (!ringMap[r.key]) allKeys.push(r.key);
+  });
+
+  allKeys.forEach(function (k) {
+    var rr = ringMap[k];
+    var cr = colorMap[k];
+    var entry = _gtData[k] || {};
+    rows.push([
+      '"' + k + '"',
+      entry.set || '',
+      cr ? cr.knownColor : '',
+      cr ? cr.predNorm   : '',
+      cr ? (cr.ok ? '1' : '0') : '',
+      rr ? rr.bucket    : '',
+      rr && rr.algoOk ? rr.centerErr.toFixed(4) : '',
+      rr && rr.algoOk ? rr.radRatio.toFixed(4)  : '',
+      _verdicts[k] || ''
+    ].join(','));
+  });
+
+  var blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  var a = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'gt-validation-' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function mean(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce(function (s, v) { return s + v; }, 0) / arr.length;
+}
+
+function log(msg) {
+  document.getElementById('log-bar').textContent = msg;
+}
+
+</script>
+</body>
+</html>

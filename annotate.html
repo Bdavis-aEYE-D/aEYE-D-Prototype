@@ -54,11 +54,11 @@ canvas { image-rendering: pixelated; display: block;
            overflow-y: auto; flex-shrink: 0; }
 
 /* Circle selector tabs */
-#circleSelect { display: flex; gap: 6px; }
-.circ-tab { flex: 1; padding: 8px 4px; border: 2px solid transparent;
+#circleSelect { display: flex; gap: 6px; flex-shrink: 0; }
+.circ-tab { padding: 4px 12px; border: 2px solid transparent;
             border-radius: 6px; text-align: center; cursor: pointer;
             font-size: 12px; font-family: monospace; transition: border-color 0.1s;
-            -webkit-tap-highlight-color: transparent; }
+            -webkit-tap-highlight-color: transparent; white-space: nowrap; }
 .circ-tab.iris        { background: #0e2233; color: #5ae; border-color: #1a3a5c; }
 .circ-tab.iris.active { background: #1a3a5c; color: #4cf; border-color: #4cf; }
 .circ-tab.pupil        { background: #2a1a00; color: #ca6; border-color: #5c3a00; }
@@ -88,6 +88,7 @@ canvas { image-rendering: pixelated; display: block;
 .imgthumb.done   { border-color: #4a4; }
 .imgthumb.active { border-color: #fa0; }
 .imgthumb.skip   { border-color: #555; opacity: .5; }
+.imgthumb.zoom   { border-color: #44f; opacity: .7; }
 #exportWrap { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
 #saveStatus { font-size: 10px; color: #4f4; text-align: center; min-height: 14px; }
 
@@ -123,33 +124,43 @@ canvas { image-rendering: pixelated; display: block;
   .set-btn   { font-size: 10px; padding: 3px 8px; }
   #gh-status { font-size: 10px; padding: 2px 6px; }
 
+  /* Circle tabs — in topbar, keep compact on mobile */
+  .circ-tab { padding: 6px 10px; font-size: 13px; }
+
+  /* Canvas fills all remaining space between topbar and bottom bar */
   #main { flex-direction: column; }
-  #canvasWrap { flex: 1; min-height: 0; }
+  #canvasWrap { flex: 1; min-height: 0; padding-bottom: 0; }
 
-  #sidebar { width: 100%; height: auto; flex-shrink: 0;
-             border-left: none; border-top: 1px solid #444;
-             padding: 7px 10px; gap: 6px; overflow-y: visible; flex-direction: column; }
+  /* Sidebar hidden entirely on mobile — buttons moved to fixed bottom bar */
+  #sidebar { display: none; }
 
-  /* Hide desktop-only sections */
-  .section { display: none; }
+  /* ── Fixed bottom action bar ── */
+  #mobile-bar {
+    display: flex; flex-direction: column;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #181818; border-top: 1px solid #444;
+    padding: 6px 10px 10px; gap: 5px;
+    z-index: 50;
+  }
+  #mobile-bar .btn-row { display: flex; gap: 8px; }
+  #mobile-bar .btn-mob-skip { flex: 0 0 66px; padding: 12px 0; font-size: 13px;
+                              background: #2a2a2a; color: #888; border: 1px solid #444;
+                              border-radius: 6px; font-family: monospace; cursor: pointer; }
+  #mobile-bar .btn-mob-zoom { flex: 0 0 90px; padding: 12px 0; font-size: 13px;
+                              background: #0e1a33; color: #6ab; border: 1px solid #1a3a5c;
+                              border-radius: 6px; font-family: monospace; cursor: pointer; }
+  #mobile-bar .btn-confirm { flex: 1; padding: 12px; font-size: 15px; font-weight: bold;
+                              background: #1a5c1a; color: #8f8; border: none;
+                              border-radius: 6px; font-family: monospace; cursor: pointer; }
+  #mobile-bar #mob-save-status { font-size: 10px; color: #4f4; text-align: center; min-height: 13px; }
 
-  /* Circle tabs — always visible, large targets */
-  #circleSelect { display: flex; }
-  .circ-tab { padding: 11px 4px; font-size: 14px; }
+  /* Thumbnail strip */
+  #mobile-thumbs { display: flex; overflow-x: auto; gap: 5px;
+                   -webkit-overflow-scrolling: touch; padding: 2px 0; }
+  #mobile-thumbs .imgthumb { flex-shrink: 0; width: 46px; height: 34px; }
 
-  /* Action row — always visible */
-  #exportWrap { display: flex; flex-direction: row; gap: 6px; margin-top: 0; }
-  #exportWrap .btn-red   { flex: 0 0 66px; width: auto; padding: 10px 0; font-size: 13px; }
-  #exportWrap .btn-green { flex: 1; padding: 10px; font-size: 14px; }
-  #exportWrap .btn-blue, #exportWrap .btn-gray { display: none; }
-  #saveStatus { font-size: 9px; }
-
-  /* Thumbnails: horizontal strip */
-  #thumbSection { display: block !important; padding: 4px 0; }
-  #thumbSection h3 { display: none; }
-  .imglist { flex-wrap: nowrap; overflow-x: auto; gap: 5px;
-             -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-  .imgthumb { flex-shrink: 0; width: 46px; height: 34px; }
+  /* Push canvas up so content isn't hidden under fixed bar */
+  body { padding-bottom: 110px; }
 }
 </style>
 </head>
@@ -182,6 +193,10 @@ canvas { image-rendering: pixelated; display: block;
     <button class="set-btn"            id="btn-set-ubiris"    onclick="switchSet('ubiris-check')">UBIRIS v2</button>
     <button class="set-btn"            id="btn-set-roboflow"  onclick="switchSet('roboflow-color')">Roboflow 🏷</button>
   </div>
+  <div id="circleSelect">
+    <div class="circ-tab iris active" id="tab-iris"  onclick="selectCircle('iris')">🔵 IRIS</div>
+    <div class="circ-tab pupil"       id="tab-pupil" onclick="selectCircle('pupil')">🟠 PUPIL</div>
+  </div>
   <span id="gh-status" class="none" onclick="openSetup()" title="Tap to configure GitHub sync">📴 Local only</span>
   <span id="known-label"></span>
   <span id="imgLabel">—</span>
@@ -192,11 +207,6 @@ canvas { image-rendering: pixelated; display: block;
   <div id="canvasWrap"><canvas id="c"></canvas></div>
 
   <div id="sidebar">
-    <div id="circleSelect">
-      <div class="circ-tab iris active" id="tab-iris"  onclick="selectCircle('iris')">🔵 IRIS</div>
-      <div class="circ-tab pupil"       id="tab-pupil" onclick="selectCircle('pupil')">🟠 PUPIL</div>
-    </div>
-
     <div class="section">
       <h3>Instructions</h3>
       <div id="instrBox">—</div>
@@ -240,6 +250,17 @@ canvas { image-rendering: pixelated; display: block;
       <button class="btn btn-blue"  style="margin-top:4px" onclick="exportJSON()">Export gt-data.json</button>
       <button class="btn btn-gray"  style="margin-top:2px" onclick="openSetup()">⚙ GitHub Settings</button>
     </div>
+  </div>
+</div>
+
+<!-- Mobile-only fixed bottom action bar -->
+<div id="mobile-bar" style="display:none">
+  <div id="mobile-thumbs"></div>
+  <div id="mob-save-status"></div>
+  <div class="btn-row">
+    <button class="btn-mob-skip" onclick="skipImage()">⊘ Skip</button>
+    <button class="btn-mob-zoom" onclick="markZoomRequired()">📷 Full Face</button>
+    <button class="btn-confirm"  onclick="saveAndNext()">✓ Confirm &amp; Next →</button>
   </div>
 </div>
 
@@ -344,12 +365,29 @@ function saveGhToken() {
   // Test the token by fetching the file
   ghFetch()
     .then(function(data) {
-      st.style.color = '#4f4';
-      st.textContent = '✓ Connected! Token saved.';
       _ghReady = true;
       _setGhStatus('ok', '✓ GitHub');
-      setTimeout(closeSetup, 1200);
       buildThumbs(); updateProgress();
+      // If there's local data not yet on GitHub, push it now
+      var localCount = Object.keys(gt).filter(function(k){ return !k.startsWith('_'); }).length;
+      if (localCount > 0) {
+        st.style.color = '#fa0';
+        st.textContent = '⟳ Pushing ' + localCount + ' local annotations…';
+        ghPush('GT: initial sync from device (' + localCount + ' entries)')
+          .then(function(res) {
+            st.style.color = '#4f4';
+            st.textContent = '✓ Connected & synced ' + localCount + ' annotations!';
+            setTimeout(closeSetup, 1800);
+          })
+          .catch(function(e) {
+            st.style.color = '#f88';
+            st.textContent = '✗ Push failed: ' + e.message;
+          });
+      } else {
+        st.style.color = '#4f4';
+        st.textContent = '✓ Connected! Token saved.';
+        setTimeout(closeSetup, 1200);
+      }
       var files = getCurrentFiles(), start = 0;
       while (start < files.length - 1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
       loadImage(start);
@@ -656,18 +694,46 @@ function showAlgo() {
     '\nirisR: '+(algoResult.rIrisFrac*iw).toFixed(1)+'\npupilR: '+(algoResult.rPupilFrac?(algoResult.rPupilFrac*iw).toFixed(1):'—');
 }
 
+// ── Image quality gate ───────────────────────────────────────────────────────
+// Returns true if the image is too small or too blurry to annotate.
+// MIN_PX: roboflow-color needs higher bar (close-up crops); other sets use 80px.
+function _isTooLowQuality(imgEl2) {
+  var minPx = (currentSet === 'roboflow-color') ? 150 : 80;
+  if (imgEl2.naturalWidth < minPx || imgEl2.naturalHeight < minPx) return true;
+  // Quick sharpness check via pixel variance in center region
+  try {
+    var sw = Math.min(imgEl2.naturalWidth,  128);
+    var sh = Math.min(imgEl2.naturalHeight, 128);
+    var ox = Math.floor((imgEl2.naturalWidth  - sw) / 2);
+    var oy = Math.floor((imgEl2.naturalHeight - sh) / 2);
+    var tmp = document.createElement('canvas'); tmp.width=sw; tmp.height=sh;
+    var tc  = tmp.getContext('2d');
+    tc.drawImage(imgEl2, ox, oy, sw, sh, 0, 0, sw, sh);
+    var px = tc.getImageData(0, 0, sw, sh).data;
+    var sum=0, n=sw*sh;
+    for (var i=0; i<px.length; i+=4) sum += 0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+    var mean=sum/n, sqSum=0;
+    for (var j=0; j<px.length; j+=4) { var g=0.299*px[j]+0.587*px[j+1]+0.114*px[j+2]-mean; sqSum+=g*g; }
+    var variance = sqSum / n;
+    if (variance < 80) return true; // near-uniform / nearly black or white
+  } catch(e) {}
+  return false;
+}
+
 // ── Load image ────────────────────────────────────────────────────────────────
 function loadImage(i) {
   idx=i; drag=null; pinchStart=null; touchDragPend=null;
+  // Persist position so reload resumes here
+  try { localStorage.setItem('aeye_pos', JSON.stringify({set:currentSet, idx:i})); } catch(e){}
   var files=getCurrentFiles(), file=files[i], key=imgKey(file);
   document.getElementById('imgLabel').textContent = currentSet+'/'+file+'  ('+(i+1)+'/'+files.length+')';
   imgEl = new Image();
   imgEl.onload = function() {
-    // Auto-skip images that are too small to annotate meaningfully
-    if (imgEl.naturalWidth < 80 || imgEl.naturalHeight < 80) {
-      console.log('[annotate] Skipping tiny image (' + imgEl.naturalWidth + '×' + imgEl.naturalHeight + '): ' + file);
+    // Auto-skip images that are too small or too blurry to annotate
+    if (_isTooLowQuality(imgEl)) {
+      console.log('[annotate] Auto-skip low-quality (' + imgEl.naturalWidth + '×' + imgEl.naturalHeight + '): ' + file);
       var files2=getCurrentFiles();
-      if (!gt[imgKey(file)]) { gt[imgKey(file)] = { _skip:true, _reason:'too_small', imgW:imgEl.naturalWidth, imgH:imgEl.naturalHeight }; }
+      if (!gt[imgKey(file)]) { gt[imgKey(file)] = { _skip:true, _reason:'low_quality', imgW:imgEl.naturalWidth, imgH:imgEl.naturalHeight }; }
       var next = idx + 1;
       if (next < files2.length) loadImage(next);
       return;
@@ -682,6 +748,21 @@ function loadImage(i) {
     canvas.style.height = Math.round(imgEl.naturalHeight * SCALE)+'px';
     canvas.width=imgEl.naturalWidth; canvas.height=imgEl.naturalHeight;
     algoResult=autoFit(imgEl, true); showAlgo();
+    // Full-face photos: iris ring < 5% of image width → zoom required to annotate.
+    // Store as _zoomRequired (not _skip) so they appear in the exported database.
+    if (algoResult && algoResult.ok && algoResult.rIrisFrac < 0.05 && !gt[key]) {
+      console.log('[annotate] Full-face detected (rIrisFrac=' + algoResult.rIrisFrac.toFixed(3) + '): ' + file);
+      gt[imgKey(file)] = { _zoomRequired:true, set:currentSet, file:file,
+                           imgW:imgEl.naturalWidth, imgH:imgEl.naturalHeight,
+                           algoIrisFrac:algoResult.rIrisFrac, ts:new Date().toISOString() };
+      persistGT();
+      updateThumbs(); updateProgress();
+      var nextFF = idx + 1, files3 = getCurrentFiles();
+      while (nextFF < files3.length && gt[imgKey(files3[nextFF])] &&
+             (gt[imgKey(files3[nextFF])]._skip || gt[imgKey(files3[nextFF])]._zoomRequired)) nextFF++;
+      if (nextFF < files3.length) loadImage(nextFF);
+      return;
+    }
     if (gt[key] && !gt[key]._skip) {
       iris  = { cx:gt[key].irisCx,  cy:gt[key].irisCy,  r:gt[key].irisR  };
       pupil = { cx:gt[key].pupilCx, cy:gt[key].pupilCy, r:gt[key].pupilR };
@@ -746,8 +827,7 @@ function saveAndNext() {
   updateThumbs(); updateProgress();
 
   // GitHub sync
-  var s = document.getElementById('saveStatus');
-  s.textContent = ''; // clear
+  _setSaveStatus(''); // clear
 
   if (_ghToken()) {
     _setGhStatus('syncing', '⟳ Syncing…');
@@ -755,30 +835,50 @@ function saveAndNext() {
     ghPush(msg)
       .then(function(res) {
         if (res.ok) {
-          _setGhStatus('ok', '✓ GitHub'); s.textContent='✓ Committed to GitHub';
-          setTimeout(function(){ s.textContent=''; }, 3000);
+          _setGhStatus('ok', '✓ GitHub'); _setSaveStatus('✓ Committed to GitHub');
+          setTimeout(function(){ _setSaveStatus(''); }, 3000);
         }
       })
       .catch(function(e) {
         _setGhStatus('err', '✗ GitHub');
-        s.textContent='✗ GitHub failed — downloaded locally';
+        _setSaveStatus('✗ GitHub failed — downloaded locally');
         autoDownload(); // fallback download
-        setTimeout(function(){ s.textContent=''; }, 5000);
+        setTimeout(function(){ _setSaveStatus(''); }, 5000);
       });
   } else {
-    // No token — just download
-    autoDownload();
+    // No token — saved to localStorage only; user can export manually
+    _setSaveStatus('✓ Saved locally', '#fa0');
+    setTimeout(function(){ _setSaveStatus(''); }, 2500);
   }
 
   var next=idx+1, flen=files.length;
-  while (next<flen && gt[imgKey(files[next])] && gt[imgKey(files[next])]._skip) next++;
+  while (next<flen && gt[imgKey(files[next])] &&
+         (gt[imgKey(files[next])]._skip || gt[imgKey(files[next])]._zoomRequired)) next++;
   if (next<flen) loadImage(next); else alert('All images in this set done!');
 }
 
 function skipImage() {
   var files=getCurrentFiles(); gt[imgKey(files[idx])]={_skip:true};
   persistGT(); updateThumbs(); updateProgress();
-  if (idx+1<files.length) loadImage(idx+1);
+  var next=idx+1;
+  while (next<files.length && gt[imgKey(files[next])] &&
+         (gt[imgKey(files[next])]._skip || gt[imgKey(files[next])]._zoomRequired)) next++;
+  if (next<files.length) loadImage(next);
+}
+
+function markZoomRequired() {
+  var files=getCurrentFiles(), file=files[idx];
+  gt[imgKey(file)] = { _zoomRequired:true, set:currentSet, file:file,
+                       imgW: imgEl?imgEl.naturalWidth:0, imgH: imgEl?imgEl.naturalHeight:0,
+                       ts: new Date().toISOString() };
+  persistGT(); updateThumbs(); updateProgress();
+  _setSaveStatus('📷 Marked as full-face / zoom required', '#6ab');
+  setTimeout(function(){ _setSaveStatus(''); }, 2000);
+  var next=idx+1;
+  while (next<files.length && gt[imgKey(files[next])] &&
+         (gt[imgKey(files[next])]._skip || gt[imgKey(files[next])]._zoomRequired)) next++;
+  if (next<files.length) loadImage(next);
+  else alert('All images in this set done!');
 }
 
 // ── Persist ───────────────────────────────────────────────────────────────────
@@ -786,6 +886,7 @@ function persistGT() { try { localStorage.setItem('aeye_gt', JSON.stringify(gt))
 
 function buildExportObj() {
   var out={_version:gtMeta._version,_note:gtMeta._note,_sets:gtMeta._sets,_updated:new Date().toISOString()};
+  // Include annotated entries AND zoom-required entries; exclude low-quality skips
   for (var k in gt) { if(!gt[k]._skip) out[k]=gt[k]; }
   return out;
 }
@@ -823,20 +924,37 @@ function buildThumbs() {
     img.onclick=(function(ii){ return function(){ loadImage(ii); }; })(i);
     list.appendChild(img);
   });
+  _buildMobileThumbs();
+}
+function _thumbClass(file, i) {
+  var k=imgKey(file);
+  var cls='imgthumb';
+  if (i===idx) cls+=' active';
+  else if (gt[k]&&gt[k]._zoomRequired) cls+=' zoom';
+  else if (gt[k]&&gt[k]._skip) cls+=' skip';
+  else if (gt[k]) cls+=' done';
+  return cls;
 }
 function updateThumbs() {
   var thumbs=document.getElementById('thumbList').querySelectorAll('img');
-  getCurrentFiles().forEach(function(file, i) {
-    var k=imgKey(file);
-    thumbs[i].className='imgthumb'+(i===idx?' active':'')+(gt[k]&&!gt[k]._skip?' done':'')+(gt[k]&&gt[k]._skip?' skip':'');
-  });
+  getCurrentFiles().forEach(function(file, i) { thumbs[i].className=_thumbClass(file,i); });
+  _updateMobileThumbs();
 }
 function updateProgress() {
-  var files=getCurrentFiles(), done=0, skipped=0;
-  files.forEach(function(f){ var k=imgKey(f); if(gt[k]&&!gt[k]._skip) done++; else if(gt[k]&&gt[k]._skip) skipped++; });
-  var available = files.length - skipped;
-  var skipNote = skipped > 0 ? ' ('+skipped+' tiny skipped)' : '';
-  document.getElementById('progress').textContent=done+' / '+available+' annotated'+skipNote;
+  var files=getCurrentFiles(), done=0, skipped=0, zoomReq=0;
+  files.forEach(function(f){
+    var k=imgKey(f), e=gt[k];
+    if (!e) return;
+    if (e._zoomRequired) zoomReq++;
+    else if (e._skip) skipped++;
+    else done++;
+  });
+  var available = files.length - skipped - zoomReq;
+  var notes = [];
+  if (skipped > 0) notes.push(skipped+' auto-skipped');
+  if (zoomReq > 0) notes.push(zoomReq+' zoom-required');
+  var noteStr = notes.length ? ' ('+notes.join(', ')+')' : '';
+  document.getElementById('progress').textContent=done+' / '+available+' annotated'+noteStr;
 }
 
 // ── Data merge ────────────────────────────────────────────────────────────────
@@ -847,6 +965,38 @@ function mergeFromFetch(data) {
   for (var k in data) { if(!k.startsWith('_') && !gt[k]) gt[k]=data[k]; }
 }
 
+// ── Mobile bar ────────────────────────────────────────────────────────────────
+var _isMobile = window.matchMedia('(max-width: 768px)').matches;
+if (_isMobile) {
+  document.getElementById('mobile-bar').style.display = 'flex';
+}
+
+function _setSaveStatus(msg, color) {
+  var els = [document.getElementById('saveStatus'), document.getElementById('mob-save-status')];
+  els.forEach(function(el) { if (!el) return; el.textContent = msg; if (color) el.style.color = color; });
+}
+
+function _buildMobileThumbs() {
+  if (!_isMobile) return;
+  var strip = document.getElementById('mobile-thumbs');
+  strip.innerHTML = '';
+  getCurrentFiles().forEach(function(file, i) {
+    var img = document.createElement('img');
+    img.src = getImgDir() + file; img.className = 'imgthumb'; img.title = file;
+    img.onclick = (function(ii){ return function(){ loadImage(ii); }; })(i);
+    strip.appendChild(img);
+  });
+}
+
+function _updateMobileThumbs() {
+  if (!_isMobile) return;
+  var thumbs = document.getElementById('mobile-thumbs').querySelectorAll('img');
+  getCurrentFiles().forEach(function(file, i) {
+    if (!thumbs[i]) return;
+    thumbs[i].className = _thumbClass(file, i);
+  });
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 try { gt=JSON.parse(localStorage.getItem('aeye_gt')||'{}'); } catch(e){ gt={}; }
 
@@ -855,9 +1005,36 @@ _loadRoboflowLabels();
 _loadRoboflowBboxes();
 
 function _boot() {
+  // Restore last set + position from previous session
+  try {
+    var pos = JSON.parse(localStorage.getItem('aeye_pos') || 'null');
+    if (pos && pos.set && IMAGE_SETS[pos.set]) {
+      if (pos.set !== currentSet) {
+        currentSet = pos.set;
+        document.getElementById('btn-set-test').className     = 'set-btn'+(currentSet==='test-images'    ?' active-set':'');
+        document.getElementById('btn-set-ubiris').className   = 'set-btn'+(currentSet==='ubiris-check'   ?' active-set':'');
+        document.getElementById('btn-set-roboflow').className = 'set-btn'+(currentSet==='roboflow-color' ?' active-set':'');
+      }
+    }
+  } catch(e) {}
+
   buildThumbs(); updateProgress();
-  var files=getCurrentFiles(), start=0;
-  while (start<files.length-1 && gt[imgKey(files[start])] && !gt[imgKey(files[start])]._skip) start++;
+  var files=getCurrentFiles();
+
+  // Restore saved index if valid; otherwise find first un-annotated
+  var start = 0;
+  try {
+    var pos2 = JSON.parse(localStorage.getItem('aeye_pos') || 'null');
+    if (pos2 && pos2.set === currentSet && typeof pos2.idx === 'number' && pos2.idx < files.length) {
+      start = pos2.idx;
+    } else {
+      while (start < files.length-1 && gt[imgKey(files[start])] &&
+             (!gt[imgKey(files[start])]._skip || gt[imgKey(files[start])]._zoomRequired)) start++;
+    }
+  } catch(e) {
+    while (start < files.length-1 && gt[imgKey(files[start])] &&
+           (!gt[imgKey(files[start])]._skip || gt[imgKey(files[start])]._zoomRequired)) start++;
+  }
   loadImage(start);
 }
 

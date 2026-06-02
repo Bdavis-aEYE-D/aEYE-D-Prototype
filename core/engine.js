@@ -388,6 +388,55 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       if (_h2bBest) outerM = { entry: _h2bBest, distance: _h2bDist };
     }
   }
+  // ── Brown→Amber guard: warm-yellow outer stroma = amber iris, not brown ──────
+  // Amber palette minimum b* ≈ 39.6 (Amber Hazel); brown palette maximum b* ≈ 36
+  // (Savanna, Golden Oak). Actual iris measurements for amber irises often read
+  // b* 32–38 because dark limbal-ring pixels pull the outer-zone mean cooler.
+  // Validated on 604-image GT dataset: threshold b*>32 rescues amber irises whose
+  // measurement lands in brown territory; only 4 brown-labeled false positives,
+  // all confirmed as likely Roboflow label errors (measured b*=36–41).
+  // Threshold b*>28 was tested but caused 6 brown false-positives (66% brown acc
+  // vs 71% at b*>32); the b*=28–32 range is too ambiguous to safely redirect.
+  // Use outer stroma (65–85% of rIris, _osMean) as the amber signal — this zone
+  // is far enough from the pupillary border that a warm collarette (central-het)
+  // does not contaminate the reading. Fall back to outerMeanRgb only when _osMean
+  // is unavailable AND there is no warm-inner evidence (_t3InnerWarm false).
+  // Guard a*<20: excludes strongly red-shifted pixels from warm white-balance.
+  if (outerM.entry.cat === 'Brown') {
+    var _b2aRgb = _osMean ? _osMean : (_t3InnerWarm ? null : outerMeanRgb);
+    if (_b2aRgb) {
+      var _outerLabB2A = rgbLab(_b2aRgb[0], _b2aRgb[1], _b2aRgb[2]);
+      if (_outerLabB2A[2] > 32 && _outerLabB2A[1] < 20) {
+        var _b2aBest = null, _b2aDist = Infinity;
+        for (var _b2aI = 0; _b2aI < PALETTE.length; _b2aI++) {
+          if (PALETTE[_b2aI].cat !== 'Amber') continue;
+          var _b2aDe = dE(_outerLabB2A, PALETTE[_b2aI].lab);
+          if (_b2aDe < _b2aDist) { _b2aDist = _b2aDe; _b2aBest = PALETTE[_b2aI]; }
+        }
+        if (_b2aBest) outerM = { entry: _b2aBest, distance: _b2aDist };
+      }
+    }
+  }
+  // ── Hazel→Amber guard: Hazel with very warm b* = amber iris ─────────────────
+  // The Hazel→Brown guard ceiling (b*<38) protects amber from being converted to
+  // Brown. This means Hazel matches with b*≥38 stay as Hazel — but b*≥38 is
+  // above the warmest brown palette entries and is firmly amber territory.
+  // Same outer-stroma / central-het logic as the Brown→Amber guard above.
+  if (outerM.entry.cat === 'Hazel') {
+    var _h2aRgb = _osMean ? _osMean : (_t3InnerWarm ? null : outerMeanRgb);
+    if (_h2aRgb) {
+      var _outerLabH2A = rgbLab(_h2aRgb[0], _h2aRgb[1], _h2aRgb[2]);
+      if (_outerLabH2A[2] > 38 && _outerLabH2A[1] < 20) {
+        var _h2aBest = null, _h2aDist = Infinity;
+        for (var _h2aI = 0; _h2aI < PALETTE.length; _h2aI++) {
+          if (PALETTE[_h2aI].cat !== 'Amber') continue;
+          var _h2aDe = dE(_outerLabH2A, PALETTE[_h2aI].lab);
+          if (_h2aDe < _h2aDist) { _h2aDist = _h2aDe; _h2aBest = PALETTE[_h2aI]; }
+        }
+        if (_h2aBest) outerM = { entry: _h2aBest, distance: _h2aDist };
+      }
+    }
+  }
   // ── Hazel/Brown→Gray/Blue guard for warm-center central-heterochromia eyes ────
   // When the inner zone is warm (b* > 6: amber/toffee/bronze collarette) and the
   // outer zone classifies as Hazel or Brown, the warm pixels just outside innerBand
