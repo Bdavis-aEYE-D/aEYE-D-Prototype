@@ -5,7 +5,7 @@
     "test-images": "Subject photos used for algorithm development and regression testing",
     "ubiris-check": "UBIRIS v2 close-up iris dataset samples"
   },
-  "_updated": "2026-06-02T16:28:38.278Z",
+  "_updated": "2026-06-02T16:28:47.511Z",
   "test-images/Bryan Left Window Reflection.png": {
     "set": "test-images",
     "file": "Bryan Left Window Reflection.png",
@@ -6623,6 +6623,27 @@
     "pupilRFrac": 0.031499548731538624,
     "note": "",
     "ts": "2026-06-02T16:28:38.272Z",
+    "knownColor": "brown"
+  },
+  "roboflow-color/brown/rf2_Brown-58-_jpg.rf.f92253a0b1920671634821132326116c.jpg": {
+    "set": "roboflow-color",
+    "file": "brown/rf2_Brown-58-_jpg.rf.f92253a0b1920671634821132326116c.jpg",
+    "imgW": 301,
+    "imgH": 198,
+    "irisCx": 151,
+    "irisCy": 99,
+    "irisR": 41,
+    "pupilCx": 152,
+    "pupilCy": 101,
+    "pupilR": 8,
+    "irisCxFrac": 0.5008375209380235,
+    "irisCyFrac": 0.4984582000913657,
+    "irisRFrac": 0.13535368470711687,
+    "pupilCxFrac": 0.5062814070351759,
+    "pupilCyFrac": 0.5092804087778962,
+    "pupilRFrac": 0.02741665225970589,
+    "note": "",
+    "ts": "2026-06-02T16:28:47.506Z",
     "knownColor": "brown"
   }
 }
