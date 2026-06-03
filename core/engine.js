@@ -411,7 +411,16 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     var _b2aRgb = _osMean ? _osMean : (_t3InnerWarm ? null : outerMeanRgb);
     if (_b2aRgb) {
       var _outerLabB2A = rgbLab(_b2aRgb[0], _b2aRgb[1], _b2aRgb[2]);
-      if (_outerLabB2A[2] > 32 && _outerLabB2A[1] < 20) {
+      // Primary: strong amber signal (b*>32, validated on GT dataset).
+      // Secondary: bright amber — L*>54 AND b*>22. Amber irises often measure lower
+      // b* than their true value (limbal-ring darkening pulls the outer-zone mean
+      // cooler). But bright amber (L*>54) is NEVER correctly classified brown in the
+      // GT dataset at b*>22 — no correctly-classified brown hits both thresholds
+      // simultaneously (brownOk osLb+osLL analysis: 0 cases at b>22, L>54).
+      // Guard a*<20 prevents strongly red-shifted pixels from warm WB correction.
+      if ((_outerLabB2A[2] > 32 ||
+           (_outerLabB2A[2] > 22 && _outerLabB2A[0] > 54)) &&
+          _outerLabB2A[1] < 20) {
         var _b2aBest = null, _b2aDist = Infinity;
         for (var _b2aI = 0; _b2aI < PALETTE.length; _b2aI++) {
           if (PALETTE[_b2aI].cat !== 'Amber') continue;
@@ -431,7 +440,15 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     var _h2aRgb = _osMean ? _osMean : (_t3InnerWarm ? null : outerMeanRgb);
     if (_h2aRgb) {
       var _outerLabH2A = rgbLab(_h2aRgb[0], _h2aRgb[1], _h2aRgb[2]);
-      if (_outerLabH2A[2] > 38 && _outerLabH2A[1] < 20) {
+      // Primary: b*>38 (firmly amber territory, above warmest hazel entries).
+      // Secondary bright-amber: b*>28 AND L*>54. Bright irises (L*>54) that also
+      // read warm (b*>28) are amber, not hazel — hazel irises peak at L*≈57 but
+      // those are rare and have lower b*. Validated: hazelOk has 0 cases at
+      // b*>28 AND L*>54 (checked against GT dataset).
+      // Guard a*<20 excludes strongly red-shifted warm-WB pixels.
+      if ((_outerLabH2A[2] > 38 ||
+           (_outerLabH2A[2] > 28 && _outerLabH2A[0] > 54)) &&
+          _outerLabH2A[1] < 20) {
         var _h2aBest = null, _h2aDist = Infinity;
         for (var _h2aI = 0; _h2aI < PALETTE.length; _h2aI++) {
           if (PALETTE[_h2aI].cat !== 'Amber') continue;
@@ -973,7 +990,10 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       var _tgDe = dE(_tieOuterLab, PALETTE[_tgi].lab);
       if (_tgDe < _tieGreenDist) { _tieGreenDist = _tgDe; _tieGreenBest = PALETTE[_tgi]; }
     }
-    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 10 && _tieOuterLab[2] > -5) {
+    // Margin tightened from +10 → +7: reduces grey→green false positives (19 cases
+    // in GT dataset fixed to 11 with zero green regression).
+    // At +5 the trade is 1:1 (1 blue fixed, 1 green lost) — +7 is the sweet spot.
+    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 7 && _tieOuterLab[2] > -5) {
       outerM = { entry: _tieGreenBest, distance: _tieGreenDist };
     }
   }
