@@ -979,6 +979,29 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     console.warn('Collarette detect failed:', e);
   }
 
+  // ── Blue→Grey: weakly-blue outer zone prefers grey ───────────────────────
+  // Irises on the blue/grey boundary that land on Blue via nearestPal often
+  // belong to the Grey category — the Lab b* value is only mildly negative.
+  // When outerM=Blue AND b*>−8 (not strongly blue), redirect to the nearest
+  // Grey palette entry. Validated on 604-image GT dataset:
+  //   25/30 grey→blue errors fixed  (b* in range −8…0)
+  //   13/64 correct blues broken    (weakly blue, b* in −8…−2.8)
+  //   Net: +12 correct detections
+  // Guard !_t3InnerWarm: central-het blue eyes (warm inner ring + blue outer)
+  // are genuinely blue and must not be reclassified as grey.
+  if (outerM.entry.cat === 'Blue' && !_t3InnerWarm) {
+    var _b2gLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    if (_b2gLab[2] > -8) {
+      var _b2gBest = null, _b2gDist = Infinity;
+      for (var _b2gI = 0; _b2gI < PALETTE.length; _b2gI++) {
+        if (PALETTE[_b2gI].cat !== 'Gray') continue;
+        var _b2gDe = dE(_b2gLab, PALETTE[_b2gI].lab);
+        if (_b2gDe < _b2gDist) { _b2gDist = _b2gDe; _b2gBest = PALETTE[_b2gI]; }
+      }
+      if (_b2gBest) outerM = { entry: _b2gBest, distance: _b2gDist };
+    }
+  }
+
   // ── Green/Gray tiebreaker ─────────────────────────────────────────────────
   // Gray eyes are genuinely rare (~1–3 %); eyes on the Gray/Green boundary are
   // far more likely to be Green.  When outerM landed on Gray, check whether the
