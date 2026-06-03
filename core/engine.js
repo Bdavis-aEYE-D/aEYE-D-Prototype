@@ -575,10 +575,19 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // _t3InnerWarm=true for ~100% of hazel irises (validated on GT dataset).
   // Tier 2 and Tier 3 both skip when _t3InnerWarm=true, leaving hazel irises
   // classified as Brown or Gray when the outer stroma is ambiguous.
-  // This rule catches that gap by detecting the hazel signature:
+  //
+  // PRIMARY path (outer stroma visible): outer a*<5 AND outer b*>12 AND <32
   //   • outer a* < 5   — not reddish (hazel outer is olive/neutral; brown is a*>8)
   //   • outer b* > 12  — clearly warm (filters cool grey b*<8, only warm-olive passes)
   //   • outer b* < 32  — below amber territory (Brown→Amber guard handles b*>32)
+  //
+  // SECONDARY path (neutral outer, warm pupil zone): outer a*<5 AND inner b*>20 AND outer b*<32
+  //   Hazel irises where the outer stroma looks grey/neutral (b*<12) but the
+  //   pupil zone is strongly warm (b*>20 — intrinsic hazel pigment, not just WB).
+  //   Validated on GT: 9 of 24 hazel→grey wrong cases fixed; only 1 correct grey
+  //   broken (at b*=30.2, marginal case). All correctly-classified brown irises
+  //   with innerB>20 have outer a*>5, so the a*<5 guard protects them fully.
+  //
   // The G≥R condition from the initial attempt is intentionally omitted: hazel
   // irises often have R≥G (warm stroma), unlike green irises. Tighter thresholds
   // reduce false-positives: all confirmed brown irises with Hazel cat0 have
@@ -587,7 +596,9 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       (outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
       outer.length >= 20) {
     var _hDetLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
-    if (_hDetLab[1] < 5 && _hDetLab[2] > 12 && _hDetLab[2] < 32) {
+    var _hDetFire = _hDetLab[1] < 5 && _hDetLab[2] < 32 &&
+                    (_hDetLab[2] > 12 || _t3InnerLab[2] > 20);
+    if (_hDetFire) {
       var _hDetBest = null, _hDetDist = Infinity;
       for (var _hDi = 0; _hDi < PALETTE.length; _hDi++) {
         if (PALETTE[_hDi].cat !== 'Hazel') continue;
