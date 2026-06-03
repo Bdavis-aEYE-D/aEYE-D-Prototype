@@ -307,7 +307,11 @@ function nearestPal(rgb){
   // measurable green component — no brown iris ever has negative a*. If the
   // nearest match landed in Brown, redirect to the nearest Green or Hazel
   // entry (whichever is closer in Lab space).
-  if (best && best.cat==='Brown' && aStar < -2) {
+  // Guard b* > -10: blue irises can also have a* slightly negative (cool side of
+  // neutral), but they have strongly negative b* (b* ≈ -20 to -50). Without this
+  // guard, dark blue irises that happen to match a near-black brown palette entry
+  // get incorrectly redirected to Green via the a* path.
+  if (best && best.cat==='Brown' && aStar < -2 && bStar > -10) {
     if (bestGreen && bestHazel) {
       if (bdGreen <= bdHazel) { best = bestGreen; bd = bdGreen; }
       else                     { best = bestHazel; bd = bdHazel; }

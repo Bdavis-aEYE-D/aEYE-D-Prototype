@@ -321,8 +321,12 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       _limRm+=edge[_limI][0]; _limGm+=edge[_limI][1]; _limBm+=edge[_limI][2];
     }
     _limRm/=edge.length; _limGm/=edge.length; _limBm/=edge.length;
-    if (_limGm-_limRm > -5 && _limGm > _limBm-5) {
-      var _limLab=rgbLab(Math.round(_limRm),Math.round(_limGm),Math.round(_limBm));
+    var _limLab=rgbLab(Math.round(_limRm),Math.round(_limGm),Math.round(_limBm));
+    // Require Lab a*<0: the limbal zone must have an actual green tint in Lab space.
+    // The original G−R>−5 check was too loose — near-neutral brown limbal zones
+    // (G≈R, a*≈+3) also passed, redirecting warm brown irises to Green.
+    // True olive/green limbal rings have a*<0 (negative = green side of Lab axis).
+    if (_limLab[1] < 0 && _limGm-_limRm > -5 && _limGm > _limBm-5) {
       var _limBest=null, _limBd=Infinity;
       for (var _limPi=0; _limPi<PALETTE.length; _limPi++){
         if (PALETTE[_limPi].cat!=='Green' && PALETTE[_limPi].cat!=='Hazel') continue;
@@ -375,10 +379,11 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Does NOT fire for gray-base irises (a* ~ 1-2) or true Hazel (a* ≤ 0 to ~3).
   if (outerM.entry.cat === 'Hazel' && _osMean) {
     var _osLabH2B = rgbLab(_osMean[0], _osMean[1], _osMean[2]);
-    // a*>5 = reddish; b*>5 = warm; b*<38 excludes amber territory (amber b*=40-57)
-    // Without the b*<38 ceiling, amber irises landing on "Amber Hazel" (b*=40.9)
-    // were incorrectly converted to Brown by this guard.
-    if (_osLabH2B[1] > 5 && _osLabH2B[2] > 5 && _osLabH2B[2] < 38) {
+    // a*>8 = reddish (raised from 5→8: all correctly-detected brown irises that
+    // start as Hazel have _osMean a*≥9, so this is safe); b*>5 = warm; b*<38
+    // excludes amber territory (amber b*=40-57). Without the b*<38 ceiling, amber
+    // irises landing on "Amber Hazel" (b*=40.9) were wrongly converted to Brown.
+    if (_osLabH2B[1] > 8 && _osLabH2B[2] > 5 && _osLabH2B[2] < 38) {
       var _h2bBest = null, _h2bDist = Infinity;
       for (var _hbi = 0; _hbi < PALETTE.length; _hbi++) {
         if (PALETTE[_hbi].cat !== 'Brown') continue;
@@ -447,15 +452,20 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Only reclassifies to Gray or Blue — never to Green — to avoid false positives.
   //
   // Primary test: palette says Gray or Blue — clear case.
-  // Fallback Lab test: a* < 7 AND b* < 11.
+  // Fallback Lab test: a* < 7 AND b* < threshold.
   //   a*<7: handles warm-lit face photos that push a* up from ~1 to ~5 (Illiana: a*=5.3).
-  //   b*<11: tight enough to exclude warm-brown irises (Jeri outerStroma b*=12.5) while
+  //   b*<11 (Brown path): excludes warm-brown irises (Jeri outerStroma b*=12.5) while
   //     still catching neutral-gray under warm WB (Illiana outerStroma b*=9.7).
-  //     Hazel typically has b* 17–25; genuine Brown 12–20; neutral gray <11 even warm-lit.
+  //   b*<9 (Hazel path): hazel outer stroma is typically b*=17–25. If _osMean reads
+  //     b*=10 it is almost certainly a ring-placement error (sclera or limbal
+  //     contamination) rather than a genuine gray eye with a hazel-matching outer zone.
+  //     Using b*<9 prevents these sampling errors from graying out real hazel irises
+  //     while still allowing the primary palette path (_osM=Gray/Blue) to function.
   if ((outerM.entry.cat === 'Hazel' || outerM.entry.cat === 'Brown') && _t3InnerWarm && _osMean) {
     var _osLabG = rgbLab(_osMean[0], _osMean[1], _osMean[2]);
+    var _osBThresh = (outerM.entry.cat === 'Hazel') ? 9 : 11;
     var _osNeutral = (_osM && (_osM.entry.cat === 'Gray' || _osM.entry.cat === 'Blue'))
-                   || (_osLabG[1] < 7 && _osLabG[2] < 11);
+                   || (_osLabG[1] < 7 && _osLabG[2] < _osBThresh);
     if (_osNeutral) {
       // Find nearest Gray/Blue entry by ΔE on outerStroma Lab
       var _gbBest = null, _gbDist = Infinity;
@@ -505,6 +515,10 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // in the outer stroma. b* > −10 guards against blue eyes (which land at
   // b* ≈ −20 to −50) being incorrectly promoted to Green.
   // Only fires if outerM is still Brown or Gray after Tiers 1 & 2.
+  // b* > -5 guard: real green irises have b* ≥ -5 (neutral→warm yellow-green).
+  // Teal/steel-blue irises have b* < -10; the -5 threshold stops them from being
+  // pulled to Green via this check. All 64 correct green detections have b* > -5
+  // (only one edge case at -5.6); 26 blue→green errors had b* mostly below -5.
   //
   // Warm-inner guard: if the inner zone has b* > 6 (amber/bronze collarette),
   // this is central-het — warm pupil ring + gray outer — not a green iris.
@@ -519,9 +533,15 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     // the green signal. Threshold tightened from -6 → -8 to prevent cool-lit gray
     // irises (raw a* ≈ -6 to -7) from false-firing. Also requires G−R ≥ 5 (not
     // just G ≥ R by 1 pixel) to demand a real green channel dominance.
-    var _t3Fire = (_t3Lab[1] < -4 && _t3Lab[2] > -10 && outerMeanRgb[1] >= outerMeanRgb[0]) ||
-                  (_t3RawLab[1] < -8 && _t3RawLab[2] > -10 &&
-                   (outerRawMeanRgb[1] - outerRawMeanRgb[0]) >= 5 && wbR >= 1.08);
+    // Minimum chroma guard: green irises have Lab C*≥8 (palest green palette entry,
+    // Mint Frost, has C*≈8). Neutral gray irises with a slight WB-induced green
+    // bias can land at a*=−5, b*=0 → C*≈5 and wrongly fire Tier 3. Requiring
+    // C*>5.5 filters out near-neutral gray readings while keeping all real greens.
+    var _t3Chroma = Math.sqrt(_t3Lab[1]*_t3Lab[1] + _t3Lab[2]*_t3Lab[2]);
+    var _t3Fire = _t3Chroma > 5.5 && (
+      (_t3Lab[1] < -4 && _t3Lab[2] > -5 && outerMeanRgb[1] >= outerMeanRgb[0]) ||
+      (_t3RawLab[1] < -8 && _t3RawLab[2] > -5 &&
+       (outerRawMeanRgb[1] - outerRawMeanRgb[0]) >= 5 && wbR >= 1.08));
     if (_t3Fire) {
       var _t3Best=null, _t3Bd=Infinity;
       for (var _t3I=0; _t3I<PALETTE.length; _t3I++){
@@ -533,6 +553,33 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     }
   }
   // ── End green detection guards ────────────────────────────────────────────
+
+  // ── Hazel detect: warm inner zone + warm-olive outer stroma ──────────────
+  // _t3InnerWarm=true for ~100% of hazel irises (validated on GT dataset).
+  // Tier 2 and Tier 3 both skip when _t3InnerWarm=true, leaving hazel irises
+  // classified as Brown or Gray when the outer stroma is ambiguous.
+  // This rule catches that gap by detecting the hazel signature:
+  //   • outer a* < 5   — not reddish (hazel outer is olive/neutral; brown is a*>8)
+  //   • outer b* > 12  — clearly warm (filters cool grey b*<8, only warm-olive passes)
+  //   • outer b* < 32  — below amber territory (Brown→Amber guard handles b*>32)
+  // The G≥R condition from the initial attempt is intentionally omitted: hazel
+  // irises often have R≥G (warm stroma), unlike green irises. Tighter thresholds
+  // reduce false-positives: all confirmed brown irises with Hazel cat0 have
+  // _osMean a*≥9, well above the a*<5 guard; hazel irises have a* median=3.2.
+  if (_t3InnerWarm &&
+      (outerM.entry.cat === 'Brown' || outerM.entry.cat === 'Gray') &&
+      outer.length >= 20) {
+    var _hDetLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    if (_hDetLab[1] < 5 && _hDetLab[2] > 12 && _hDetLab[2] < 32) {
+      var _hDetBest = null, _hDetDist = Infinity;
+      for (var _hDi = 0; _hDi < PALETTE.length; _hDi++) {
+        if (PALETTE[_hDi].cat !== 'Hazel') continue;
+        var _hDDe = dE(_hDetLab, PALETTE[_hDi].lab);
+        if (_hDDe < _hDetDist) { _hDetDist = _hDDe; _hDetBest = PALETTE[_hDi]; }
+      }
+      if (_hDetBest) outerM = { entry: _hDetBest, distance: _hDetDist };
+    }
+  }
 
   // ===== Heterochromia: combined detection =====
   // Path 1 (legacy): cross-category color shift between inner/outer halves
@@ -926,7 +973,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       var _tgDe = dE(_tieOuterLab, PALETTE[_tgi].lab);
       if (_tgDe < _tieGreenDist) { _tieGreenDist = _tgDe; _tieGreenBest = PALETTE[_tgi]; }
     }
-    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 10) {
+    if (_tieGreenBest && _tieGreenDist <= outerM.distance + 10 && _tieOuterLab[2] > -5) {
       outerM = { entry: _tieGreenBest, distance: _tieGreenDist };
     }
   }
