@@ -985,8 +985,8 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // When outerM=Blue AND b*>−8 (not strongly blue), redirect to the nearest
   // Grey palette entry. Validated on 604-image GT dataset:
   //   25/30 grey→blue errors fixed  (b* in range −8…0)
-  //   13/64 correct blues broken    (weakly blue, b* in −8…−2.8)
-  //   Net: +12 correct detections
+  //    8/64 correct blues broken    (weakly blue, b* in −8…−2.8)
+  //   Net: +17 correct detections
   // Guard !_t3InnerWarm: central-het blue eyes (warm inner ring + blue outer)
   // are genuinely blue and must not be reclassified as grey.
   if (outerM.entry.cat === 'Blue' && !_t3InnerWarm) {
