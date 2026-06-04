@@ -989,6 +989,10 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   //   25/30 grey→blue errors fixed  (b* in range −8…0)
   //    8/64 correct blues broken    (weakly blue, b* in −8…−2.8)
   //   Net: +17 correct detections
+  // NOTE: OKLab chroma was tested as an additional discriminator but ALL 37
+  //   borderline blue/grey cases have OKLab C* < 0.045 — both grey and blue
+  //   irises in this b* range are perceptually near-achromatic in OKLab space.
+  //   The guard provided no separation; it was removed to keep the rule clean.
   // Guard !_t3InnerWarm: central-het blue eyes (warm inner ring + blue outer)
   // are genuinely blue and must not be reclassified as grey.
   if (outerM.entry.cat === 'Blue' && !_t3InnerWarm) {
