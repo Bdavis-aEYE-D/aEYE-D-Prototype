@@ -1035,9 +1035,10 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       var _tgDe = dE(_tieOuterLab, PALETTE[_tgi].lab);
       if (_tgDe < _tieGreenDist) { _tieGreenDist = _tgDe; _tieGreenBest = PALETTE[_tgi]; }
     }
-    // Margin tightened from +10 → +7: reduces grey→green false positives (19 cases
-    // in GT dataset fixed to 11 with zero green regression).
-    // At +5 the trade is 1:1 (1 blue fixed, 1 green lost) — +7 is the sweet spot.
+    // Margin tightened from +10 → +7: reduces grey→green false positives (19→11).
+    // NOTE: G≥R guard was tested but ALL 11 remaining grey→green and 10 blue→green
+    //   wrong cases already have G≥R — they appear greenish even in raw RGB.
+    //   The guard provided zero separation; it was removed.
     if (_tieGreenBest && _tieGreenDist <= outerM.distance + 7 && _tieOuterLab[2] > -5) {
       outerM = { entry: _tieGreenBest, distance: _tieGreenDist };
     }
