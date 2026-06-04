@@ -242,6 +242,17 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   if (outer.length < 50){
     return { error: 'Not enough iris pixels. If wearing glasses, try removing them. Otherwise drag the circle onto your iris and make it larger.' };
   }
+  // ---- Rayid iris type classification (early — needed by color guards below) ----
+  // Moved before colour guards so rayid.jewelScore can be used as a second gate
+  // in the Green-cat hazel detect. Depends only on raw pixel data d + iris geometry;
+  // no colour guard outputs are needed.
+  var rayid = null;
+  try {
+    var stripGray = unwrapIris(d, stageW, stageH, cx, cy, cxP, cyP, rOut, rIn);
+    rayid = classifyRayid(stripGray, 360, 64);
+  } catch(e) {
+    console.warn('Rayid classify failed:', e);
+  }
   function dominant(pixels){
     if (!pixels.length) return null;
     var buckets = {}, keys = [];
@@ -967,15 +978,6 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       fc.clock = clockF;
     }
     freckles = kept;
-  }
-
-  // ---- Rayid iris type classification ----
-  var rayid = null;
-  try {
-    var stripGray = unwrapIris(d, stageW, stageH, cx, cy, cxP, cyP, rOut, rIn);
-    rayid = classifyRayid(stripGray, 360, 64);
-  } catch(e) {
-    console.warn('Rayid classify failed:', e);
   }
 
   // ---- Collarette (autonomic nerve wreath) detection ----
