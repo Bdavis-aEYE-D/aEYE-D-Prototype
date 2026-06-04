@@ -413,11 +413,10 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // Does NOT fire for gray-base irises (a* ~ 1-2) or true Hazel (a* ≤ 0 to ~3).
   if (outerM.entry.cat === 'Hazel' && _osMean) {
     var _osLabH2B = rgbLab(_osMean[0], _osMean[1], _osMean[2]);
-    // a*>8 = reddish (raised from 5→8: all correctly-detected brown irises that
-    // start as Hazel have _osMean a*≥9, so this is safe); b*>5 = warm; b*<38
-    // excludes amber territory (amber b*=40-57). Without the b*<38 ceiling, amber
-    // irises landing on "Amber Hazel" (b*=40.9) were wrongly converted to Brown.
-    if (_osLabH2B[1] > 8 && _osLabH2B[2] > 5 && _osLabH2B[2] < 38) {
+    // a*>9 = reddish (raised from 5→8→9: confirmed brown irises with Hazel cat0
+    // have _osMean a*≥9; hazel→brown wrong cases have a*=8.4-8.7, below new threshold).
+    // b*>5 = warm; b*<38 excludes amber territory (amber b*=40-57).
+    if (_osLabH2B[1] > 9 && _osLabH2B[2] > 5 && _osLabH2B[2] < 38) {
       var _h2bBest = null, _h2bDist = Infinity;
       for (var _hbi = 0; _hbi < PALETTE.length; _hbi++) {
         if (PALETTE[_hbi].cat !== 'Brown') continue;
