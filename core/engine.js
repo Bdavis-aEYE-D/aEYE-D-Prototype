@@ -404,6 +404,32 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
                Math.round(_osB/outerStroma.length)];
     _osM = nearestPal(_osMean);
   }
+  // ── k-NN PRIMARY classification ──────────────────────────────────────────
+  // 5-NN classifier trained on 597 GT hand-annotated images (72.9% LOO).
+  // Replaces the rule-based guard chain below. _osMean and _t3InnerLab are
+  // already computed above and available to knnColor(). When the k-NN
+  // succeeds, _knnOverrode=true bypasses all subsequent colour guards.
+  // Only the Violet→Blue redirect still runs regardless (palette integrity).
+  var _knnOverrode = false;
+  if (typeof knnColor === 'function') {
+    var _knnHsv0 = rgbHsv(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    var _knnRes0 = knnColor(outerMeanRgb, _osMean, _t3InnerLab, _knnHsv0);
+    if (_knnRes0) {
+      // KNN_CATS uses lowercase GT labels ('grey') but PALETTE uses titlecase ('Gray').
+      // Map the k-NN result to the exact PALETTE cat string before searching.
+      var _knnCatMap = {amber:'Amber',blue:'Blue',brown:'Brown',green:'Green',grey:'Gray',hazel:'Hazel'};
+      var _knnPalCat = _knnCatMap[_knnRes0.cat] || _knnRes0.cat;
+      var _knnLab0 = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+      var _knnBest0 = null, _knnBd0 = Infinity;
+      for (var _kni0 = 0; _kni0 < PALETTE.length; _kni0++) {
+        if (PALETTE[_kni0].cat !== _knnPalCat) continue;
+        var _kde0 = dE(_knnLab0, PALETTE[_kni0].lab);
+        if (_kde0 < _knnBd0) { _knnBd0 = _kde0; _knnBest0 = PALETTE[_kni0]; }
+      }
+      if (_knnBest0) { outerM = { entry: _knnBest0, distance: _knnBd0 }; _knnOverrode = true; }
+    }
+  }
+  if (!_knnOverrode) { // ── Rule-based guards (fallback when k-NN unavailable) ──
   // ── Hazel→Brown guard: reddish outer stroma = no green component = not true Hazel ─
   // True Hazel irises have a green/olive outer stroma (a* near 0 or negative in Lab).
   // When outer = Hazel but outerStroma Lab a*>5 AND b*>5, there is no green signal —
@@ -642,6 +668,19 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       }
       if (_hDetBest) outerM = { entry: _hDetBest, distance: _hDetDist };
     }
+  }
+  } // end if (!_knnOverrode) — close rule-based guard block
+
+  // ── Violet→Blue: always applied regardless of which classifier ran ─────────
+  if (outerM.entry.cat === 'Violet') {
+    var _v2bLab2 = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    var _v2bBest2 = null, _v2bDist2 = Infinity;
+    for (var _v2bI2 = 0; _v2bI2 < PALETTE.length; _v2bI2++) {
+      if (PALETTE[_v2bI2].cat !== 'Blue') continue;
+      var _v2bDe2 = dE(_v2bLab2, PALETTE[_v2bI2].lab);
+      if (_v2bDe2 < _v2bDist2) { _v2bDist2 = _v2bDe2; _v2bBest2 = PALETTE[_v2bI2]; }
+    }
+    if (_v2bBest2) outerM = { entry: _v2bBest2, distance: _v2bDist2 };
   }
 
   // ===== Heterochromia: combined detection =====
@@ -1005,6 +1044,8 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     console.warn('Collarette detect failed:', e);
   }
 
+  // ── Blue→Grey + tiebreaker: only when k-NN did not already classify ────────
+  if (!_knnOverrode) {
   // ── Blue→Grey: weakly-blue outer zone prefers grey ───────────────────────
   // Irises on the blue/grey boundary that land on Blue via nearestPal often
   // belong to the Grey category — the Lab b* value is only mildly negative.
@@ -1062,6 +1103,7 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       outerM = { entry: _tieGreenBest, distance: _tieGreenDist };
     }
   }
+  } // end !_knnOverrode: Blue→Grey + tiebreaker
 
   // ---- Pupil eccentricity (iris center vs pupil center offset) ----
   // Close-up images confirmed pupil ≠ iris center; this surfaces the offset.
@@ -1117,6 +1159,18 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     brightness: brightness,
     saturation: saturation,
     topColors: top.map(function(t){ return t.rgb; }),
+    // ── Colour feature vector — for k-NN training / share card diagnostics ──
+    // These are the inner-pipeline signals used by the colour guards, exposed
+    // so validate.html can run leave-one-out k-NN evaluation and so the share
+    // card can show precise diagnostic info.
+    colorFeatures: {
+      outerLab: (function(){ var l=rgbLab(outerMeanRgb[0],outerMeanRgb[1],outerMeanRgb[2]); return [+l[0].toFixed(2),+l[1].toFixed(2),+l[2].toFixed(2)]; })(),
+      osLab:     _osMean ? (function(){ var l=rgbLab(_osMean[0],_osMean[1],_osMean[2]); return [+l[0].toFixed(2),+l[1].toFixed(2),+l[2].toFixed(2)]; })() : null,
+      innerB:    +(_t3InnerLab ? _t3InnerLab[2].toFixed(2) : 0),
+      rsat:      +(outerMeanRgb[0]>0 ? ((outerMeanRgb[0]-outerMeanRgb[2])/outerMeanRgb[0]).toFixed(3) : 0),
+      hsvOuter:  (function(){ var h=rgbHsv(outerMeanRgb[0],outerMeanRgb[1],outerMeanRgb[2]); return [+h[0].toFixed(1),+h[1].toFixed(3),+h[2].toFixed(3)]; })(),
+      innerWarm: _t3InnerWarm
+    },
     // Dual-photo workflow: snapshot the analysis photo + iris fit so the
     // share card can re-render the iris from this image at high resolution
     // even after a portrait photo replaces imgEl.
