@@ -304,6 +304,24 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     return [Math.round(rS/n), Math.round(gS/n), Math.round(bS/n)];
   })();
   var outerM = nearestPal(outerMeanRgb);
+  // ── Violet→Blue: Violet is not a standard 6-colour iris category ──────────
+  // The GT dataset uses only 6 classes (amber/blue/brown/green/grey/hazel).
+  // Violet palette entries exist for the rare blue-indigo irises but every
+  // Violet prediction scores as "wrong" against all GT labels. Redirect Violet
+  // to the nearest Blue entry before any other guard runs — the remaining guards
+  // then treat the iris as the dark blue it actually is.
+  // Validated: 14 blue irises were predicted Violet (blue→violet wrong cases);
+  // 0 irises in the GT have a Violet ground-truth label.
+  if (outerM.entry.cat === 'Violet') {
+    var _v2bLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    var _v2bBest = null, _v2bDist = Infinity;
+    for (var _v2bI = 0; _v2bI < PALETTE.length; _v2bI++) {
+      if (PALETTE[_v2bI].cat !== 'Blue') continue;
+      var _v2bDe = dE(_v2bLab, PALETTE[_v2bI].lab);
+      if (_v2bDe < _v2bDist) { _v2bDist = _v2bDe; _v2bBest = PALETTE[_v2bI]; }
+    }
+    if (_v2bBest) outerM = { entry: _v2bBest, distance: _v2bDist };
+  }
   // ── Rsat guard: dark warm-neutral outer zone → Gray not Brown ──────────────
   // SBVPI masked-subject analysis: all confirmed brown irises have (R-B)/R > 0.36;
   // dark blue-gray irises that fall through as Brown cluster at 0.13-0.17.
