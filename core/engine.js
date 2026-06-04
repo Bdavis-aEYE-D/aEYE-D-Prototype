@@ -296,11 +296,16 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // ── Rsat guard: dark warm-neutral outer zone → Gray not Brown ──────────────
   // SBVPI masked-subject analysis: all confirmed brown irises have (R-B)/R > 0.36;
   // dark blue-gray irises that fall through as Brown cluster at 0.13-0.17.
-  // Threshold 0.165 fixes those edge cases with zero regressions on brown subjects.
+  // Threshold 0.165 fixes those edge cases.
+  // Secondary guard Lab b*<5: dark near-neutral irises are only grey if the outer
+  // zone is also tonally cool/neutral (b*<5). Warm-dark brown irises (b*>5) can
+  // have low rsat due to very dark pixels pulling R and B together — they must not
+  // be reclassified as grey. This second condition fixes the 11 brown→grey wrong
+  // cases where warm dark-brown irises were being caught by the rsat threshold alone.
   if (outerM.entry.cat === 'Brown') {
     var _rsatV = outerMeanRgb[0] > 0 ? (outerMeanRgb[0]-outerMeanRgb[2])/outerMeanRgb[0] : 0;
-    if (_rsatV < 0.165) {
-      var _rsLab = rgbLab(outerMeanRgb[0],outerMeanRgb[1],outerMeanRgb[2]);
+    var _rsLab = rgbLab(outerMeanRgb[0],outerMeanRgb[1],outerMeanRgb[2]);
+    if (_rsatV < 0.165 && _rsLab[2] < 5) {
       var _rsGBest=null, _rsGBd=Infinity;
       for (var _rsI=0; _rsI<PALETTE.length; _rsI++){
         if (PALETTE[_rsI].cat!=='Gray') continue;
