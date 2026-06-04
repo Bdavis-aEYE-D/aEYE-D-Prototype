@@ -445,6 +445,8 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
       // read warm (b*>28) are amber, not hazel — hazel irises peak at L*≈57 but
       // those are rare and have lower b*. Validated: hazelOk has 0 cases at
       // b*>28 AND L*>54 (checked against GT dataset).
+      // NOTE: HSV Hue was tested but removed — hazel and amber share Hue≈40-50°
+      // (both have warm golden outer stroma) so Hue does not discriminate reliably.
       // Guard a*<20 excludes strongly red-shifted warm-WB pixels.
       if ((_outerLabH2A[2] > 38 ||
            (_outerLabH2A[2] > 28 && _outerLabH2A[0] > 54)) &&
