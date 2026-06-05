@@ -272,7 +272,8 @@ var SaveStore = (function() {
     // Auto-close after user sees confirmation
     setTimeout(function() {
       hideSaveModal();
-      if (typeof GalleryUI !== 'undefined') GalleryUI.refresh();
+      if (typeof GalleryUI  !== 'undefined') GalleryUI.refresh();
+      if (typeof HomeRecent !== 'undefined') HomeRecent.render();
     }, 1400);
   }
 
@@ -525,5 +526,105 @@ var GalleryUI = (function() {
     });
   }
 
-  return { refresh: refresh };
+  return { refresh: refresh, _showDetail: showDetail };
+})();
+
+
+// ======================= HOME SCREEN RECENT SAVES =======================
+var HomeRecent = (function() {
+
+  function colorDot(cat) {
+    var p={'Amber':'#ffb347','Blue':'#6cc4ff','Brown':'#8b5e3c','Green':'#5dbb6d','Gray':'#9ba8bb','Grey':'#9ba8bb','Hazel':'#c09060'};
+    return p[cat]||'#aab1cc';
+  }
+
+  function render() {
+    var wrap = document.getElementById('home-recent-saves');
+    var row  = document.getElementById('home-recent-row');
+    if (!wrap || !row) return;
+
+    // Collect the 5 most recent analyses across all people
+    var people = SaveStore.getAllPeople();
+    var all = [];
+    people.forEach(function(p) {
+      SaveStore.getPersonAnalyses(p.id).forEach(function(a) {
+        all.push({ person: p.name, entry: a });
+      });
+    });
+    all.sort(function(a,b){ return b.entry.timestamp - a.entry.timestamp; });
+    var recent = all.slice(0, 5);
+
+    if (!recent.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    row.innerHTML = '';
+
+    recent.forEach(function(item) {
+      var a = item.entry;
+      var card = document.createElement('div');
+      card.style.cssText = 'flex-shrink:0;width:80px;text-align:center;cursor:pointer';
+      card.title = item.person + ' · ' + a.color;
+
+      // Circular thumbnail
+      var thumb = document.createElement('div');
+      thumb.style.cssText = 'width:64px;height:64px;border-radius:50%;margin:0 auto 6px;overflow:hidden;border:2px solid ' + colorDot(a.cat) + ';background:#0e1430;position:relative';
+      if (a.thumb) {
+        var img = document.createElement('img');
+        img.src = a.thumb;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+        thumb.appendChild(img);
+      } else {
+        thumb.style.background = colorDot(a.cat);
+        thumb.style.opacity = '0.6';
+      }
+
+      // Name label
+      var label = document.createElement('div');
+      label.style.cssText = 'font-size:11px;color:#f4f6ff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      label.textContent = item.person;
+
+      // Color sub-label
+      var sub = document.createElement('div');
+      sub.style.cssText = 'font-size:10px;color:#aab1cc;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      sub.textContent = a.color || a.cat;
+
+      card.appendChild(thumb);
+      card.appendChild(label);
+      card.appendChild(sub);
+
+      // Tap → open detail view
+      (function(capturedEntry) {
+        card.addEventListener('click', function() {
+          if (typeof GalleryUI !== 'undefined' && typeof GalleryUI._showDetail === 'function') {
+            GalleryUI._showDetail(capturedEntry);
+          }
+        });
+      })(a);
+
+      row.appendChild(card);
+    });
+  }
+
+  // Wire up "See all →" to switch to the People tab
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      render();
+      var seeAll = document.getElementById('home-see-all');
+      if (seeAll) {
+        seeAll.addEventListener('click', function() {
+          // Switch to gallery tab
+          var tabs = document.querySelectorAll('.tab-btn');
+          for (var i=0; i<tabs.length; i++) tabs[i].classList.remove('active');
+          var galBtn = document.querySelector('.tab-btn[data-tab="gallery"]');
+          if (galBtn) galBtn.classList.add('active');
+          ['capture','gallery','post','about'].forEach(function(n){
+            var el = document.getElementById('tab-'+n);
+            if (el) el.classList.toggle('hidden', n !== 'gallery');
+          });
+          if (typeof GalleryUI !== 'undefined') GalleryUI.refresh();
+        });
+      }
+    }, 150);
+  });
+
+  return { render: render };
 })();
