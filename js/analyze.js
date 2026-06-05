@@ -81,6 +81,15 @@ function renderResult(result){
 
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = colorDisplayName(result.overall.name, result.overall.cat);
+
+  // ── Save button: show + wire up ────────────────────────────────────────────
+  var _saveBtn = $('btn-save-result');
+  if (_saveBtn) {
+    _saveBtn.style.display = 'block';
+    _saveBtn.onclick = function() {
+      if (typeof SaveModal !== 'undefined') SaveModal.show(result);
+    };
+  }
   // ── Confidence indicator ──────────────────────────────────────────────────
   // When the cascade RF is uncertain (confidence < 60/100), show a subtle
   // indicator so users know the colour call is borderline.

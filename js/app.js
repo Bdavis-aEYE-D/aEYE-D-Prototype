@@ -29,11 +29,12 @@ for (var i=0;i<tabs.length;i++){
       for (var j=0;j<tabs.length;j++) tabs[j].classList.remove('active');
       btn.classList.add('active');
       var t = btn.getAttribute('data-tab');
-      ['capture','post','about'].forEach(function(n){
+      ['capture','gallery','post','about'].forEach(function(n){
         var el = $('tab-'+n);
         if (el) el.classList.toggle('hidden', n !== t);
       });
       if (t === 'post') drawPostStage();
+      if (t === 'gallery' && typeof GalleryUI !== 'undefined') GalleryUI.refresh();
     });
   })(tabs[i]);
 }
