@@ -423,7 +423,7 @@ var GalleryUI = (function() {
     var header = document.createElement('div');
     header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px';
     header.innerHTML = '<div style="font-size:17px;font-weight:700;color:#f4f6ff">' + person.name + '</div>' +
-      '<div style="font-size:12px;color:#aab1cc">' + analyses.length + ' analysis' + (analyses.length !== 1 ? 'es' : '') + '</div>';
+      '<div style="font-size:12px;color:#aab1cc">' + analyses.length + ' ' + (analyses.length !== 1 ? 'analyses' : 'analysis') + '</div>';
     wrap.appendChild(header);
 
     if (!analyses.length) {
@@ -452,17 +452,20 @@ var GalleryUI = (function() {
         thumb.style.opacity = '0.5';
       }
 
-      // Info
+      // Info — single column, no wrapping
       var info = document.createElement('div');
-      info.style.cssText = 'flex:1;min-width:0';
+      info.style.cssText = 'flex:1;min-width:0;overflow:hidden';
+      var dateStr = new Date(a.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric'})
+                  + ' ' + new Date(a.timestamp).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})
+                  + (a.side ? ' · ' + a.side : '');
       info.innerHTML =
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">' +
-          '<span style="width:10px;height:10px;border-radius:50%;background:' + colorDot(a.cat) + ';flex-shrink:0;display:inline-block"></span>' +
-          '<span style="font-size:15px;font-weight:700;color:#f4f6ff">' + (a.color || a.cat) + '</span>' +
-          (a.conf != null ? '<span style="font-size:10px;color:#aab1cc;background:#0e1430;border-radius:8px;padding:2px 6px">' + a.conf + '%</span>' : '') +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:nowrap">' +
+          '<span style="width:9px;height:9px;border-radius:50%;background:' + colorDot(a.cat) + ';flex-shrink:0;display:inline-block"></span>' +
+          '<span style="font-size:15px;font-weight:700;color:#f4f6ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (a.color || a.cat) + '</span>' +
+          (a.conf != null ? '<span style="font-size:10px;color:#aab1cc;background:#0e1430;border-radius:6px;padding:1px 5px;flex-shrink:0">' + a.conf + '%</span>' : '') +
         '</div>' +
-        '<div style="font-size:11px;color:#aab1cc">' + formatDate(a.timestamp) + (a.side ? ' · ' + a.side : '') + '</div>' +
-        (a.vibe ? '<div style="font-size:11px;color:#6cc4ff;margin-top:2px">' + a.vibe + '</div>' : '');
+        '<div style="font-size:11px;color:#aab1cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + dateStr + '</div>' +
+        (a.vibe ? '<div style="font-size:11px;color:#6cc4ff;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + a.vibe + '</div>' : '');
 
       // Delete button
       var del = document.createElement('button');
@@ -479,11 +482,30 @@ var GalleryUI = (function() {
         }
       });
 
-      // Tap row to open full detail view
+      // Tap row → show full eyeD Card (same as original analysis view)
       row.style.cursor = 'pointer';
       (function(capturedEntry){
         row.addEventListener('click', function(e){
           if (e.target.dataset.pid || e.target.dataset.aid) return; // ignore delete btn
+          // If we have fullResult and renderResult is available, show the full card
+          if (capturedEntry.fullResult && typeof renderResult === 'function') {
+            var cardResult = document.getElementById('card-result');
+            if (cardResult) {
+              // Switch to Analyze tab so card-result is visible
+              var tabs = document.querySelectorAll('.tab-btn');
+              for (var t=0; t<tabs.length; t++) tabs[t].classList.remove('active');
+              var analyzeBtn = document.querySelector('.tab-btn[data-tab="capture"]');
+              if (analyzeBtn) analyzeBtn.classList.add('active');
+              ['capture','gallery','post','about'].forEach(function(n){
+                var el = document.getElementById('tab-'+n);
+                if (el) el.classList.toggle('hidden', n !== 'capture');
+              });
+              renderResult(capturedEntry.fullResult);
+              setTimeout(function(){ cardResult.scrollIntoView({behavior:'smooth'}); }, 100);
+              return;
+            }
+          }
+          // Fallback: show detail modal
           showDetail(capturedEntry);
         });
       })(a);

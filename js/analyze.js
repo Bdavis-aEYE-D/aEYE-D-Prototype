@@ -82,6 +82,11 @@ function renderResult(result){
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = colorDisplayName(result.overall.name, result.overall.cat);
 
+  // ── Capture thumbnail NOW while the iris is still on the stage canvas ──────
+  // Must happen immediately when the result renders — canvas may be cleared
+  // by the time the user taps Save.
+  if (typeof SaveStore !== 'undefined') SaveStore.captureThumb();
+
   // ── Save button: show + wire up ────────────────────────────────────────────
   var _saveBtn = $('btn-save-result');
   if (_saveBtn) {
