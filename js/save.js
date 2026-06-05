@@ -604,27 +604,63 @@ var HomeRecent = (function() {
     });
   }
 
-  // Wire up "See all →" to switch to the People tab
+  // Wire up "See all →"
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
       render();
       var seeAll = document.getElementById('home-see-all');
       if (seeAll) {
         seeAll.addEventListener('click', function() {
-          // Switch to gallery tab
-          var tabs = document.querySelectorAll('.tab-btn');
-          for (var i=0; i<tabs.length; i++) tabs[i].classList.remove('active');
           var galBtn = document.querySelector('.tab-btn[data-tab="gallery"]');
-          if (galBtn) galBtn.classList.add('active');
-          ['capture','gallery','post','about'].forEach(function(n){
-            var el = document.getElementById('tab-'+n);
-            if (el) el.classList.toggle('hidden', n !== 'gallery');
-          });
-          if (typeof GalleryUI !== 'undefined') GalleryUI.refresh();
+          if (galBtn) {
+            // index.html: switch to People tab
+            var tabs = document.querySelectorAll('.tab-btn');
+            for (var i=0; i<tabs.length; i++) tabs[i].classList.remove('active');
+            galBtn.classList.add('active');
+            ['capture','gallery','post','about'].forEach(function(n){
+              var el = document.getElementById('tab-'+n);
+              if (el) el.classList.toggle('hidden', n !== 'gallery');
+            });
+            if (typeof GalleryUI !== 'undefined') GalleryUI.refresh();
+          } else {
+            // reveal.html: show inline full-gallery overlay
+            showAllGallery();
+          }
         });
       }
     }, 150);
   });
+
+  function showAllGallery() {
+    var existing = document.getElementById('all-gallery-modal');
+    if (existing) { existing.remove(); return; }
+    var modal = document.createElement('div');
+    modal.id = 'all-gallery-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:#0c0a08;z-index:700;overflow-y:auto;padding:20px 16px 60px';
+    var header = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+      '<div style="font-size:17px;font-weight:700;color:#e8e0d0">My Saved Eyes</div>' +
+      '<button onclick="document.getElementById(\'all-gallery-modal\').remove()" style="background:transparent;border:none;color:#7a6e60;font-size:24px;cursor:pointer;padding:0;line-height:1;width:auto">×</button>' +
+      '</div>';
+    modal.innerHTML = header + '<div id="all-gallery-inner"></div>';
+    document.body.appendChild(modal);
+    // Render using GalleryUI
+    var inner = document.getElementById('all-gallery-inner');
+    if (inner && typeof GalleryUI !== 'undefined') {
+      var people = SaveStore.getAllPeople();
+      if (!people.length || (people.length===1 && people[0].count===0)) {
+        inner.innerHTML = '<div style="text-align:center;color:#7a6e60;padding:40px 0">No saved results yet.</div>';
+      } else {
+        // Reuse the existing gallery renderer by temporarily swapping #gallery-content
+        var tmp = document.createElement('div');
+        tmp.id = 'gallery-content';
+        inner.appendChild(tmp);
+        GalleryUI.refresh();
+        // Move rendered children back
+        while (tmp.firstChild) inner.insertBefore(tmp.firstChild, tmp);
+        tmp.remove();
+      }
+    }
+  }
 
   return { render: render };
 })();
