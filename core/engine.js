@@ -411,9 +411,11 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
   // succeeds, _knnOverrode=true bypasses all subsequent colour guards.
   // Only the Violet→Blue redirect still runs regardless (palette integrity).
   var _knnOverrode = false;
+  var _knnConfidence = null;  // 0-100 classifier confidence, null when rule-based
   if (typeof knnColor === 'function') {
     var _knnHsv0 = rgbHsv(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
     var _knnRes0 = knnColor(outerMeanRgb, _osMean, _t3InnerLab, _knnHsv0);
+    if (_knnRes0 && _knnRes0.confidence != null) _knnConfidence = _knnRes0.confidence;
     if (_knnRes0) {
       // KNN_CATS uses lowercase GT labels ('grey') but PALETTE uses titlecase ('Gray').
       // Map the k-NN result to the exact PALETTE cat string before searching.
@@ -1159,6 +1161,11 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     brightness: brightness,
     saturation: saturation,
     topColors: top.map(function(t){ return t.rgb; }),
+    // ── Classifier confidence (0-100) ────────────────────────────────────────
+    // Confidence from the cascade RF: min(Stage1 votes, Stage2 votes) / 30 * 100.
+    // null when rule-based fallback is active (knnColor not available).
+    // UI guidance: < 60 = uncertain, show manual-adjust prompt; ≥ 80 = confident.
+    colorConfidence: _knnConfidence,
     // ── Colour feature vector — for k-NN training / share card diagnostics ──
     // These are the inner-pipeline signals used by the colour guards, exposed
     // so validate.html can run leave-one-out k-NN evaluation and so the share

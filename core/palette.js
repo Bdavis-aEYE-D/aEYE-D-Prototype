@@ -443,17 +443,27 @@ function knnColor(outerMeanRgb,osMean,t3InnerLab,hsvOuter) {
   // Stage 1: dark (1) vs light (0)
   var s1=_casPredict('s1',_CAS_O.s1,fvn,30);
   var isDark=s1.cls===1;
-  // Stage 2: fine classification within group
-  var s2=isDark?_casPredict('s2a',_CAS_O.s2a,fvn,30):_casPredict('s2b',_CAS_O.s2b,fvn,30);
+  var s2;
+  // ── Soft routing: when Stage 1 is uncertain (< 60% agreement, votes < 18/30),
+  // run BOTH Stage 2a and 2b and take the sub-classifier with higher vote confidence.
+  // This prevents the cascade from confidently routing hazel irises (which sit near
+  // the dark/light boundary) to the wrong sub-classifier.
+  if (s1.votes < 18) {
+    var _s2a=_casPredict('s2a',_CAS_O.s2a,fvn,30);
+    var _s2b=_casPredict('s2b',_CAS_O.s2b,fvn,30);
+    if (_s2a.votes >= _s2b.votes) { isDark=true;  s2=_s2a; }
+    else                          { isDark=false; s2=_s2b; }
+  } else {
+    s2=isDark?_casPredict('s2a',_CAS_O.s2a,fvn,30):_casPredict('s2b',_CAS_O.s2b,fvn,30);
+  }
   var catIdx=(isDark?_CAS_D:_CAS_L)[s2.cls];
   // ── Hazel rescue: cascade routes hazel irises with neutral outer stroma
   // to the "light" group, where Stage 2b classifies them as grey.
-  // GT data: hazel→grey errors went from 4 (flat RF) to 12 (cascade) — the
-  // key signal is a warm inner zone (innerB>18) with cool outer (outerB<12).
-  // This is the same signature used by the engine's hazel detect (innerB>20).
-  // CAS_CATS indices: grey=4, hazel=5.
   if (catIdx === 4 && t3InnerLab && t3InnerLab[2] > 18 && lab[2] < 12) {
     catIdx = 5; // reclassify grey→hazel
   }
-  return {cat:CAS_CATS[catIdx],votes:s2.votes,darkVotes:s1.votes};
+  // ── Confidence score 0-100: minimum of Stage 1 and Stage 2 vote fractions.
+  // Low score (< 60) = classifier is uncertain; UI should offer manual adjust.
+  var _conf = Math.round(Math.min(s1.votes, s2.votes) / 30 * 100);
+  return {cat:CAS_CATS[catIdx],votes:s2.votes,darkVotes:s1.votes,confidence:_conf};
 }

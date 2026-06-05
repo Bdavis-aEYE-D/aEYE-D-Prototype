@@ -81,6 +81,20 @@ function renderResult(result){
 
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = colorDisplayName(result.overall.name, result.overall.cat);
+  // ── Confidence indicator ──────────────────────────────────────────────────
+  // When the cascade RF is uncertain (confidence < 60/100), show a subtle
+  // indicator so users know the colour call is borderline.
+  var _confBar = $('r-confidence-bar');
+  if (_confBar) {
+    var _conf = result.colorConfidence;
+    if (_conf != null && _conf < 60) {
+      var _confLabel = _conf < 40 ? '⚠ Low confidence — tap to manually adjust' : '~ Borderline colour — tap to manually adjust';
+      _confBar.textContent = _confLabel;
+      _confBar.style.display = 'block';
+    } else {
+      _confBar.style.display = 'none';
+    }
+  }
   // ── Opening line: colour + intensity ──────────────────────────────────────
   var cat      = result.overall.cat;            // e.g. 'Blue', 'Green', 'Brown', 'Hazel'
   var name     = result.overall.name;           // e.g. 'Sky Blue', 'Emerald', 'Warm Amber'
