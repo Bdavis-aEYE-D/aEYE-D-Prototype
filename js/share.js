@@ -119,27 +119,9 @@ function renderShareCardSync(result, imageSpec){
       pillY += 58;
     });
 
-    // ---- Palette swatches (5 anchors from same category) ----
-    var siblings = [];
-    if (typeof PALETTE !== 'undefined') {
-      for (var i = 0; i < PALETTE.length && siblings.length < 5; i++) {
-        if (PALETTE[i].cat === result.overall.cat) siblings.push(PALETTE[i].rgb);
-      }
-    }
-    if (siblings.length) {
-      var sw = 50, gap = 10;
-      var totalW = siblings.length * sw + (siblings.length - 1) * gap;
-      var sx = (W - totalW) / 2;
-      siblings.forEach(function(rgb){
-        ctx.fillStyle = rgbStr(rgb);
-        roundRect(ctx, sx, 1200, sw, sw, 10); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 2;
-        roundRect(ctx, sx, 1200, sw, sw, 10); ctx.stroke();
-        sx += sw + gap;
-      });
-    }
-
-    // ---- Color fingerprint ----
+    // ---- Color fingerprint (Lab + hex) ----
+    // Palette swatches removed: for monochromatic irises (grey, blue) all 5
+    // siblings look identical and crowd the text without adding information.
     if (result.fingerprint) {
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.font = '400 18px ui-monospace, Menlo, monospace';
@@ -147,13 +129,13 @@ function renderShareCardSync(result, imageSpec){
                        + result.fingerprint.lab[1].toFixed(0) + ', '
                        + result.fingerprint.lab[2].toFixed(0) + ')   '
                        + result.fingerprint.hex.toUpperCase();
-      ctx.fillText(fp, W/2, 1275);
+      ctx.fillText(fp, W/2, 1240);
     }
 
     // ---- Brand line ----
     ctx.fillStyle = 'rgba(255,255,255,0.32)';
     ctx.font = '300 16px -apple-system, sans-serif';
-    ctx.fillText('eyeD · iris.color', W/2, 1310);
+    ctx.fillText('eyeD · iris.color', W/2, 1278);
 
     canvas.toBlob(function(blob){ resolve({ canvas: canvas, blob: blob }); }, 'image/png');
   });

@@ -72,9 +72,20 @@ var SaveStore = (function() {
   function saveAnalysis(personId, result) {
     if (!personId || !result) return false;
     var analyses = loadAnalyses(personId);
+    // Strip large image fields before storing — analysisImage.src can be
+    // a multi-MB data URL. Keep everything else for the detail view.
+    var stripped = null;
+    try {
+      stripped = JSON.parse(JSON.stringify(result));
+      if (stripped.analysisImage) stripped.analysisImage = null;
+      if (stripped.portraitImage) stripped.portraitImage = null;
+      // topColors RGB arrays are small — keep them
+    } catch(e) { stripped = null; }
+
     var entry = {
       id:        uid(),
       timestamp: Date.now(),
+      // Summary fields (for gallery list display)
       color:     result.overall ? result.overall.name  : '?',
       cat:       result.overall ? result.overall.cat   : '?',
       conf:      result.colorConfidence || null,
@@ -83,7 +94,9 @@ var SaveStore = (function() {
       limbal:    result.limbal || 'None',
       rarity:    result.rarity ? result.rarity.label  : '',
       side:      result.side  || 'Right',
-      thumb:     _pendingThumb || null
+      thumb:     _pendingThumb || null,
+      // Full result (for detail view — analysisImage stripped to save space)
+      fullResult: stripped
     };
     analyses.unshift(entry);  // newest first
     // Keep max 50 analyses per person (to avoid localStorage bloat)
@@ -281,6 +294,89 @@ var GalleryUI = (function() {
     return palette[cat] || '#aab1cc';
   }
 
+  // ── Detail modal: shows full eyeD Card for a saved analysis ──────────────
+  function showDetail(entry) {
+    var existing = document.getElementById('gallery-detail-modal');
+    if (existing) existing.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'gallery-detail-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:600;overflow-y:auto;padding:20px 16px 60px';
+
+    // Close on backdrop tap
+    modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+
+    var fr = entry.fullResult;
+    var dotColor = function(cat) {
+      var p={'Amber':'#ffb347','Blue':'#6cc4ff','Brown':'#8b5e3c','Green':'#5dbb6d','Gray':'#9ba8bb','Grey':'#9ba8bb','Hazel':'#c09060'};
+      return p[cat]||'#aab1cc';
+    };
+
+    var html = '<div style="max-width:520px;margin:0 auto">';
+    // Header
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">';
+    html += '<div style="font-size:11px;color:#6cc4ff;text-transform:uppercase;letter-spacing:2px">Saved Analysis</div>';
+    html += '<button type="button" onclick="document.getElementById(\'gallery-detail-modal\').remove()" style="background:transparent;border:none;color:#aab1cc;font-size:24px;cursor:pointer;padding:0;line-height:1">×</button>';
+    html += '</div>';
+
+    // Iris thumbnail (large)
+    if (entry.thumb) {
+      html += '<div style="text-align:center;margin-bottom:16px"><img src="' + entry.thumb + '" style="width:120px;height:120px;border-radius:50%;border:3px solid #6cc4ff;object-fit:cover"></div>';
+    }
+
+    // Color hero
+    html += '<div style="background:linear-gradient(140deg,#1d2856,#0e1430);border:1px solid #6cc4ff;border-radius:18px;padding:18px;margin-bottom:12px;text-align:center">';
+    html += '<div style="font-size:11px;color:#6cc4ff;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">' + entry.side + ' Eye · ' + new Date(entry.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) + '</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px">';
+    html += '<span style="width:14px;height:14px;border-radius:50%;background:' + dotColor(entry.cat) + ';display:inline-block;flex-shrink:0"></span>';
+    html += '<span style="font-size:26px;font-weight:800;color:#6cc4ff">' + (entry.color||entry.cat) + '</span>';
+    html += '</div>';
+    if (entry.vibe) html += '<div style="font-size:13px;color:#aab1cc;margin-bottom:4px">' + entry.vibe + '</div>';
+    if (entry.conf != null) html += '<div style="font-size:11px;color:#aab1cc;background:#0e1430;border-radius:8px;padding:2px 8px;display:inline-block">Confidence: ' + entry.conf + '%</div>';
+    html += '</div>';
+
+    // Attributes grid from fullResult
+    if (fr) {
+      var attrs = [
+        ['Hetero', fr.hetero||'None'],
+        ['Limbal Ring', fr.limbal||'None'],
+        ['Rarity', fr.rarity ? fr.rarity.label : '—'],
+        ['Brightness', fr.brightness||'—'],
+        ['Saturation', fr.saturation||'—'],
+        ['Iris Type', fr.rayid ? fr.rayid.label : '—'],
+        ['Collarette', fr.collarette ? fr.collarette.label : '—'],
+        ['Freckles', fr.freckles && fr.freckles.length ? fr.freckles.length + ' detected' : 'None'],
+        ['Sectoral', fr.sectoral ? (fr.sectoral.color.name + ' @ ' + fr.sectoral.clock + 'h') : 'None']
+      ];
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+      attrs.forEach(function(a){
+        html += '<div style="background:#0e1430;border:1px solid #2a335c;border-radius:12px;padding:10px">';
+        html += '<div style="font-size:10px;color:#aab1cc;text-transform:uppercase;letter-spacing:1px">' + a[0] + '</div>';
+        html += '<div style="font-size:14px;color:#f4f6ff;font-weight:600;margin-top:2px">' + a[1] + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      // Fingerprint
+      if (fr.fingerprint) {
+        var fp = fr.fingerprint;
+        html += '<div style="background:#0e1430;border:1px solid #2a335c;border-radius:12px;padding:12px;margin-bottom:12px;text-align:center">';
+        html += '<div style="font-size:10px;color:#aab1cc;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Colour Fingerprint</div>';
+        html += '<div style="display:flex;align-items:center;justify-content:center;gap:10px">';
+        html += '<div style="width:32px;height:32px;border-radius:50%;background:rgb(' + fp.rgb.join(',') + ');border:2px solid rgba(255,255,255,0.2)"></div>';
+        html += '<div style="font-family:monospace;font-size:13px;color:#f4f6ff">' + fp.hex.toUpperCase() + '<br><span style="color:#aab1cc;font-size:11px">Lab(' + fp.lab.map(function(v){return v.toFixed(0);}).join(', ') + ')</span></div>';
+        html += '</div></div>';
+      }
+    }
+
+    // Close button
+    html += '<button type="button" onclick="document.getElementById(\'gallery-detail-modal\').remove()" style="width:100%;background:transparent;border:1.5px solid #2a335c;color:#aab1cc;border-radius:14px;padding:12px;font-size:15px;cursor:pointer">Close</button>';
+    html += '</div>';
+
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+  }
+
   function renderPerson(person) {
     var analyses = SaveStore.getPersonAnalyses(person.id);
     var wrap = document.createElement('div');
@@ -346,6 +442,15 @@ var GalleryUI = (function() {
           GalleryUI.refresh();
         }
       });
+
+      // Tap row to open full detail view
+      row.style.cursor = 'pointer';
+      (function(capturedEntry){
+        row.addEventListener('click', function(e){
+          if (e.target.dataset.pid || e.target.dataset.aid) return; // ignore delete btn
+          showDetail(capturedEntry);
+        });
+      })(a);
 
       row.appendChild(thumb);
       row.appendChild(info);
