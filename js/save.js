@@ -177,15 +177,24 @@ var SaveStore = (function() {
     el.className = 'save-modal-overlay';
     el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:500;align-items:flex-end;justify-content:center;padding:0';
     el.innerHTML = [
-      '<div class="save-modal-sheet" style="background:#1a2240;border-radius:24px 24px 0 0;padding:24px 20px 40px;width:100%;max-width:520px;border-top:1px solid #2a335c">',
-        '<div style="font-size:11px;color:#6cc4ff;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">Save Result For</div>',
-        '<button type="button" id="save-btn-me" style="width:100%;background:#1d3050;border:2px solid #6cc4ff;color:#6cc4ff;border-radius:14px;padding:14px;font-size:16px;font-weight:700;margin-bottom:12px;cursor:pointer">👤 Me</button>',
-        '<div id="save-people-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>',
-        '<div style="display:flex;gap:8px;align-items:center">',
-          '<input id="save-name-input" type="text" placeholder="Type a name…" autocomplete="off" style="flex:1;background:#0e1430;border:1.5px solid #2a335c;border-radius:10px;padding:11px 14px;color:#f4f6ff;font-size:15px;outline:none">',
-          '<button type="button" id="save-name-confirm" style="background:#6cc4ff;color:#001a2e;border-radius:10px;padding:11px 18px;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap">Save</button>',
+      '<div class="save-modal-sheet" style="background:#1a2240;border-radius:24px 24px 0 0;padding:24px 20px 44px;width:100%;max-width:520px;border-top:1px solid #2a335c">',
+        // Confirmation area (hidden until saved)
+        '<div id="save-confirm-msg" style="display:none;text-align:center;padding:20px 0;font-size:22px;font-weight:800;color:#6cc4ff"></div>',
+        // Main content
+        '<div id="save-modal-body">',
+          '<div style="font-size:12px;color:#aab1cc;margin-bottom:14px;text-align:center">Who is this iris for?</div>',
+          // Me — primary action, large and prominent
+          '<button type="button" id="save-btn-me" style="width:100%;background:#1d3050;border:2px solid #6cc4ff;color:#6cc4ff;border-radius:16px;padding:16px;font-size:17px;font-weight:800;margin-bottom:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="font-size:22px">👤</span><span>Me</span></button>',
+          // Previously saved people
+          '<div id="save-people-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>',
+          // Divider + new name
+          '<div style="font-size:11px;color:#aab1cc;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Save for someone new</div>',
+          '<div style="display:flex;gap:8px;align-items:center">',
+            '<input id="save-name-input" type="text" placeholder="Type a name…" autocomplete="off" style="flex:1;background:#0e1430;border:1.5px solid #2a335c;border-radius:10px;padding:12px 14px;color:#f4f6ff;font-size:15px;outline:none">',
+            '<button type="button" id="save-name-confirm" disabled style="background:#2a3a5a;color:#4a6a9a;border-radius:10px;padding:12px 18px;font-weight:700;font-size:15px;cursor:default;white-space:nowrap;border:none;transition:all 0.15s">Save</button>',
+          '</div>',
+          '<button type="button" id="save-modal-close" style="width:100%;margin-top:12px;background:transparent;border:none;color:#aab1cc;border-radius:12px;padding:11px;font-size:14px;cursor:pointer">Cancel</button>',
         '</div>',
-        '<button type="button" id="save-modal-close" style="width:100%;margin-top:14px;background:transparent;border:1px solid #2a335c;color:#aab1cc;border-radius:12px;padding:11px;font-size:14px;cursor:pointer">Cancel</button>',
       '</div>'
     ].join('');
     document.body.appendChild(el);
@@ -205,13 +214,19 @@ var SaveStore = (function() {
     var people = SaveStore.getAllPeople().filter(function(p){ return !p.isDefault && p.count > 0; });
     var chips = document.getElementById('save-people-chips');
     chips.innerHTML = '';
-    people.slice(0, 8).forEach(function(p) {
+    if (people.length > 0) {
+      var chipsLabel = document.createElement('div');
+      chipsLabel.textContent = 'Or save for:';
+      chipsLabel.style.cssText = 'font-size:11px;color:#aab1cc;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;width:100%';
+      chips.appendChild(chipsLabel);
+    }
+    people.slice(0, 6).forEach(function(p) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = p.name;
       btn.dataset.pid = p.id;
       btn.dataset.pname = p.name;
-      btn.style.cssText = 'background:#0e1430;border:1.5px solid #2a335c;color:#f4f6ff;border-radius:20px;padding:7px 14px;font-size:13px;cursor:pointer';
+      btn.style.cssText = 'background:#0e1430;border:1.5px solid #2a335c;color:#f4f6ff;border-radius:20px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;flex-shrink:0';
       btn.addEventListener('click', function(){ doSave(p.name); });
       chips.appendChild(btn);
     });
@@ -222,33 +237,43 @@ var SaveStore = (function() {
   function hideSaveModal() {
     var modal = document.getElementById('save-modal');
     if (modal) modal.style.display = 'none';
+    // Reset confirmation state for next open
+    var body = document.getElementById('save-modal-body');
+    var confirm = document.getElementById('save-confirm-msg');
+    var inp = document.getElementById('save-name-input');
+    var confirmBtn = document.getElementById('save-name-confirm');
+    if (body)    body.style.display = '';
+    if (confirm) confirm.style.display = 'none';
+    if (inp)     inp.value = '';
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.background = '#2a3a5a';
+      confirmBtn.style.color = '#4a6a9a';
+      confirmBtn.style.cursor = 'default';
+    }
     _pendingResult = null;
   }
 
-  // ── Save action ────────────────────────────────────────────────────────────
+  // ── Save action — shows inline confirmation before closing ────────────────
   function doSave(name) {
     if (!_pendingResult) { hideSaveModal(); return; }
-    var personId = SaveStore.getOrCreatePerson(name || 'Me');
+    var displayName = (name || 'Me').trim() || 'Me';
+    var personId = SaveStore.getOrCreatePerson(displayName);
     if (!personId) return;
     SaveStore.saveAnalysis(personId, _pendingResult);
-    hideSaveModal();
-    showToast('Saved for ' + (name || 'Me') + ' ✓');
-    // Refresh gallery if it's open
-    if (typeof GalleryUI !== 'undefined') GalleryUI.refresh();
-  }
-
-  function showToast(msg) {
-    var t = document.getElementById('save-toast');
-    if (!t) {
-      t = document.createElement('div');
-      t.id = 'save-toast';
-      t.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1a2240;border:1px solid #6cc4ff;color:#6cc4ff;font-size:13px;font-weight:700;padding:10px 20px;border-radius:999px;z-index:600;transition:opacity 0.4s;pointer-events:none';
-      document.body.appendChild(t);
+    // Show inline confirmation (don't just silently close)
+    var body = document.getElementById('save-modal-body');
+    var confirm = document.getElementById('save-confirm-msg');
+    if (body && confirm) {
+      body.style.display = 'none';
+      confirm.textContent = '✓ Saved for ' + displayName;
+      confirm.style.display = 'block';
     }
-    t.textContent = msg;
-    t.style.opacity = '1';
-    clearTimeout(t._tid);
-    t._tid = setTimeout(function(){ t.style.opacity = '0'; }, 2200);
+    // Auto-close after user sees confirmation
+    setTimeout(function() {
+      hideSaveModal();
+      if (typeof GalleryUI !== 'undefined') GalleryUI.refresh();
+    }, 1400);
   }
 
   // ── Wire up after DOM ready ────────────────────────────────────────────────
@@ -256,18 +281,28 @@ var SaveStore = (function() {
     var modal = getModal();
     document.getElementById('save-btn-me').addEventListener('click', function(){ doSave('Me'); });
     document.getElementById('save-modal-close').addEventListener('click', hideSaveModal);
-    document.getElementById('save-name-confirm').addEventListener('click', function(){
-      var name = (document.getElementById('save-name-input').value || '').trim();
+
+    // Enable/disable Save button based on input content
+    var inp = document.getElementById('save-name-input');
+    var confirmBtn = document.getElementById('save-name-confirm');
+    inp.addEventListener('input', function() {
+      var hasText = this.value.trim().length > 0;
+      confirmBtn.disabled = !hasText;
+      confirmBtn.style.background = hasText ? '#6cc4ff' : '#2a3a5a';
+      confirmBtn.style.color      = hasText ? '#001a2e' : '#4a6a9a';
+      confirmBtn.style.cursor     = hasText ? 'pointer'  : 'default';
+    });
+    confirmBtn.addEventListener('click', function(){
+      var name = inp.value.trim();
       if (name) doSave(name);
     });
-    document.getElementById('save-name-input').addEventListener('keydown', function(e){
-      if (e.key === 'Enter') {
-        var name = (this.value || '').trim();
-        if (name) doSave(name);
-      }
+    inp.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && this.value.trim()) doSave(this.value.trim());
     });
-    // Close on backdrop click
-    modal.addEventListener('click', function(e){ if (e.target === modal) hideSaveModal(); });
+    // Close on backdrop click (but only if showing body, not confirmation)
+    modal.addEventListener('click', function(e){
+      if (e.target === modal) hideSaveModal();
+    });
   }
 
   // Expose globally
