@@ -360,6 +360,45 @@ function autoFit(src, closeup){
     }
   }
 
+  // ── Stage 3: absolute-floor limbus rescue ───────────────────────────────────
+  // Trigger: irisR < 6% of image width.  At the 200px sampleSide, this is <12px —
+  // impossibly small for any real iris (GT P5 = 11.6% = 23px).  This is the
+  // ONLY reliable trigger that doesn't depend on the coarse pupil scan (pr),
+  // which can be overestimated and make ratio-based checks unreliable.
+  //
+  // When triggered: scan the GT P10-P90 range (8%–30% of W) for the best
+  // bilateral horizontal signal without moving the center.  ok stays true.
+  // Previous attempts using iris/pupil ratios decreased accuracy because pr
+  // triggers false positives on valid dilated-pupil irises.
+  if (irisR < Math.round(W * 0.06)) {
+    var _s3Lo = Math.round(W * 0.08);
+    var _s3Hi = Math.min(Math.round(W * 0.30), R_MAX_CU || Math.round(W * 0.30));
+    var _s3BestSc = -1, _s3BR = 0, _s3BCx = pcx, _s3BCy = pcy;
+    var _s3yLo2 = Math.max(0, Math.round(pcy - _s3Hi));
+    var _s3yHi2 = Math.min(H-1, Math.round(pcy + _s3Hi));
+    for (var _s3y2 = _s3yLo2; _s3y2 <= _s3yHi2; _s3y2 += 3) {
+      var _s3b2 = scanBand(_s3y2, pcx);
+      if (_s3b2.lh >= 0 && _s3b2.rh >= 0) {
+        var _s3sp2 = _s3b2.rh - _s3b2.lh, _s3r2 = Math.round(_s3sp2 / 2);
+        if (_s3r2 >= _s3Lo && _s3r2 <= _s3Hi) {
+          var _s3in2  = bm(_s3b2.lh, _s3y2-bandH, _s3b2.rh, _s3y2+bandH+1);
+          var _s3fl2  = Math.max(5, Math.round(_s3sp2 * 0.10));
+          var _s3eL2  = (_s3b2.lh >= _s3fl2) ? bm(_s3b2.lh-_s3fl2, _s3y2-bandH, _s3b2.lh, _s3y2+bandH+1) : _s3in2;
+          var _s3eR2  = (_s3b2.rh+_s3fl2 <= W) ? bm(_s3b2.rh, _s3y2-bandH, _s3b2.rh+_s3fl2, _s3y2+bandH+1) : _s3in2;
+          var _s3sc2  = _s3sp2 * Math.max(0, (_s3eL2+_s3eR2)*0.5 - _s3in2);
+          if (_s3sc2 > _s3BestSc) {
+            _s3BestSc = _s3sc2; _s3BR = _s3r2;
+            _s3BCx = Math.round((_s3b2.lh+_s3b2.rh)/2); _s3BCy = _s3y2;
+          }
+        }
+      }
+    }
+    if (_s3BR > 0 && _s3BestSc > 0) {
+      irisR = _s3BR; pcx = _s3BCx; pcy = _s3BCy; ok = true;
+      leftHit = Math.round(_s3BCx - _s3BR); rightHit = Math.round(_s3BCx + _s3BR);
+    }
+  }
+
   // Independent pupil center re-search (close-up + ok only).
   // The coarse pupil grid above runs before iris detection and may place the pupil
   // at the iris center rather than the true (offset) pupil center. Here we do a
