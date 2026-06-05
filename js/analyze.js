@@ -88,9 +88,23 @@ function renderResult(result){
   if (_confBar) {
     var _conf = result.colorConfidence;
     if (_conf != null && _conf < 60) {
-      var _confLabel = _conf < 40 ? '⚠ Low confidence — tap to manually adjust' : '~ Borderline colour — tap to manually adjust';
+      var _isVeryLow = _conf < 40;
+      var _confLabel = _isVeryLow
+        ? '⚠ Low confidence — ring placement may be off. Scroll up to re-adjust.'
+        : '~ Borderline colour — tap to manually adjust if ring looks off.';
       _confBar.textContent = _confLabel;
       _confBar.style.display = 'block';
+      // Very low confidence: also flag the ring fit section with the orange warning
+      // so users scrolling back up see it immediately.
+      if (_isVeryLow) {
+        var _hint = $('hint');
+        if (_hint && _hint.style.color !== '#fa0') {
+          _hint.textContent = 'Low colour confidence — check ring placement and re-analyze if needed.';
+          _hint.style.color = '#fa0';
+        }
+        var _rb = $('btn-quality-retake');
+        if (_rb) _rb.style.display = '';
+      }
     } else {
       _confBar.style.display = 'none';
     }
