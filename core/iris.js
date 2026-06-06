@@ -134,6 +134,27 @@ function autoFit(src, closeup){
   // the high-contrast pupil-amber boundary from being detected instead of the limbus.
   if (closeup) guardR = Math.max(guardR, Math.round(Math.min(W, H) * 0.18));
 
+  // ── Mascara detection: heavy lashes push guardR outward ─────────────────────
+  // Count dark pixels (lum < 60) in the upper and lower thirds of the image.
+  // Heavy mascara creates a dense dark band above/below the iris that the bilateral
+  // scan can confuse with the limbus. If dark pixel density > 8% in those bands,
+  // we're dealing with significant lash coverage — expand guardR to push the
+  // scan past the lash zone and closer to the true sclera-iris boundary.
+  if (closeup) {
+    var _lashDark = 0, _lashTotal = 0;
+    var _lashYlo = Math.floor(H * 0.10), _lashYhi = Math.floor(H * 0.35);
+    for (var _ly = _lashYlo; _ly < _lashYhi; _ly++) {
+      for (var _lx = Math.floor(W * 0.20); _lx < Math.ceil(W * 0.80); _lx++) {
+        _lashTotal++;
+        if (lum[_ly * W + _lx] < 60) _lashDark++;
+      }
+    }
+    if (_lashTotal > 0 && _lashDark / _lashTotal > 0.08) {
+      // Heavy mascara detected — push guardR out to 28% of shorter dim
+      guardR = Math.max(guardR, Math.round(Math.min(W, H) * 0.28));
+    }
+  }
+
   // Helper: scan one horizontal band at scanY, return {leftHit, rightHit} or {-1,-1}.
   function scanBand(scanY, refCx) {
     var prof = new Float32Array(W);
