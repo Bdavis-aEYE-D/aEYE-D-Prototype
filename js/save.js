@@ -67,11 +67,10 @@ var SaveStore = (function() {
       img.onload = function() {
         try {
           var ai = result.analysisImage;
-          if (ai && ai.iris && ai.drawInfo) {
-            var di = ai.drawInfo;
+          if (ai && ai.iris && ai.iris.drawInfo) {  // drawInfo lives at ai.iris.drawInfo
+            var di = ai.iris.drawInfo;              // NOT ai.drawInfo (that doesn't exist)
             var nW = ai.naturalW || img.naturalWidth;
             // cx, cy, rIris are in STAGE pixels — convert to natural image pixels
-            // by scaling with (naturalW / drawInfo.dw)
             var scale = nW / (di.dw || 1);
             var imgCx = (ai.iris.cx - di.dx) * scale;
             var imgCy = (ai.iris.cy - di.dy) * scale;
