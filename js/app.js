@@ -1213,8 +1213,14 @@ function _applyFitClassical(closeup, skipZoom){
     // Exception: when _fromBand is true, zoomToEye uses mpZoomHint.irisR directly
     // (not donut.rIris), so the override concern does not apply — always call
     // zoomToEye when the band scan gave us a reliable iris center+radius.
+    // Always zoom so the user has a close-up view for manual ring adjustment.
+    // Previously zoom was suppressed when _overridedRipx=true (low-conf detection)
+    // to prevent the cascade re-running and overwriting the override — but this
+    // left users unable to see the iris clearly to drag and correct it manually.
+    // The cascade on the zoomed image is typically MORE reliable than on the full
+    // image (iris fills more of the frame), so letting it run is usually beneficial.
     var _bandZoomOk = mpZoomHint && mpZoomHint._fromBand;
-    if (!skipZoom && (!_overridedRipx || _bandZoomOk)) zoomToEye(fit.ok);
+    if (!skipZoom) zoomToEye(fit.ok);
     return fit.ok;
   } catch(e) {
     if (st) st.textContent = 'Auto-fit error: ' + (e.message || e);
