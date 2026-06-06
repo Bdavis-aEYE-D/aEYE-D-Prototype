@@ -49,24 +49,50 @@ var SaveStore = (function() {
   }
 
   // ── Thumbnail capture ─────────────────────────────────────────────────────
-  // Called from app.js/analyze.js right after analysis completes.
-  // Grabs the stage canvas and stores a small JPEG.
-  function captureThumb() {
+  // Use the iris image stored in result.analysisImage rather than the DOM
+  // canvas — the canvas may be tainted (cross-origin) or cleared by the time
+  // we read it. result.analysisImage.src is a data URL from the engine.
+  function captureThumbFromResult(result) {
     _pendingThumb = null;
+    if (!result) return;
+    var src = result.analysisImage ? result.analysisImage.src : null;
+    if (!src) return;
     try {
-      // Try the main stage canvas (rendered iris photo + ring overlay)
-      var canvas = document.querySelector('.stage canvas') ||
-                   document.querySelector('canvas#stage-canvas') ||
-                   document.querySelector('canvas');
-      if (!canvas) return;
       var size = 80;
       var tmp = document.createElement('canvas');
       tmp.width = size; tmp.height = size;
       var ctx = tmp.getContext('2d');
-      ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, size, size);
-      _pendingThumb = tmp.toDataURL('image/jpeg', 0.35);
+      var img = new Image();
+      // data URLs don't need crossOrigin, but set for blob URLs
+      if (src.indexOf('data:') !== 0) img.crossOrigin = 'anonymous';
+      img.onload = function() {
+        try {
+          // Crop to the iris region if we have the ring info
+          var ai = result.analysisImage;
+          if (ai && ai.iris && ai.drawInfo) {
+            var di = ai.drawInfo;
+            var cx = ai.iris.cx, cy = ai.iris.cy, r = ai.iris.rIris;
+            // iris center in natural image coords
+            var scaleX = (ai.naturalW || img.naturalWidth)  / (di.dw || 1);
+            var scaleY = (ai.naturalH || img.naturalHeight) / (di.dh || 1);
+            var srcX = Math.max(0, (cx - di.dx) / di.dw * (ai.naturalW || img.naturalWidth) - r * scaleX * 1.1);
+            var srcY = Math.max(0, (cy - di.dy) / di.dh * (ai.naturalH || img.naturalHeight) - r * scaleY * 1.1);
+            var srcS = r * Math.max(scaleX, scaleY) * 2.2;
+            ctx.drawImage(img, srcX, srcY, srcS, srcS, 0, 0, size, size);
+          } else {
+            // Fallback: full image scaled down
+            ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, 0, size, size);
+          }
+          _pendingThumb = tmp.toDataURL('image/jpeg', 0.5);
+        } catch(e) { _pendingThumb = null; }
+      };
+      img.onerror = function() { _pendingThumb = null; };
+      img.src = src;
     } catch(e) { _pendingThumb = null; }
   }
+
+  // Legacy alias — still called from analyze.js
+  function captureThumb() { /* no-op: use captureThumbFromResult instead */ }
 
   // ── Save an analysis ─────────────────────────────────────────────────────
   function saveAnalysis(personId, result) {

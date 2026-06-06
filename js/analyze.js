@@ -82,10 +82,10 @@ function renderResult(result){
   $('r-side').textContent = result.side + ' Eye';
   $('r-color').textContent = colorDisplayName(result.overall.name, result.overall.cat);
 
-  // ── Capture thumbnail NOW while the iris is still on the stage canvas ──────
-  // Must happen immediately when the result renders — canvas may be cleared
-  // by the time the user taps Save.
-  if (typeof SaveStore !== 'undefined') SaveStore.captureThumb();
+  // ── Capture thumbnail from the result's analysisImage ─────────────────────
+  // result.analysisImage.src is the actual iris data URL stored by the engine.
+  // This is more reliable than the DOM canvas (which can be tainted/cleared).
+  if (typeof SaveStore !== 'undefined') SaveStore.captureThumbFromResult(result);
 
   // ── Save button: show + wire up ────────────────────────────────────────────
   var _saveBtn = $('btn-save-result');
