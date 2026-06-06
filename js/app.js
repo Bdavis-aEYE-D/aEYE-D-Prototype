@@ -2663,15 +2663,30 @@ function zoomToEye(skipSanityCheck) {
       }
     }
     // Ring Correction Memory: if this image was previously placed manually,
-    // override the auto-fit result with the saved correction.
+    // override the auto-fit result with the saved correction — but only if
+    // the stored center is close to the current auto-fit center.  A large
+    // drift (> 50 % of irisR) means the stored data is stale (e.g. from a
+    // different zoom crop or an older version of the app) and should not
+    // override the freshly-computed result.
     var _storedRing = _loadedFile ? _ringStore.get(_loadedFile) : null;
-    if (_storedRing && _applyStoredRing(_storedRing)) {
-      draw();
-      if (hint) {
-        hint.textContent = 'Restored your saved placement. Adjust if needed, then tap "Analyze Iris".';
-        hint.style.color = '#6cc4ff';
+    if (_storedRing) {
+      // Preview where restore would place the center (fractions → canvas px)
+      var _sRestoredCx = drawInfo.dx + _storedRing.irisCxFrac * drawInfo.dw;
+      var _sRestoredCy = drawInfo.dy + _storedRing.irisCyFrac * drawInfo.dh;
+      var _sDrift = Math.sqrt(
+        Math.pow(_sRestoredCx - donut.cx, 2) + Math.pow(_sRestoredCy - donut.cy, 2));
+      var _sDriftOk = _sDrift < donut.rIris * 0.5;  // within half a radius = valid
+      console.log('[RING-STORE] drift=' + Math.round(_sDrift) + ' rIris=' + Math.round(donut.rIris) + ' ok=' + _sDriftOk);
+      if (_sDriftOk && _applyStoredRing(_storedRing)) {
+        draw();
+        if (hint) {
+          hint.textContent = 'Restored your saved placement. Adjust if needed, then tap "Analyze Iris".';
+          hint.style.color = '#6cc4ff';
+        }
+        console.log('[RING-STORE] restored:', _loadedFile ? _loadedFile.name : '?');
+      } else if (!_sDriftOk) {
+        console.log('[RING-STORE] skipped stale placement (drift too large)');
       }
-      console.log('[RING-STORE] restored:', _loadedFile ? _loadedFile.name : '?');
     }
   };
   newImg.src = off.toDataURL();
