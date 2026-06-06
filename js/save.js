@@ -179,14 +179,15 @@ var SaveStore = (function() {
   }
 
   return {
-    captureThumb:      captureThumb,
-    saveAnalysis:      saveAnalysis,
-    getOrCreatePerson: getOrCreatePerson,
-    getAllPeople:       getAllPeople,
-    getPersonAnalyses: getPersonAnalyses,
-    deleteAnalysis:    deleteAnalysis,
-    deletePerson:      deletePerson,
-    ensureMe:          ensureMePerson
+    captureThumb:           captureThumb,
+    captureThumbFromResult: captureThumbFromResult,   // ← was missing — caused renderResult() crash
+    saveAnalysis:           saveAnalysis,
+    getOrCreatePerson:      getOrCreatePerson,
+    getAllPeople:            getAllPeople,
+    getPersonAnalyses:      getPersonAnalyses,
+    deleteAnalysis:         deleteAnalysis,
+    deletePerson:           deletePerson,
+    ensureMe:               ensureMePerson
   };
 })();
 
