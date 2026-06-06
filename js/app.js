@@ -1624,9 +1624,9 @@ function zoomToEye(skipSanityCheck) {
     iR   = mpZoomHint.irisR;
     iPCx = iCx; iPCy = iCy;  // pupil seed = iris centre; findPupilCenter refines later
     zCx  = iCx;  zCy  = iCy;
-    pad  = Math.round(mpZoomHint.irisR * 3.0);
+    pad  = Math.round(mpZoomHint.irisR * 1.5);  // tighter: iris fills ~67% of crop (was 3.0 = 33%)
     console.log('[ZOOM-band] iris-centred zCx=' + Math.round(zCx) +
-                ' zCy=' + Math.round(zCy) + ' pad=' + pad + ' (bandIrisR×3.0)');
+                ' zCy=' + Math.round(zCy) + ' pad=' + pad + ' (bandIrisR×1.5)');
     mpZoomHint = { _consumed: true };  // keep truthy → containment guard stays disabled
   } else if (mpZoomHint && mpZoomHint.eyeW > 20) {
     // Canthus geometry hint saved by 1-eye gate (Rachel-type single-eye close-ups).
@@ -1641,7 +1641,7 @@ function zoomToEye(skipSanityCheck) {
   } else {
     zCx = iCx;
     zCy = iCy;
-    pad = Math.round(iR * 2.0);
+    pad = Math.round(iR * 1.3);  // tighter: iris fills ~77% of crop (was 2.0 = 50%)
   }
   var x0  = Math.max(0, Math.round(zCx - pad));
   var y0  = Math.max(0, Math.round(zCy - pad));
