@@ -63,27 +63,30 @@ var SaveStore = (function() {
       tmp.width = size; tmp.height = size;
       var ctx = tmp.getContext('2d');
       var img = new Image();
-      // data URLs don't need crossOrigin, but set for blob URLs
       if (src.indexOf('data:') !== 0) img.crossOrigin = 'anonymous';
       img.onload = function() {
         try {
-          // Crop to the iris region if we have the ring info
           var ai = result.analysisImage;
           if (ai && ai.iris && ai.drawInfo) {
             var di = ai.drawInfo;
-            var cx = ai.iris.cx, cy = ai.iris.cy, r = ai.iris.rIris;
-            // iris center in natural image coords
-            var scaleX = (ai.naturalW || img.naturalWidth)  / (di.dw || 1);
-            var scaleY = (ai.naturalH || img.naturalHeight) / (di.dh || 1);
-            var srcX = Math.max(0, (cx - di.dx) / di.dw * (ai.naturalW || img.naturalWidth) - r * scaleX * 1.1);
-            var srcY = Math.max(0, (cy - di.dy) / di.dh * (ai.naturalH || img.naturalHeight) - r * scaleY * 1.1);
-            var srcS = r * Math.max(scaleX, scaleY) * 2.2;
+            var nW = ai.naturalW || img.naturalWidth;
+            // cx, cy, rIris are in STAGE pixels — convert to natural image pixels
+            // by scaling with (naturalW / drawInfo.dw)
+            var scale = nW / (di.dw || 1);
+            var imgCx = (ai.iris.cx - di.dx) * scale;
+            var imgCy = (ai.iris.cy - di.dy) * scale;
+            var imgR  = ai.iris.rIris * scale;
+            // Tight crop: iris center ± 1.1× radius → just the iris disc
+            var margin = 1.1;
+            var srcX = Math.max(0, imgCx - imgR * margin);
+            var srcY = Math.max(0, imgCy - imgR * margin);
+            var srcS = imgR * margin * 2;
             ctx.drawImage(img, srcX, srcY, srcS, srcS, 0, 0, size, size);
           } else {
-            // Fallback: full image scaled down
+            // Fallback: full image
             ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, 0, size, size);
           }
-          _pendingThumb = tmp.toDataURL('image/jpeg', 0.5);
+          _pendingThumb = tmp.toDataURL('image/jpeg', 0.6);
         } catch(e) { _pendingThumb = null; }
       };
       img.onerror = function() { _pendingThumb = null; };
