@@ -508,30 +508,11 @@ var GalleryUI = (function() {
         }
       });
 
-      // Tap row → show full eyeD Card (same as original analysis view)
+      // Tap row → show full detail modal with all stored data
       row.style.cursor = 'pointer';
       (function(capturedEntry){
         row.addEventListener('click', function(e){
-          if (e.target.dataset.pid || e.target.dataset.aid) return; // ignore delete btn
-          // If we have fullResult and renderResult is available, show the full card
-          if (capturedEntry.fullResult && typeof renderResult === 'function') {
-            var cardResult = document.getElementById('card-result');
-            if (cardResult) {
-              // Switch to Analyze tab so card-result is visible
-              var tabs = document.querySelectorAll('.tab-btn');
-              for (var t=0; t<tabs.length; t++) tabs[t].classList.remove('active');
-              var analyzeBtn = document.querySelector('.tab-btn[data-tab="capture"]');
-              if (analyzeBtn) analyzeBtn.classList.add('active');
-              ['capture','gallery','post','about'].forEach(function(n){
-                var el = document.getElementById('tab-'+n);
-                if (el) el.classList.toggle('hidden', n !== 'capture');
-              });
-              renderResult(capturedEntry.fullResult);
-              setTimeout(function(){ cardResult.scrollIntoView({behavior:'smooth'}); }, 100);
-              return;
-            }
-          }
-          // Fallback: show detail modal
+          if (e.target.dataset.pid || e.target.dataset.aid) return;
           showDetail(capturedEntry);
         });
       })(a);
