@@ -2663,29 +2663,32 @@ function zoomToEye(skipSanityCheck) {
       }
     }
     // Ring Correction Memory: if this image was previously placed manually,
-    // override the auto-fit result with the saved correction — but only if
-    // the stored center is close to the current auto-fit center.  A large
-    // drift (> 50 % of irisR) means the stored data is stale (e.g. from a
-    // different zoom crop or an older version of the app) and should not
-    // override the freshly-computed result.
+    // override the auto-fit result with the saved correction — but only if:
+    //  (a) center drift < 40 % of irisR  (old pre-zoom positions land far away)
+    //  (b) stored radius within 40–160 % of current auto-fit radius (catches
+    //      stale tiny/huge rings even when the center happens to be nearby)
     var _storedRing = _loadedFile ? _ringStore.get(_loadedFile) : null;
     if (_storedRing) {
-      // Preview where restore would place the center (fractions → canvas px)
       var _sRestoredCx = drawInfo.dx + _storedRing.irisCxFrac * drawInfo.dw;
       var _sRestoredCy = drawInfo.dy + _storedRing.irisCyFrac * drawInfo.dh;
+      var _sRestoredR  = _storedRing.irisRFrac * drawInfo.dw;
       var _sDrift = Math.sqrt(
         Math.pow(_sRestoredCx - donut.cx, 2) + Math.pow(_sRestoredCy - donut.cy, 2));
-      var _sDriftOk = _sDrift < donut.rIris * 0.5;  // within half a radius = valid
-      console.log('[RING-STORE] drift=' + Math.round(_sDrift) + ' rIris=' + Math.round(donut.rIris) + ' ok=' + _sDriftOk);
-      if (_sDriftOk && _applyStoredRing(_storedRing)) {
+      var _sRatio = _sRestoredR / (donut.rIris || 1);
+      var _sDriftOk = _sDrift < donut.rIris * 0.4;          // tightened: 0.5 → 0.4
+      var _sRadiusOk = _sRatio >= 0.6 && _sRatio <= 1.6;    // radius must be plausible
+      console.log('[RING-STORE] drift=' + Math.round(_sDrift) + ' rIris=' + Math.round(donut.rIris) +
+                  ' storedR=' + Math.round(_sRestoredR) + ' ratio=' + _sRatio.toFixed(2) +
+                  ' driftOk=' + _sDriftOk + ' radOk=' + _sRadiusOk);
+      if (_sDriftOk && _sRadiusOk && _applyStoredRing(_storedRing)) {
         draw();
         if (hint) {
           hint.textContent = 'Restored your saved placement. Adjust if needed, then tap "Analyze Iris".';
           hint.style.color = '#6cc4ff';
         }
         console.log('[RING-STORE] restored:', _loadedFile ? _loadedFile.name : '?');
-      } else if (!_sDriftOk) {
-        console.log('[RING-STORE] skipped stale placement (drift too large)');
+      } else {
+        console.log('[RING-STORE] skipped stale placement (drift=' + Math.round(_sDrift) + ' ratio=' + _sRatio.toFixed(2) + ')');
       }
     }
   };

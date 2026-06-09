@@ -584,6 +584,7 @@
 
     <nav class="tabs">
       <button type="button" class="tab-btn active" data-tab="capture">Analyze</button>
+      <button type="button" class="tab-btn" data-tab="gallery">People</button>
       <button type="button" class="tab-btn" data-tab="post">Post Maker</button>
       <button type="button" class="tab-btn" data-tab="about">About</button>
     </nav>
@@ -783,6 +784,16 @@
 
     </section>
 
+    <!-- People / Gallery -->
+    <section id="tab-gallery" class="hidden">
+      <div class="card" style="background:#1a2240;border:1px solid #2a335c;border-radius:18px;padding:16px;margin-bottom:12px">
+        <div style="font-size:11px;color:#c9a96e;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px">Saved Results</div>
+        <div style="font-size:20px;font-weight:700;color:#e8e0d0;margin-bottom:6px">People</div>
+        <div style="font-size:13px;color:#9a8e7e">Save iris analyses and track results over time.</div>
+      </div>
+      <div id="gallery-content"></div>
+    </section>
+
     <!-- Post Maker -->
     <section id="tab-post" class="hidden">
       <div class="card">
@@ -911,7 +922,7 @@
 <script src="js/share.js?v=326"></script>
 <script src="js/post.js?v=277"></script>
 <script src="js/camera.js?v=277"></script>
-<script src="js/app.js?v=328"></script>
+<script src="js/app.js?v=329"></script>
 
 <!-- ═══════════════════════════════════════════════════════
      REVEAL UI LOGIC
