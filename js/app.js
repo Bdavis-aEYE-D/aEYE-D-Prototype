@@ -3260,7 +3260,7 @@ function uploadToSupabase(result) {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
         'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'Prefer': 'return=minimal'
+        'Prefer': 'return=representation'
       },
       body: JSON.stringify(record)
     }).then(function(res) {
@@ -3285,20 +3285,39 @@ function uploadToSupabase(result) {
             });
           });
       }
-      // Upload iris crop for this eye
-      var irisSrc = result.analysisImage && result.analysisImage.src;
-      if (irisSrc) {
-        uploadFile(irisFileName, irisSrc)
-          .then(function(r){ console.log('[PHOTO] iris upload', r.status, irisFileName); })
-          .catch(function(e){ console.warn('[PHOTO] iris upload failed', e); });
-      }
-      // Upload full-face photo once per session
-      if (!_sessionFaceUploaded && originalImgEl && originalImgEl.src) {
-        _sessionFaceUploaded = true;
-        uploadFile(faceFileName, originalImgEl.src)
-          .then(function(r){ console.log('[PHOTO] face upload', r.status, faceFileName); })
-          .catch(function(e){ console.warn('[PHOTO] face upload failed', e); });
-      }
+      // Parse response to get the generated row ID, then save a local thumbnail
+      // so the gallery can show iris photos without needing public bucket access.
+      res.json().then(function(rows) {
+        var id = rows && rows[0] && rows[0].id;
+        var irisSrc = result.analysisImage && result.analysisImage.src;
+        if (id && irisSrc) {
+          var img = new Image();
+          img.onload = function() {
+            try {
+              var size = 80, off = document.createElement('canvas');
+              off.width = off.height = size;
+              var c = off.getContext('2d');
+              c.beginPath(); c.arc(size/2, size/2, size/2, 0, Math.PI*2); c.clip();
+              c.drawImage(img, 0, 0, size, size);
+              localStorage.setItem('aeyed_thumb_' + id, off.toDataURL('image/jpeg', 0.7));
+            } catch(e) {}
+          };
+          img.src = irisSrc;
+        }
+        // Upload iris crop for this eye
+        if (irisSrc) {
+          uploadFile(irisFileName, irisSrc)
+            .then(function(r){ console.log('[PHOTO] iris upload', r.status, irisFileName); })
+            .catch(function(e){ console.warn('[PHOTO] iris upload failed', e); });
+        }
+        // Upload full-face photo once per session
+        if (!_sessionFaceUploaded && originalImgEl && originalImgEl.src) {
+          _sessionFaceUploaded = true;
+          uploadFile(faceFileName, originalImgEl.src)
+            .then(function(r){ console.log('[PHOTO] face upload', r.status, faceFileName); })
+            .catch(function(e){ console.warn('[PHOTO] face upload failed', e); });
+        }
+      }).catch(function() {});
     }).catch(function(e) {
       showSaveToast('Save failed: ' + String(e).slice(0, 60), false);
     });

@@ -625,15 +625,16 @@ var SupabaseHistory = (function() {
       item.setAttribute('data-sbid', row.id);
       item.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #2a335c';
 
-      // Colour circle — photo if available, hex fill as fallback
+      // Iris thumbnail — local cache first, hex fill as fallback
       var thumb = document.createElement('div');
       var bgColor = row.hex_color ? row.hex_color : colorDot(row.color_category || '');
       thumb.style.cssText = 'width:52px;height:52px;border-radius:50%;flex-shrink:0;overflow:hidden;border:2px solid #2a335c;background:' + bgColor;
-      if (row.photo_path) {
+      var localThumb = null;
+      try { localThumb = localStorage.getItem('aeyed_thumb_' + row.id); } catch(e) {}
+      if (localThumb) {
         var img = document.createElement('img');
-        img.src = SB_URL + '/storage/v1/object/iris-photos/' + row.photo_path + '?apikey=' + SB_KEY;
+        img.src = localThumb;
         img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-        img.onerror = function() { if (thumb.contains(img)) thumb.removeChild(img); };
         thumb.appendChild(img);
       }
 
