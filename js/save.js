@@ -548,17 +548,156 @@ var GalleryUI = (function() {
     var container = document.getElementById('gallery-content');
     if (!container) return;
     container.innerHTML = '';
-    var people = SaveStore.getAllPeople();
-    if (!people.length || (people.length === 1 && people[0].count === 0)) {
-      container.innerHTML = '<div style="text-align:center;color:#aab1cc;padding:40px 20px;font-size:14px">No saved results yet.<br><br>Analyze an iris and tap <strong>Save</strong> to keep results here.</div>';
-      return;
+
+    // Supabase history for this device (async — inserts at top when ready)
+    if (typeof SupabaseHistory !== 'undefined') {
+      SupabaseHistory.loadAndRender(container);
     }
-    people.forEach(function(p) {
-      container.appendChild(renderPerson(p));
-    });
+
+    // Locally saved people
+    var people = SaveStore.getAllPeople().filter(function(p) { return p.count > 0; });
+    if (people.length) {
+      var divider = document.createElement('div');
+      divider.style.cssText = 'font-size:11px;color:#c9a96e;text-transform:uppercase;letter-spacing:2px;margin:16px 0 8px;padding:0 2px;border-top:1px solid #2a335c;padding-top:16px';
+      divider.textContent = 'Saved People';
+      container.appendChild(divider);
+      people.forEach(function(p) { container.appendChild(renderPerson(p)); });
+    }
   }
 
   return { refresh: refresh, _showDetail: showDetail };
+})();
+
+
+// ======================= SUPABASE HISTORY =======================
+// Shows all analyses for this device, pulled from Supabase.
+// Hiding an entry only adds it to a local hidden-IDs list — the row
+// stays untouched in Supabase for development use.
+var SupabaseHistory = (function() {
+  var SB_URL    = 'https://mmotthgsydxgviabnycv.supabase.co';
+  var SB_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb3R0aGdzeWR4Z3ZpYWJueWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTM2MjcsImV4cCI6MjA5MzU4OTYyN30.hUgH6_0eJ-s4FbtSD3_EuyH-5sYLWIUQK4fdDAP0yMU';
+  var HIDDEN_KEY = 'aeyed_hidden_ids';
+
+  function getHidden() {
+    try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function addHidden(id) {
+    var h = getHidden();
+    if (h.indexOf(id) === -1) { h.push(id); }
+    try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(h)); } catch(e) {}
+  }
+  function deviceId() {
+    return localStorage.getItem('eyeid_device_id') || null;
+  }
+  function colorDot(cat) {
+    var p = {'Amber':'#ffb347','Blue':'#6cc4ff','Brown':'#8b5e3c','Green':'#5dbb6d','Gray':'#9ba8bb','Grey':'#9ba8bb','Hazel':'#c09060','Violet':'#b088e8'};
+    return p[cat] || '#aab1cc';
+  }
+
+  function load(callback) {
+    var did = deviceId();
+    if (!did) { callback([]); return; }
+    var url = SB_URL + '/rest/v1/analyses'
+      + '?device_id=eq.' + encodeURIComponent(did)
+      + '&order=created_at.desc&limit=200'
+      + '&select=id,created_at,color_name,color_category,eye_side,hex_color,rarity_score,photo_path,vibe';
+    fetch(url, { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) { callback(Array.isArray(rows) ? rows : []); })
+      .catch(function() { callback([]); });
+  }
+
+  function render(container, rows) {
+    var hidden  = getHidden();
+    var visible = rows.filter(function(r) { return hidden.indexOf(r.id) === -1; });
+    if (!visible.length) return;
+
+    var section = document.createElement('div');
+    section.id = 'sb-history-section';
+
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:11px;color:#c9a96e;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;padding:0 2px';
+    hdr.textContent = 'Your Analysis History (' + visible.length + ')';
+    section.appendChild(hdr);
+
+    visible.forEach(function(row) {
+      var item = document.createElement('div');
+      item.setAttribute('data-sbid', row.id);
+      item.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #2a335c';
+
+      // Colour circle — photo if available, hex fill as fallback
+      var thumb = document.createElement('div');
+      var bgColor = row.hex_color ? row.hex_color : colorDot(row.color_category || '');
+      thumb.style.cssText = 'width:52px;height:52px;border-radius:50%;flex-shrink:0;overflow:hidden;border:2px solid #2a335c;background:' + bgColor;
+      if (row.photo_path) {
+        var img = document.createElement('img');
+        img.src = SB_URL + '/storage/v1/object/iris-photos/' + row.photo_path + '?apikey=' + SB_KEY;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+        img.onerror = function() { if (thumb.contains(img)) thumb.removeChild(img); };
+        thumb.appendChild(img);
+      }
+
+      // Info
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0';
+      var d = new Date(row.created_at);
+      var mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+      var hr = d.getHours(), mn = d.getMinutes(), ampm = hr >= 12 ? 'PM' : 'AM';
+      hr = hr % 12 || 12;
+      var ds = mo + ' ' + d.getDate() + ' · ' + hr + ':' + (mn < 10 ? '0' : '') + mn + ' ' + ampm;
+      info.innerHTML =
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;overflow:hidden">' +
+          '<span style="width:9px;height:9px;border-radius:50%;background:' + colorDot(row.color_category||'') + ';flex-shrink:0;display:inline-block"></span>' +
+          '<span style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#f4f6ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (row.color_name || '—') + '</span>' +
+          (row.eye_side ? '<span style="font-size:10px;color:#aab1cc;background:#0e1430;border-radius:6px;padding:1px 5px;flex-shrink:0">' + row.eye_side + '</span>' : '') +
+        '</div>' +
+        '<div style="font-size:11px;color:#aab1cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ds + '</div>' +
+        (row.vibe ? '<div style="font-size:11px;color:#6cc4ff;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + row.vibe + '</div>' : '');
+
+      // Hide button (local only — does NOT delete from Supabase)
+      var hideBtn = document.createElement('button');
+      hideBtn.type = 'button';
+      hideBtn.title = 'Hide from this view — stays in database';
+      hideBtn.textContent = '×';
+      hideBtn.style.cssText = 'background:transparent;border:none;color:#4a5c7a;font-size:20px;cursor:pointer;padding:4px;line-height:1;flex-shrink:0;width:auto';
+      (function(id) {
+        hideBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          addHidden(id);
+          var el = section.querySelector('[data-sbid="' + id + '"]');
+          if (el) el.remove();
+          var remaining = section.querySelectorAll('[data-sbid]').length;
+          hdr.textContent = 'Your Analysis History (' + remaining + ')';
+          if (remaining === 0) section.remove();
+        });
+      })(row.id);
+
+      item.appendChild(thumb);
+      item.appendChild(info);
+      item.appendChild(hideBtn);
+      section.appendChild(item);
+    });
+
+    // Insert above any existing content (people section renders synchronously before us)
+    container.insertBefore(section, container.firstChild);
+  }
+
+  function loadAndRender(container) {
+    if (!deviceId()) return;
+    var loading = document.createElement('div');
+    loading.id = 'sb-history-loading';
+    loading.style.cssText = 'color:#aab1cc;font-size:13px;padding:12px 0;text-align:center';
+    loading.textContent = 'Loading your history…';
+    container.insertBefore(loading, container.firstChild);
+
+    load(function(rows) {
+      var el = document.getElementById('sb-history-loading');
+      if (el) el.remove();
+      render(container, rows);
+    });
+  }
+
+  return { loadAndRender: loadAndRender };
 })();
 
 
