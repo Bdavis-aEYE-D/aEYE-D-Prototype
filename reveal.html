@@ -889,6 +889,7 @@
     <div class="rv-story" id="rv-story-text"></div>
 
     <div class="rv-restart">
+      <button type="button" id="rv-btn-save" style="width:100%;margin-bottom:10px;background:var(--gold);color:#0c0a08;border:none;border-radius:14px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;display:none">💾 Save Result</button>
       <button type="button" id="rv-btn-other">Analyze Other Eye</button>
       <button type="button" class="secondary" id="rv-btn-restart">Start Over</button>
     </div>
@@ -1107,6 +1108,17 @@
 
     // eye story
     buildStory();
+
+    // Save button — capture thumb from result and show button
+    var rvSaveBtn = document.getElementById('rv-btn-save');
+    var _rv_result = window.__lastResult || null;
+    if (rvSaveBtn && _rv_result) {
+      if (typeof SaveStore !== 'undefined') SaveStore.captureThumbFromResult(_rv_result);
+      rvSaveBtn.style.display = 'block';
+      rvSaveBtn.onclick = function() {
+        if (typeof SaveModal !== 'undefined') SaveModal.show(_rv_result);
+      };
+    }
 
     // transition
     setState('reveal');
