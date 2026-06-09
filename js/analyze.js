@@ -45,6 +45,12 @@ function analyze(){
   eyeResults[result.side] = result;
   renderResult(result);
   window.__lastResult = result;
+
+  // Attach iris canvas snapshot so uploadToSupabase can send the photo
+  if (typeof canvas !== 'undefined' && canvas) {
+    try { result.analysisImage = { src: canvas.toDataURL('image/jpeg', 0.85), iris: donut }; }
+    catch(e) {}
+  }
   uploadToSupabase(result);
 }
 

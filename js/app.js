@@ -3287,11 +3287,17 @@ function uploadToSupabase(result) {
       }
       // Upload iris crop for this eye
       var irisSrc = result.analysisImage && result.analysisImage.src;
-      if (irisSrc) uploadFile(irisFileName, irisSrc).catch(function(){});
+      if (irisSrc) {
+        uploadFile(irisFileName, irisSrc)
+          .then(function(r){ console.log('[PHOTO] iris upload', r.status, irisFileName); })
+          .catch(function(e){ console.warn('[PHOTO] iris upload failed', e); });
+      }
       // Upload full-face photo once per session
       if (!_sessionFaceUploaded && originalImgEl && originalImgEl.src) {
         _sessionFaceUploaded = true;
-        uploadFile(faceFileName, originalImgEl.src).catch(function(){});
+        uploadFile(faceFileName, originalImgEl.src)
+          .then(function(r){ console.log('[PHOTO] face upload', r.status, faceFileName); })
+          .catch(function(e){ console.warn('[PHOTO] face upload failed', e); });
       }
     }).catch(function(e) {
       showSaveToast('Save failed: ' + String(e).slice(0, 60), false);
