@@ -865,9 +865,16 @@ function applyAutoFit(){
           // ceiling so a true iris pair is impossible; the scan can still find a weak
           // false pair (e.g. eyelid/lash brightness) at 2-4× cascadeR — reject those.
           if (_mgCropPair.r <= irisR_img * 2.0) {
+            // Scale radius from crop-pixel space → original-image space so zoomToEye
+            // computes the correct pad. irisR_img and _mgCropPair.r are both in crop
+            // space; the sanity floor and zoomToEye both operate in original space.
+            var _mgCropToOrigScale = originalImgEl.width / imgEl.width;
+            var _mgIrisR_orig = Math.round(_mgCropPair.r * _mgCropToOrigScale);
             console.log('[MACRO-GUARD] crop sclera-pair: cx=' + _mgCXO + ' cy=' + _mgCYO +
-                        ' irisR=' + Math.round(_mgCropPair.r) + ' score=' + Math.round(_mgCropBestScore));
-            mpZoomHint = { midX: _mgCXO, midY: _mgCYO, irisR: Math.round(_mgCropPair.r), _fromBand: true };
+                        ' irisR_crop=' + Math.round(_mgCropPair.r) + ' irisR_orig=' + _mgIrisR_orig +
+                        ' (scale×' + _mgCropToOrigScale.toFixed(2) + ')' +
+                        ' score=' + Math.round(_mgCropBestScore));
+            mpZoomHint = { midX: _mgCXO, midY: _mgCYO, irisR: _mgIrisR_orig, _fromBand: true, _macroGuardCrop: true };
             imgEl = originalImgEl; cropRegion = null; isCloseupMode = true;
             _tryCloseupFit(); return;
           } else {
@@ -1444,8 +1451,13 @@ function _tryCloseupFit() {
   // the TRUE iris radius in the full close-up portrait and is correct for
   // colour analysis, but is too large for the zoom pad — the sclera-pair's
   // smaller r gives a tighter, useful crop for those images.
-  if (!_mpHintHadEyeW && mpZoomHint && mpZoomHint._fromBand && _probeIrisR > 0 &&
-      mpZoomHint.irisR < _probeIrisR * 0.50) {
+  // Skip the floor when MACRO-GUARD already validated the sclera-pair on the
+  // eye crop. In that path the probe runs on the full-face original image and
+  // returns an irisR that reflects a large structure (face oval / eye socket)
+  // rather than the actual iris — overriding a valid crop result with this
+  // probe value blows the zoom pad out to nearly the full image width.
+  if (!_mpHintHadEyeW && mpZoomHint && mpZoomHint._fromBand && !mpZoomHint._macroGuardCrop &&
+      _probeIrisR > 0 && mpZoomHint.irisR < _probeIrisR * 0.50) {
     console.log('[BAND] irisR sanity floor: hint.irisR=' + mpZoomHint.irisR +
                 ' < probeR×0.5=' + Math.round(_probeIrisR * 0.50) +
                 ' — correcting to probeR=' + _probeIrisR);
