@@ -278,7 +278,7 @@ var loadOriginalFromUrl = function(url){
     // before analysis even starts.  This way the face record exists even if
     // the user closes the tab after seeing the fit but before saving results.
     if (!_sessionId) _sessionId = String(Date.now());
-    if (!_sessionFaceUploaded && typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    if (!window._devMode && !_sessionFaceUploaded && typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
       _sessionFaceUploaded = true;
       var _faceUrl = url;
       var _facePath = SUPABASE_URL + '/storage/v1/object/iris-photos/' + _sessionId + '-face.jpg';
@@ -3340,3 +3340,56 @@ function uploadToSupabase(result) {
 
 // Everything attached — flip banner to green
 markRunning();
+
+// ── Dev / test-gallery URL param loader ─────────────────────────────────
+// Opens the app directly on a test image when launched from test-gallery.html.
+//   ?testimg=test-images/Bryan.JPG  — fetch and auto-load that image
+//   &dev=1                          — skip Supabase uploads (test traffic)
+// Also checks sessionStorage for images dropped via the gallery file picker.
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  window._devMode = (params.get('dev') === '1');
+  var testImg = params.get('testimg');
+
+  function _doLoad(src, label) {
+    console.log('[DEV] loading test image:', label || src.slice(0, 60));
+    var img = new Image();
+    img.onload = function() {
+      originalImgEl = img;
+      mpEyes = null; mpZoomHint = null; preZoomState = null;
+      isCloseupMode = false; cropRegion = null;
+      if (!_sessionId) _sessionId = 'dev-' + Date.now();
+      autoDetectAndJumpToFit();
+    };
+    img.onerror = function() { console.warn('[DEV] failed to load test image', label); };
+    img.src = src;
+  }
+
+  // Priority 1: sessionStorage blob (gallery file-picker → new tab)
+  try {
+    var ssData = sessionStorage.getItem('aeyed_dev_testimg_data');
+    var ssName = sessionStorage.getItem('aeyed_dev_testimg_name');
+    if (ssData) {
+      sessionStorage.removeItem('aeyed_dev_testimg_data');
+      sessionStorage.removeItem('aeyed_dev_testimg_name');
+      window._devMode = true;
+      setTimeout(function() { _doLoad(ssData, ssName); }, 600);
+      return;
+    }
+  } catch(e) {}
+
+  // Priority 2: ?testimg= URL param (gallery "Load" button → new tab)
+  if (testImg) {
+    window._devMode = true;
+    setTimeout(function() {
+      fetch(testImg)
+        .then(function(r) { return r.blob(); })
+        .then(function(blob) {
+          var reader = new FileReader();
+          reader.onload = function(ev) { _doLoad(ev.target.result, testImg); };
+          reader.readAsDataURL(blob);
+        })
+        .catch(function(e) { console.warn('[DEV] fetch testimg failed:', e.message); });
+    }, 600);
+  }
+})();

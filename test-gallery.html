@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>eyeD · Test Image Library</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0c0a08; color: #e8dcc8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+a { color: inherit; text-decoration: none; }
+
+/* ── Header ── */
+.hdr { background: #12100e; border-bottom: 1px solid #2a2420; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+.hdr-logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.hdr-logo span { color: #c9a96e; }
+.hdr-tag { font-size: 12px; color: #6b5f50; }
+.hdr-back { font-size: 13px; color: #c9a96e; }
+
+/* ── Upload banner ── */
+.upload-bar { background: #1a1510; border-bottom: 1px solid #2a2420; padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.upload-bar label { cursor: pointer; background: #c9a96e; color: #0c0a08; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 6px; }
+.upload-bar input[type=file] { display: none; }
+.upload-bar p { font-size: 12px; color: #6b5f50; flex: 1; }
+#upload-status { font-size: 12px; color: #c9a96e; }
+
+/* ── Filter bar ── */
+.filter-bar { padding: 12px 20px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filter-bar span { font-size: 12px; color: #6b5f50; margin-right: 4px; }
+.chip { font-size: 12px; padding: 4px 10px; border-radius: 20px; border: 1px solid #2a2420; background: transparent; color: #9a8a76; cursor: pointer; transition: all .15s; }
+.chip.active, .chip:hover { background: #c9a96e; color: #0c0a08; border-color: #c9a96e; }
+
+/* ── Subject cards ── */
+.grid { padding: 0 16px 60px; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+.card { background: #12100e; border: 1px solid #1e1a16; border-radius: 12px; overflow: hidden; }
+.card-head { padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px; }
+.color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.color-dot.Blue-Gray { background: radial-gradient(circle, #a8c4d8 0%, #6e9ab8 60%, #4a7898 100%); }
+.color-dot.Blue      { background: radial-gradient(circle, #98b8d8 0%, #4878b8 60%, #2858a8 100%); }
+.color-dot.Green     { background: radial-gradient(circle, #a8c898 0%, #5a9860 60%, #2a7838 100%); }
+.color-dot.Brown     { background: radial-gradient(circle, #c89868 0%, #8a5828 60%, #5a3810 100%); }
+.color-dot.Various   { background: conic-gradient(#6e9ab8 0deg, #5a9860 90deg, #8a5828 180deg, #e8c890 270deg, #6e9ab8 360deg); }
+.card-name { font-size: 15px; font-weight: 600; }
+.card-gt { font-size: 11px; color: #6b5f50; margin-left: auto; }
+.card-notes { font-size: 11px; color: #6b5f50; padding: 0 16px 10px; }
+.photo-list { border-top: 1px solid #1e1a16; }
+.photo-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1a1610; transition: background .12s; }
+.photo-row:last-child { border-bottom: none; }
+.photo-row:hover { background: #1a1610; }
+.thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; background: #1e1a16; flex-shrink: 0; cursor: pointer; }
+.thumb:hover { opacity: .85; }
+.photo-info { flex: 1; min-width: 0; }
+.photo-type { font-size: 11px; color: #c9a96e; text-transform: uppercase; letter-spacing: .5px; }
+.photo-notes { font-size: 11px; color: #6b5f50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn-load { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; background: #1e3a50; color: #6ab4e8; border: 1px solid #2a5070; cursor: pointer; white-space: nowrap; transition: all .15s; }
+.btn-load:hover { background: #2a5070; }
+
+/* ── Loading state ── */
+.loading { text-align: center; padding: 80px 20px; color: #6b5f50; font-size: 14px; }
+
+/* ── Add-photo section ── */
+.add-hint { text-align: center; padding: 40px 20px; color: #4a3f34; font-size: 13px; }
+.add-hint code { background: #1a1510; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #c9a96e; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">eye<span>D</span> · Dev Gallery</div>
+  <a class="hdr-back" href="index.html">← Open App</a>
+</div>
+
+<div class="upload-bar">
+  <label for="file-add">+ Add Photo</label>
+  <input type="file" id="file-add" accept="image/*" multiple>
+  <p>Drop new test photos here. They load in the app immediately — save to <code>test-images/</code> then update <code>manifest.json</code> to persist.</p>
+  <span id="upload-status"></span>
+</div>
+
+<div class="filter-bar">
+  <span>Filter:</span>
+  <button class="chip active" data-filter="all">All</button>
+  <button class="chip" data-filter="full-face">Full Face</button>
+  <button class="chip" data-filter="close-up">Close-up</button>
+  <button class="chip" data-filter="iris-crop">Iris Crop</button>
+  <button class="chip" data-filter="zoomed">Zoomed</button>
+</div>
+
+<div class="grid" id="gallery">
+  <div class="loading">Loading manifest…</div>
+</div>
+
+<script>
+var appUrl  = 'index.html';
+var devFlag = '&dev=1';
+var activeFilter = 'all';
+
+// ── Chip filter ──────────────────────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('active'); });
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    renderGallery(window._manifest);
+  });
+});
+
+// ── File upload shortcut ─────────────────────────────────────────────────
+document.getElementById('file-add').addEventListener('change', function(e) {
+  var files = e.target.files;
+  if (!files.length) return;
+  var f = files[0];
+  var status = document.getElementById('upload-status');
+  status.textContent = 'Loading ' + f.name + '…';
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    status.textContent = 'Opening in app…';
+    var w = window.open(appUrl + '?dev=1', '_blank');
+    if (!w) { status.textContent = 'Allow popups to open in app.'; return; }
+    // Pass image via sessionStorage so the new tab picks it up
+    sessionStorage.setItem('aeyed_dev_testimg_name', f.name);
+    sessionStorage.setItem('aeyed_dev_testimg_data', ev.target.result);
+    setTimeout(function(){ status.textContent = ''; }, 3000);
+  };
+  reader.readAsDataURL(f);
+});
+
+// ── Load manifest and render ─────────────────────────────────────────────
+fetch('test-images/manifest.json?v=' + Date.now())
+  .then(function(r){ return r.json(); })
+  .then(function(manifest) {
+    window._manifest = manifest;
+    renderGallery(manifest);
+  })
+  .catch(function(e) {
+    document.getElementById('gallery').innerHTML =
+      '<div class="loading">Could not load manifest.json — run the app from a local server.<br><small>' + e.message + '</small></div>';
+  });
+
+function renderGallery(manifest) {
+  if (!manifest) return;
+  var grid = document.getElementById('gallery');
+  var html = '';
+
+  manifest.subjects.forEach(function(sub) {
+    var photos = sub.photos.filter(function(p) {
+      return activeFilter === 'all' || p.type === activeFilter;
+    });
+    if (!photos.length) return;
+
+    html += '<div class="card">';
+    html += '<div class="card-head">';
+    html += '<div class="color-dot ' + sub.groundTruth.replace(/\s+/g,'_').replace('-','_') + '" title="' + sub.groundTruth + '"></div>';
+    html += '<div class="card-name">' + sub.name + '</div>';
+    html += '<div class="card-gt">' + sub.groundTruth + '</div>';
+    html += '</div>';
+    if (sub.notes) html += '<div class="card-notes">' + sub.notes + '</div>';
+    html += '<div class="photo-list">';
+
+    photos.forEach(function(p) {
+      var label = p.type + (p.side ? ' · ' + p.side : '') + (p.camera ? ' · ' + p.camera : '');
+      var loadUrl = appUrl + '?testimg=' + encodeURIComponent(p.file) + devFlag;
+      html += '<div class="photo-row">';
+      html += '<img class="thumb" src="' + p.file + '" alt="" loading="lazy" onclick="loadInApp(\'' + encodeURIComponent(p.file) + '\')" title="Click to load in app">';
+      html += '<div class="photo-info">';
+      html += '<div class="photo-type">' + label + '</div>';
+      html += '<div class="photo-notes">' + (p.notes || '') + '</div>';
+      html += '</div>';
+      html += '<button class="btn-load" onclick="loadInApp(\'' + encodeURIComponent(p.file) + '\')">Load</button>';
+      html += '</div>';
+    });
+
+    html += '</div></div>';
+  });
+
+  if (!html) html = '<div class="loading" style="grid-column:1/-1">No photos match this filter.</div>';
+  grid.innerHTML = html;
+}
+
+function loadInApp(encodedPath) {
+  var url = appUrl + '?testimg=' + encodedPath + devFlag;
+  window.open(url, '_blank');
+}
+</script>
+</body>
+</html>

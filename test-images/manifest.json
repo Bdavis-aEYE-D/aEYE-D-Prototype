@@ -1,0 +1,213 @@
+{
+  "version": "1.1",
+  "updated": "2026-06-10",
+  "subjects": [
+    {
+      "id": "bryan",
+      "name": "Bryan Davis",
+      "groundTruth": "Blue-Gray",
+      "notes": "App creator. iPhone 16 Pro.",
+      "photos": [
+        {
+          "file": "test-images/Bryan.JPG",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "Standard selfie, arms-length, slight upward angle"
+        },
+        {
+          "file": "test-images/IMG_9924 Bryan Left.JPG",
+          "type": "close-up",
+          "side": "Left",
+          "camera": "rear",
+          "notes": "Rear camera mirror technique, left eye"
+        },
+        {
+          "file": "test-images/Bryan Portrait 1500w.jpg",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "1500×2000px portrait, different angle/session from Bryan.JPG"
+        },
+        {
+          "file": "test-images/Bryan Left.png",
+          "type": "iris-crop",
+          "side": "Left",
+          "notes": "Cropped iris, normal light"
+        },
+        {
+          "file": "test-images/Bryan Right.png",
+          "type": "iris-crop",
+          "side": "Right",
+          "notes": "Cropped iris, normal light"
+        },
+        {
+          "file": "test-images/Bryan Left Window Reflection.png",
+          "type": "iris-crop",
+          "side": "Left",
+          "notes": "Window reflection highlight — challenging for limbus"
+        },
+        {
+          "file": "test-images/Bryan Right Window Reflection.png",
+          "type": "iris-crop",
+          "side": "Right",
+          "notes": "Window reflection highlight — challenging for limbus"
+        }
+      ]
+    },
+    {
+      "id": "iliana",
+      "name": "Iliana",
+      "groundTruth": "Blue",
+      "notes": "Deep blue iris. Good detail.",
+      "photos": [
+        {
+          "file": "test-images/IMG_6410 Illiana.jpg",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "Full-face selfie, macro-closeup detection path"
+        },
+        {
+          "file": "test-images/IMG_6410 Illiana Zoom.jpg",
+          "type": "zoomed",
+          "notes": "Pre-cropped zoomed version for direct iris test"
+        }
+      ]
+    },
+    {
+      "id": "rachel",
+      "name": "Rachel Green",
+      "groundTruth": "Green",
+      "notes": "Solid green. Good test for green vs hazel separation.",
+      "photos": [
+        {
+          "file": "test-images/IMG_9119 Rachel Green.jpg",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "Full-face, slight angle"
+        },
+        {
+          "file": "test-images/IMG_9119 Rachel Green Zoom.jpg",
+          "type": "zoomed",
+          "notes": "Pre-cropped zoomed version"
+        }
+      ]
+    },
+    {
+      "id": "jeri",
+      "name": "Jeri Norden",
+      "groundTruth": "Brown",
+      "notes": "Dark periocular area. Challenging for band scan. Fixed in v2.29.",
+      "photos": [
+        {
+          "file": "test-images/IMG_3091 Jeri Norden.jpg",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "Full-face, _bandZoomOk required for this case"
+        }
+      ]
+    },
+    {
+      "id": "bradley",
+      "name": "Bradley N",
+      "groundTruth": "Brown",
+      "notes": "Low-res source image.",
+      "photos": [
+        {
+          "file": "test-images/IMG_3166 Bradley N.jpg",
+          "type": "close-up",
+          "notes": "Small image (555×257px), close-up path"
+        }
+      ]
+    },
+    {
+      "id": "terri",
+      "name": "Terri",
+      "groundTruth": "Brown",
+      "notes": "Portrait mode selfie, angled. Good hazel/brown test case.",
+      "photos": [
+        {
+          "file": "test-images/Terri 1.jpg",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "Angled selfie, arm visible, portrait orientation 1242×2208"
+        }
+      ]
+    },
+    {
+      "id": "blake",
+      "name": "Blake",
+      "groundTruth": "Blue-Gray",
+      "notes": "Similar to Bryan — good Blue-Gray reference.",
+      "photos": [
+        {
+          "file": "test-images/IMG_0496 Blake Right.jpeg",
+          "type": "close-up",
+          "side": "Right",
+          "camera": "rear",
+          "notes": "Rear camera close-up, right eye"
+        }
+      ]
+    },
+    {
+      "id": "carlie",
+      "name": "Carlie",
+      "groundTruth": "Green",
+      "notes": "Iris-only crop. Skip MediaPipe, direct classical CV.",
+      "photos": [
+        {
+          "file": "test-images/Carlie_Right_Iris.jpg",
+          "type": "iris-crop",
+          "side": "Right",
+          "notes": "Close-up iris crop, no face context"
+        }
+      ]
+    },
+    {
+      "id": "sbvpi",
+      "name": "SBVPI Dataset",
+      "groundTruth": "Various",
+      "notes": "Public dataset. Side-gaze stress tests — detection only, not color accuracy.",
+      "photos": [
+        {
+          "file": "test-images/SBVPI_1_brown_m28.jpg",
+          "type": "full-face",
+          "notes": "Brown · male 28"
+        },
+        {
+          "file": "test-images/SBVPI_2_blue_f28.jpg",
+          "type": "full-face",
+          "notes": "Blue · female 28"
+        },
+        {
+          "file": "test-images/SBVPI_4_grey_f75.jpg",
+          "type": "full-face",
+          "notes": "Grey · female 75"
+        },
+        {
+          "file": "test-images/SBVPI_7_green_m45.jpg",
+          "type": "full-face",
+          "notes": "Green · male 45"
+        },
+        {
+          "file": "test-images/SBVPI_9_blue_m75.jpg",
+          "type": "full-face",
+          "notes": "Blue · male 75"
+        },
+        {
+          "file": "test-images/SBVPI_14_green_f15.jpg",
+          "type": "full-face",
+          "notes": "Green · female 15"
+        },
+        {
+          "file": "test-images/SBVPI_15_brown_f32.jpg",
+          "type": "full-face",
+          "notes": "Brown · female 32"
+        },
+        {
+          "file": "test-images/SBVPI_19_blue_m21.jpg",
+          "type": "full-face",
+          "notes": "Blue · male 21"
+        }
+      ]
+    }
+  ]
+}
