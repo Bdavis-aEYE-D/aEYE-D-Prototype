@@ -90,9 +90,11 @@ a { color: inherit; text-decoration: none; }
 </div>
 
 <script>
-var appUrl  = 'index.html';
-var devFlag = '&dev=1';
+var appUrl   = 'index.html';
+var devFlag  = '&dev=1';
 var activeFilter = 'all';
+var SB_URL  = 'https://mmotthgsydxgviabnycv.supabase.co';
+var SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb3R0aGdzeWR4Z3ZpYWJueWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTM2MjcsImV4cCI6MjA5MzU4OTYyN30.hUgH6_0eJ-s4FbtSD3_EuyH-5sYLWIUQK4fdDAP0yMU';
 
 // ── Chip filter ──────────────────────────────────────────────────────────
 document.querySelectorAll('.chip').forEach(function(btn) {
@@ -116,7 +118,6 @@ document.getElementById('file-add').addEventListener('change', function(e) {
     status.textContent = 'Opening in app…';
     var w = window.open(appUrl + '?dev=1', '_blank');
     if (!w) { status.textContent = 'Allow popups to open in app.'; return; }
-    // Pass image via sessionStorage so the new tab picks it up
     sessionStorage.setItem('aeyed_dev_testimg_name', f.name);
     sessionStorage.setItem('aeyed_dev_testimg_data', ev.target.result);
     setTimeout(function(){ status.textContent = ''; }, 3000);
@@ -124,18 +125,65 @@ document.getElementById('file-add').addEventListener('change', function(e) {
   reader.readAsDataURL(f);
 });
 
-// ── Load manifest and render ─────────────────────────────────────────────
-fetch('test-images/manifest.json?v=' + Date.now())
-  .then(function(r){ return r.json(); })
-  .then(function(manifest) {
+// ── Supabase → manifest-like structure ───────────────────────────────────
+function rowsToManifest(rows) {
+  var order = [];
+  var subjects = {};
+  rows.forEach(function(row) {
+    var meta = {};
+    try { meta = JSON.parse(row.user_agent); } catch(e) {}
+    var sid = meta.subject_id || row.vibe || 'unknown';
+    if (!subjects[sid]) {
+      order.push(sid);
+      subjects[sid] = {
+        id: sid,
+        name: row.vibe || meta.subject || sid,
+        groundTruth: row.color_name || meta.ground_truth || '',
+        notes: meta.subject_notes || '',
+        photos: []
+      };
+    }
+    subjects[sid].photos.push({
+      file: meta.local_file || row.face_photo_path || '',
+      thumbUrl: row.face_photo_path || meta.local_file || '',
+      type: meta.photo_type || '',
+      camera: meta.camera || '',
+      side: meta.side || '',
+      notes: meta.notes || ''
+    });
+  });
+  return { subjects: order.map(function(id){ return subjects[id]; }) };
+}
+
+// ── Load from Supabase, fall back to manifest.json ────────────────────────
+document.getElementById('gallery').innerHTML = '<div class="loading">Querying Supabase…</div>';
+
+fetch(SB_URL + '/rest/v1/analyses?device_id=eq.aeyed-test-library&select=*&order=created_at.asc', {
+  headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+})
+  .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+  .then(function(rows) {
+    if (!rows.length) return Promise.reject('empty');
+    var manifest = rowsToManifest(rows);
     window._manifest = manifest;
     renderGallery(manifest);
   })
-  .catch(function(e) {
-    document.getElementById('gallery').innerHTML =
-      '<div class="loading">Could not load manifest.json — run the app from a local server.<br><small>' + e.message + '</small></div>';
+  .catch(function(err) {
+    // Fallback: local manifest.json
+    document.getElementById('gallery').innerHTML = '<div class="loading">Supabase unavailable (' + err + '), loading local manifest…</div>';
+    fetch('test-images/manifest.json?v=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(manifest) {
+        window._manifest = manifest;
+        renderGallery(manifest);
+      })
+      .catch(function(e) {
+        document.getElementById('gallery').innerHTML =
+          '<div class="loading">Could not load test library.<br><small>' + e.message + '</small></div>';
+      });
   });
 
+// ── Render ────────────────────────────────────────────────────────────────
 function renderGallery(manifest) {
   if (!manifest) return;
   var grid = document.getElementById('gallery');
@@ -147,9 +195,10 @@ function renderGallery(manifest) {
     });
     if (!photos.length) return;
 
+    var dotClass = sub.groundTruth.replace(/[\s-]+/g, '_');
     html += '<div class="card">';
     html += '<div class="card-head">';
-    html += '<div class="color-dot ' + sub.groundTruth.replace(/\s+/g,'_').replace('-','_') + '" title="' + sub.groundTruth + '"></div>';
+    html += '<div class="color-dot ' + dotClass + '" title="' + sub.groundTruth + '"></div>';
     html += '<div class="card-name">' + sub.name + '</div>';
     html += '<div class="card-gt">' + sub.groundTruth + '</div>';
     html += '</div>';
@@ -158,14 +207,15 @@ function renderGallery(manifest) {
 
     photos.forEach(function(p) {
       var label = p.type + (p.side ? ' · ' + p.side : '') + (p.camera ? ' · ' + p.camera : '');
-      var loadUrl = appUrl + '?testimg=' + encodeURIComponent(p.file) + devFlag;
+      var thumbSrc = p.thumbUrl || p.file;
+      var loadPath = encodeURIComponent(p.file);
       html += '<div class="photo-row">';
-      html += '<img class="thumb" src="' + p.file + '" alt="" loading="lazy" onclick="loadInApp(\'' + encodeURIComponent(p.file) + '\')" title="Click to load in app">';
+      html += '<img class="thumb" src="' + thumbSrc + '" alt="" loading="lazy" onclick="loadInApp(\'' + loadPath + '\')" title="Click to load in app">';
       html += '<div class="photo-info">';
       html += '<div class="photo-type">' + label + '</div>';
       html += '<div class="photo-notes">' + (p.notes || '') + '</div>';
       html += '</div>';
-      html += '<button class="btn-load" onclick="loadInApp(\'' + encodeURIComponent(p.file) + '\')">Load</button>';
+      html += '<button class="btn-load" onclick="loadInApp(\'' + loadPath + '\')">Load</button>';
       html += '</div>';
     });
 
@@ -177,8 +227,7 @@ function renderGallery(manifest) {
 }
 
 function loadInApp(encodedPath) {
-  var url = appUrl + '?testimg=' + encodedPath + devFlag;
-  window.open(url, '_blank');
+  window.open(appUrl + '?testimg=' + encodedPath + devFlag, '_blank');
 }
 </script>
 </body>
