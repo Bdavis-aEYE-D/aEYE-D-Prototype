@@ -428,7 +428,9 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
         var _kde0 = dE(_knnLab0, PALETTE[_kni0].lab);
         if (_kde0 < _knnBd0) { _knnBd0 = _kde0; _knnBest0 = PALETTE[_kni0]; }
       }
-      if (_knnBest0) { outerM = { entry: _knnBest0, distance: _knnBd0 }; _knnOverrode = true; }
+      if (_knnBest0) {
+        outerM = { entry: _knnBest0, distance: _knnBd0 }; _knnOverrode = true;
+      }
     }
   }
   if (!_knnOverrode) { // ── Rule-based guards (fallback when k-NN unavailable) ──
@@ -672,6 +674,81 @@ function analyzeIris(imgEl, donut, drawInfo, stageW, stageH, side, userAge, opti
     }
   }
   } // end if (!_knnOverrode) — close rule-based guard block
+
+  // ── Post-knn tiebreakers: run even when cascade RF overrode rule-based guards ──
+  // The RF is trained on feature vectors and can misclassify when lighting conditions
+  // compress the colour signal. These rules apply known Lab-axis invariants on top.
+
+  // (A) Grey→Green: strong a* green signal means real green iris regardless of RF vote.
+  //     Mirrors Tier 3 (rule-based path) so knn-overridden grey eyes get the same fix.
+  //     Guard _t3InnerWarm: warm collarette eyes must not be rerouted to Green.
+  if (_knnOverrode && outerM.entry.cat === 'Gray' && !_t3InnerWarm && outer.length >= 20) {
+    var _pkgLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    var _pkgChroma = Math.sqrt(_pkgLab[1]*_pkgLab[1] + _pkgLab[2]*_pkgLab[2]);
+    if (_pkgChroma > 5.5 && _pkgLab[1] < -4 && _pkgLab[2] > -5 && outerMeanRgb[1] >= outerMeanRgb[0]) {
+      var _pkgBest = null, _pkgDist = Infinity;
+      for (var _pkgI = 0; _pkgI < PALETTE.length; _pkgI++) {
+        if (PALETTE[_pkgI].cat !== 'Green' && PALETTE[_pkgI].cat !== 'Hazel') continue;
+        var _pkgDe = dE(_pkgLab, PALETTE[_pkgI].lab);
+        if (_pkgDe < _pkgDist) { _pkgDist = _pkgDe; _pkgBest = PALETTE[_pkgI]; }
+      }
+      if (_pkgBest) { outerM = { entry: _pkgBest, distance: _pkgDist }; }
+    }
+  }
+
+  // (B) Grey→Blue: b* blue bias means photo-lighting is flattening a blue iris to grey.
+  //     Mirrors the b* tiebreaker in nearestPal(). Threshold -1.5 (slightly relaxed from
+  //     -2) because blue-gray irises often photograph at b*≈-1.5 under frontal lighting.
+  //     Guard: nearest Blue entry must be within 5 ΔE of nearest Gray (no forced remap).
+  if (_knnOverrode && outerM.entry.cat === 'Gray') {
+    var _pkbLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    if (_pkbLab[2] < -1.5) {
+      var _pkbBestBlue = null, _pkbBdBlue = Infinity, _pkbBestGray = null, _pkbBdGray = Infinity;
+      for (var _pkbI = 0; _pkbI < PALETTE.length; _pkbI++) {
+        var _pkbDe = dE(_pkbLab, PALETTE[_pkbI].lab);
+        if (PALETTE[_pkbI].cat === 'Blue' && _pkbDe < _pkbBdBlue) { _pkbBdBlue = _pkbDe; _pkbBestBlue = PALETTE[_pkbI]; }
+        if (PALETTE[_pkbI].cat === 'Gray' && _pkbDe < _pkbBdGray) { _pkbBdGray = _pkbDe; _pkbBestGray = PALETTE[_pkbI]; }
+      }
+      if (_pkbBestBlue && (_pkbBdBlue - _pkbBdGray) < 5) {
+        outerM = { entry: _pkbBestBlue, distance: _pkbBdBlue };
+      }
+    }
+  }
+
+  // (C) Hazel→Brown: hazel classification with reddish outer stroma (a*>3) is brown,
+  //     not hazel. True hazel outer is olive/neutral (a*≈-2 to +2). This fires when
+  //     the warm inner zone (collarette or central heterochromia) caused the RF to
+  //     route a warm-brown eye to hazel via its dark-branch Stage 2a.
+  //     Guard b*<35: excludes amber territory (amber b*≥38).
+  if (_knnOverrode && outerM.entry.cat === 'Hazel') {
+    var _pkhLab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    if (_pkhLab[1] > 3 && _pkhLab[2] < 35) {
+      var _pkhBest = null, _pkhDist = Infinity;
+      for (var _pkhI = 0; _pkhI < PALETTE.length; _pkhI++) {
+        if (PALETTE[_pkhI].cat !== 'Brown') continue;
+        var _pkhDe = dE(_pkhLab, PALETTE[_pkhI].lab);
+        if (_pkhDe < _pkhDist) { _pkhDist = _pkhDe; _pkhBest = PALETTE[_pkhI]; }
+      }
+      if (_pkhBest) { outerM = { entry: _pkhBest, distance: _pkhDist }; }
+    }
+  }
+
+  // (C2) Hazel→Gray/Blue: near-neutral outer (|a*|<2, b*<6) with warm inner means
+  //      the RF mistook a gray/blue iris with warm collarette for hazel. True hazel
+  //      outer stroma is warm-olive (b*>10); b*<6 outer is too cool/neutral to be hazel.
+  if (_knnOverrode && outerM.entry.cat === 'Hazel') {
+    var _pkh2Lab = rgbLab(outerMeanRgb[0], outerMeanRgb[1], outerMeanRgb[2]);
+    if (Math.abs(_pkh2Lab[1]) < 2 && _pkh2Lab[2] < 6) {
+      var _pkh2SrcLab = _osMean ? rgbLab(_osMean[0],_osMean[1],_osMean[2]) : _pkh2Lab;
+      var _pkh2Best = null, _pkh2Dist = Infinity;
+      for (var _pkh2I = 0; _pkh2I < PALETTE.length; _pkh2I++) {
+        if (PALETTE[_pkh2I].cat !== 'Gray' && PALETTE[_pkh2I].cat !== 'Blue') continue;
+        var _pkh2De = dE(_pkh2SrcLab, PALETTE[_pkh2I].lab);
+        if (_pkh2De < _pkh2Dist) { _pkh2Dist = _pkh2De; _pkh2Best = PALETTE[_pkh2I]; }
+      }
+      if (_pkh2Best) { outerM = { entry: _pkh2Best, distance: _pkh2Dist }; }
+    }
+  }
 
   // ── Violet→Blue: always applied regardless of which classifier ran ─────────
   if (outerM.entry.cat === 'Violet') {

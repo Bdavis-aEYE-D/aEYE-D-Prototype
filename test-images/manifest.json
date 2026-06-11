@@ -5,7 +5,7 @@
     {
       "id": "bryan",
       "name": "Bryan Davis",
-      "groundTruth": "Blue-Gray",
+      "groundTruth": "Blue",
       "notes": "App creator. iPhone 16 Pro.",
       "photos": [
         {
@@ -135,7 +135,7 @@
     {
       "id": "blake",
       "name": "Blake",
-      "groundTruth": "Blue-Gray",
+      "groundTruth": "Blue",
       "notes": "Similar to Bryan — good Blue-Gray reference.",
       "photos": [
         {
