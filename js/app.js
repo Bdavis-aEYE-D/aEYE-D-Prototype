@@ -366,12 +366,20 @@ function autoDetectAndJumpToFit() {
       var _eyeToChin = _chin.y - _avgIrisY;
       var _noseFrac  = _eyeToChin > 0.05 ? (_noseTip.y - _avgIrisY) / _eyeToChin : 1.0;
       var badNoseProp = (_noseFrac < 0.25);
-      if (badYLevel || badPlacement || badIPD || badNoseProp) {
+      // Eye-opening asymmetry: in a real two-eye photo both canthus spans are similar
+      // (ratio ≤ ~1.5). A phantom eye placed on skin/hair produces badly-calibrated
+      // canthus landmarks with a very different span from the real eye.
+      // Guard _minSpan>5: prevents false trigger when one eye is at image edge.
+      var _preRSpan = (function(){ var dx=(L[33].x-L[133].x)*imgW, dy=(L[33].y-L[133].y)*imgH; return Math.sqrt(dx*dx+dy*dy); })();
+      var _preLSpan = (function(){ var dx=(L[263].x-L[362].x)*imgW, dy=(L[263].y-L[362].y)*imgH; return Math.sqrt(dx*dx+dy*dy); })();
+      var _minSpan  = Math.min(_preRSpan, _preLSpan);
+      var badEyeAsymmetry = _minSpan > 5 && Math.max(_preRSpan, _preLSpan) / _minSpan > 2.5;
+      if (badYLevel || badPlacement || badIPD || badNoseProp || badEyeAsymmetry) {
         console.warn('1-eye gate → closeup: ry=' + ry.toFixed(3) +
                      ' ly=' + ly.toFixed(3) + ' ipdFrac=' + ipdFrac.toFixed(3) +
-                     ' noseFrac=' + _noseFrac.toFixed(3) +
+                     ' noseFrac=' + _noseFrac.toFixed(3) + ' rSpan=' + Math.round(_preRSpan) + ' lSpan=' + Math.round(_preLSpan) +
                      ' badYLevel=' + badYLevel + ' badPlacement=' + badPlacement +
-                     ' badIPD=' + badIPD + ' badNoseProp=' + badNoseProp);
+                     ' badIPD=' + badIPD + ' badNoseProp=' + badNoseProp + ' badEyeAsymmetry=' + badEyeAsymmetry);
         // Save canthus geometry for close-up zoom calibration.
         // The right-eye canthus landmarks (L[33]=outer, L[133]=inner) correspond to the
         // real visible eye even when the face mesh is hallucinated — they are more stable
