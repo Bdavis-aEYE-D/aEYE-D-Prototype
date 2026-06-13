@@ -162,6 +162,20 @@
       ]
     },
     {
+      "id": "angled-closeup",
+      "name": "Angled Closeup (unknown)",
+      "groundTruth": "Gray",
+      "notes": "Half-face angled close-up, only right eye visible. Key test case for 1-eye gate badEyeAsymmetry fix (v334). Safari detects 2 eyes (phantom in hair); old gate missed it → huge ring, no zoom. New gate fires on canthus span asymmetry.",
+      "photos": [
+        {
+          "file": "test-images/Unknown Angled Closeup.jpg",
+          "type": "full-face",
+          "camera": "front",
+          "notes": "Angled half-face, one eye visible, real nose/chin present — all 4 old gate checks passed. Expected behavior: 1-eye gate fires, close-up zoom, correct iris ring."
+        }
+      ]
+    },
+    {
       "id": "sbvpi",
       "name": "SBVPI Dataset",
       "groundTruth": "Various",
