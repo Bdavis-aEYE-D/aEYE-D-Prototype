@@ -396,8 +396,41 @@ function autoDetectAndJumpToFit() {
         console.log('mpZoomHint: eyeW=' + Math.round(mpZoomHint.eyeW) +
                     ' midX=' + Math.round(mpZoomHint.midX) +
                     ' midY=' + Math.round(mpZoomHint.midY));
-        $('card-fit').style.display = 'none';
-        _tryCloseupFit();
+        var _gCropR = Math.round(mpZoomHint.eyeW * 1.50);
+        var _gImgW  = originalImgEl.naturalWidth  || originalImgEl.width;
+        var _gImgH  = originalImgEl.naturalHeight || originalImgEl.height;
+        var _gCx0 = Math.max(0, Math.round(mpZoomHint.midX - _gCropR));
+        var _gCy0 = Math.max(0, Math.round(mpZoomHint.midY - _gCropR));
+        var _gCx1 = Math.min(_gImgW, Math.round(mpZoomHint.midX + _gCropR));
+        var _gCy1 = Math.min(_gImgH, Math.round(mpZoomHint.midY + _gCropR));
+        var _gCw = _gCx1 - _gCx0, _gCh = _gCy1 - _gCy0;
+        if (_gCw < 120 || _gCh < 120) {
+          $('card-fit').style.display = 'none';
+          _tryCloseupFit();
+          return;
+        }
+        currentSide = (rightCI === 468) ? 'Right' : 'Left';
+        isCloseupMode = false;
+        cropRegion = { x: _gCx0, y: _gCy0, w: _gCw, h: _gCh };
+        var _gOff = document.createElement('canvas');
+        _gOff.width = _gCw; _gOff.height = _gCh;
+        _gOff.getContext('2d', { colorSpace: 'srgb' }).drawImage(
+          originalImgEl, _gCx0, _gCy0, _gCw, _gCh, 0, 0, _gCw, _gCh);
+        var _gImg = new Image();
+        _gImg.onload = function() {
+          imgEl = _gImg; imgLoaded = true;
+          $('card-locate').style.display = 'none';
+          $('card-fit').style.display    = 'block';
+          $('card-result').style.display = 'none';
+          $('fit-side-label').textContent = currentSide + ' Eye';
+          _updateSwitchEyeBtn(currentSide);
+          setTimeout(function() {
+            layoutStage();
+            applyAutoFit();
+            $('card-fit').scrollIntoView({behavior:'smooth', block:'start'});
+          }, 50);
+        };
+        _gImg.src = _gOff.toDataURL();
         return;
       }
 
