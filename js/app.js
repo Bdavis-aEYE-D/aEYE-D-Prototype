@@ -1358,16 +1358,33 @@ function _tryCloseupFit() {
   //      (e.g. inner-corner highlight) that return a tiny r, regardless of whether
   //      MACRO-GUARD's RIP also succeeded (_swRipR may be 0).
   var _mpHintHadEyeW = !!(mpZoomHint && mpZoomHint.eyeW > 0);
+  if (_mpHintHadEyeW) {
+    mpZoomHint = { midX: mpZoomHint.midX, midY: mpZoomHint.midY,
+                   irisR: Math.round(mpZoomHint.eyeW * 0.50), _fromBand: true };
+    isCloseupMode = true;
+    currentSide   = 'Right';
+    cropRegion    = null;
+    imgEl         = originalImgEl;
+    imgLoaded     = true;
+    $('card-locate').style.display = 'none';
+    $('card-fit').style.display    = 'block';
+    $('card-result').style.display = 'none';
+    $('fit-side-label').textContent = 'Close-up';
+    _updateSwitchEyeBtn('Right');
+    setTimeout(function() {
+      layoutStage();
+      _applyFitClassical(true);
+      $('card-fit').scrollIntoView({behavior:'smooth', block:'start'});
+    }, 50);
+    return;
+  }
 
   var probe, _probeIrisR = 0;
   try {
     probe = autoFit(originalImgEl, true);
-    if (!probe.ok && !_mpHintHadEyeW) { showLocate(); return; }
-    if (!_mpHintHadEyeW && probe.rIrisFrac < 0.08) { showLocate(); return; }
-    if (probe.ok) _probeIrisR = Math.round(probe.rIrisFrac * originalImgEl.width);
-    if (!_probeIrisR && _mpHintHadEyeW) _probeIrisR = Math.round(mpZoomHint.eyeW * 0.40);
-  } catch(e) { if (!_mpHintHadEyeW) { showLocate(); return; }
-               _probeIrisR = Math.round(mpZoomHint.eyeW * 0.40); }
+    if (!probe.ok || probe.rIrisFrac < 0.08) { showLocate(); return; }
+    _probeIrisR = Math.round(probe.rIrisFrac * originalImgEl.width);
+  } catch(e) { showLocate(); return; }
 
   // ── Sclera-pair scan to find the iris X-centre ───────────────────────────
   // When mpZoomHint has a known y-position (1-eye gate / MACRO-GUARD path),
