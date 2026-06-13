@@ -396,41 +396,8 @@ function autoDetectAndJumpToFit() {
         console.log('mpZoomHint: eyeW=' + Math.round(mpZoomHint.eyeW) +
                     ' midX=' + Math.round(mpZoomHint.midX) +
                     ' midY=' + Math.round(mpZoomHint.midY));
-        var _gCropR = Math.round(mpZoomHint.eyeW * 1.50);
-        var _gImgW  = originalImgEl.naturalWidth  || originalImgEl.width;
-        var _gImgH  = originalImgEl.naturalHeight || originalImgEl.height;
-        var _gCx0 = Math.max(0, Math.round(mpZoomHint.midX - _gCropR));
-        var _gCy0 = Math.max(0, Math.round(mpZoomHint.midY - _gCropR));
-        var _gCx1 = Math.min(_gImgW, Math.round(mpZoomHint.midX + _gCropR));
-        var _gCy1 = Math.min(_gImgH, Math.round(mpZoomHint.midY + _gCropR));
-        var _gCw = _gCx1 - _gCx0, _gCh = _gCy1 - _gCy0;
-        if (_gCw < 120 || _gCh < 120) {
-          $('card-fit').style.display = 'none';
-          _tryCloseupFit();
-          return;
-        }
-        currentSide = (rightCI === 468) ? 'Right' : 'Left';
-        isCloseupMode = false;
-        cropRegion = { x: _gCx0, y: _gCy0, w: _gCw, h: _gCh };
-        var _gOff = document.createElement('canvas');
-        _gOff.width = _gCw; _gOff.height = _gCh;
-        _gOff.getContext('2d', { colorSpace: 'srgb' }).drawImage(
-          originalImgEl, _gCx0, _gCy0, _gCw, _gCh, 0, 0, _gCw, _gCh);
-        var _gImg = new Image();
-        _gImg.onload = function() {
-          imgEl = _gImg; imgLoaded = true;
-          $('card-locate').style.display = 'none';
-          $('card-fit').style.display    = 'block';
-          $('card-result').style.display = 'none';
-          $('fit-side-label').textContent = currentSide + ' Eye';
-          _updateSwitchEyeBtn(currentSide);
-          setTimeout(function() {
-            layoutStage();
-            applyAutoFit();
-            $('card-fit').scrollIntoView({behavior:'smooth', block:'start'});
-          }, 50);
-        };
-        _gImg.src = _gOff.toDataURL();
+        $('card-fit').style.display = 'none';
+        _tryCloseupFit();
         return;
       }
 
@@ -1390,12 +1357,17 @@ function _tryCloseupFit() {
   //   2. Reference: _probeIrisR guards the sclera-pair result against false hits
   //      (e.g. inner-corner highlight) that return a tiny r, regardless of whether
   //      MACRO-GUARD's RIP also succeeded (_swRipR may be 0).
+  var _mpHintHadEyeW = !!(mpZoomHint && mpZoomHint.eyeW > 0);
+
   var probe, _probeIrisR = 0;
   try {
     probe = autoFit(originalImgEl, true);
-    if (!probe.ok || probe.rIrisFrac < 0.08) { showLocate(); return; }
-    _probeIrisR = Math.round(probe.rIrisFrac * originalImgEl.width);
-  } catch(e) { showLocate(); return; }
+    if (!probe.ok && !_mpHintHadEyeW) { showLocate(); return; }
+    if (!_mpHintHadEyeW && probe.rIrisFrac < 0.08) { showLocate(); return; }
+    if (probe.ok) _probeIrisR = Math.round(probe.rIrisFrac * originalImgEl.width);
+    if (!_probeIrisR && _mpHintHadEyeW) _probeIrisR = Math.round(mpZoomHint.eyeW * 0.40);
+  } catch(e) { if (!_mpHintHadEyeW) { showLocate(); return; }
+               _probeIrisR = Math.round(mpZoomHint.eyeW * 0.40); }
 
   // ── Sclera-pair scan to find the iris X-centre ───────────────────────────
   // When mpZoomHint has a known y-position (1-eye gate / MACRO-GUARD path),
@@ -1403,13 +1375,6 @@ function _tryCloseupFit() {
   // When mpZoomHint is absent (MediaPipe found no face at all — Jeri-type),
   // sweep multiple y-positions across the image to locate the eye.
   // Uses _scleraPairScan() — the bilateral sclera brightness detector.
-  //
-  // _mpHintHadEyeW: true when the hint came from the 1-eye gate (canthus
-  // midpoint, eyeW>0). Probe-based cx-mismatch and irisR floor must NOT fire
-  // in that case — the probe irisR reflects the true iris size in the full
-  // portrait (too large for the zoom pad) and the canthus midX is not a
-  // reliable iris-centre reference for sclera-pair validation.
-  var _mpHintHadEyeW = !!(mpZoomHint && mpZoomHint.eyeW > 0);
   if (!mpZoomHint || !mpZoomHint._fromBand) {
     var _swSweep, _swH = originalImgEl.height;
     if (mpZoomHint && mpZoomHint.midY > 0) {
